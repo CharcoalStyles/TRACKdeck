@@ -1,0 +1,28 @@
+# docker-compose.yml
+#
+# For local development, just run `uv run uvicorn main:app --reload` directly.
+# This file is for when you want the app running as a managed service.
+#
+# Usage:
+#   docker compose up --build          # first run
+#   docker compose up -d               # background
+#   docker compose logs -f assistant   # tail logs
+ 
+services:
+ 
+  assistant:
+    build: .
+    container_name: pa-assistant
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist SQLite and Chroma outside the container so they survive rebuilds
+      - ./data/memory.db:/app/memory.db
+      - ./data/chroma_db:/app/chroma_db
+    env_file:
+      # Docker will read your .env file automatically — same vars, no duplication
+      - .env
+    extra_hosts:
+      # Allows the container to reach LM Studio running on the Mac host
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

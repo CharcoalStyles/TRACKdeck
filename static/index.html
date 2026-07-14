@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Command Agent Portal</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background-color: #121212;
+      color: #e0e0e0;
+      margin: 0;
+    }
+
+    .container {
+      text-align: center;
+      padding: 2rem;
+      border-radius: 12px;
+      background: #1e1e1e;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    }
+
+    button {
+      background-color: #00adb5;
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      font-size: 1.2rem;
+      border-radius: 50px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-bottom: 1.5rem;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background-color: #00f5ff;
+      box-shadow: 0 0 15px rgba(0, 173, 181, 0.4);
+    }
+
+    button.recording {
+      background-color: #ff4141;
+      animation: pulse 1.5s infinite;
+    }
+
+    button.recording:hover {
+      background-color: #ff0000;
+    }
+
+    #status {
+      font-size: 1rem;
+      color: #888;
+    }
+
+    #response-box {
+      margin-top: 1.5rem;
+      padding: 1rem;
+      background: #252525;
+      border-radius: 6px;
+      max-width: 400px;
+      word-wrap: break-word;
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+    <h2>Voice Agent Command</h2>
+    <button id="recordBtn">Hold or Click to Record</button>
+    <div id="status">Ready</div>
+    <div id="response-box"></div>
+  </div>
+
+  <script>
+    const recordBtn = document.getElementById('recordBtn');
+    const statusText = document.getElementById('status');
+    const responseBox = document.getElementById('response-box');
+
+    let mediaRecorder;
+    let audioChunks = [];
+    let isRecording = false;
+
+    // TARGET BACKEND ENDPOINT: Update this URL to match your backend route
+    const BACKEND_URL = '/voice';
+
+    recordBtn.addEventListener('click', async () => {
+      if (!isRecording) {
+        startRecording();
+      } else {
+        stopRecording();
+      }
+    });
+
+    async function startRecording() {
+      audioChunks = [];
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        // Using standard webaudio containers (webm works seamlessly with Whisper)
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunks.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = async () => {
+          // Combine chunks into a single Blob
+          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          await sendAudioToBackend(audioBlob);
+
+          // Stop all audio tracks to release the microphone hardware link
+          stream.getTracks().forEach(track => track.stop());
+        };
+
+        mediaRecorder.start();
+        isRecording = true;
+        recordBtn.textContent = 'Stop Recording';
+        recordBtn.classList.add('recording');
+        statusText.textContent = 'Listening...';
+        responseBox.style.display = 'none';
+      } catch (err) {
+        console.error('Microphone access denied or unsupported:', err);
+        statusText.textContent = 'Error: Mic access denied.';
+      }
+    }
+
+    function stopRecording() {
+      if (mediaRecorder && isRecording) {
+        mediaRecorder.stop();
+        isRecording = false;
+        recordBtn.textContent = 'Record';
+        recordBtn.classList.remove('recording');
+        statusText.textContent = 'Processing audio...';
+      }
+    }
+
+    async function sendAudioToBackend(blob) {
+      const formData = new FormData();
+
+      // FIX 1: Change 'audio' to 'file' to match FastAPI's parameter name
+      formData.append('file', blob, 'command.webm');
+
+      try {
+        const response = await fetch('/voice', { // Pointing to your router's path
+          method: 'POST',
+          headers: {
+            // FIX 2: Send the required API token in the Header
+            'auth': 'YOUR_SUPER_SECRET_SECURE_TOKEN'
+          },
+          body: formData
+        });
+
+        if (!response.ok) throw new Error(`Server returned ${response.status}`);
+
+        const data = await response.json();
+        statusText.textContent = 'Sending to LLM!';
+        responseBox.style.display = 'block';
+        responseBox.innerHTML = `<strong>Transcription:</strong><br>${data.transcription || JSON.stringify(data)}`;
+
+        console.log(data);
+        sendTextToLlm(data.transcription);
+
+      } catch (error) {
+        console.error('Transmission failed:', error);
+        statusText.textContent = 'Error sending audio to backend.';
+      }
+    }
+
+    async function sendTextToLlm(text) {
+      try {
+        const response = await fetch('/text', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            "text": text
+          })
+        });
+
+        if (!response.ok) throw new Error(`Server returned ${response.status}`);
+
+        const data = await response.json();
+        statusText.textContent = 'Done!';
+        responseBox.style.display = 'block';
+        responseBox.innerHTML = responseBox.innerHTML + "<hr/>" + `<strong>Response:</strong><br>${data.reply}`;
+
+      } catch (error) {
+        console.error('Transmission failed:', error);
+        statusText.textContent = 'Error sending text to backend.';
+      }
+    }
+  </script>
+</body>
+
+</html>
