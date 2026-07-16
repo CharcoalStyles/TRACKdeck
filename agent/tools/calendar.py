@@ -2,9 +2,11 @@ from typing import Optional
 import json
 import uuid
 
+from datetime import timedelta
+
 from langchain_core.tools import tool
 
-from utils.datetime import get_todays_datetime, text_to_utc
+from utils.datetime import get_todays_datetime, text_to_utc, add_time_to_UTC_text
 from utils.next_cloud_calendar import get_event, get_events_in_range, create_or_update_event, delete_event
 
 @tool
@@ -15,12 +17,7 @@ def get_todays_events() -> str:
     start, end = get_todays_datetime()
     print(f"Retrieving events from {start} to {end}")
     
-    response = get_events_in_range(start, end)
-
-    if response.get("success"):
-        return json.dumps(response.get("events"))
-    else:
-        return "Failed to retrieve events." + response.get("error")
+    return get_events_in_range(start, end)
 
 @tool
 def get_calendar_event(uid: str) -> str:
@@ -34,24 +31,29 @@ def get_calendar_event(uid: str) -> str:
     response = get_event(uid)
     
     if response.get("success"):
-        return json.stringify(response.get("event"))
+        return json.dumps(response.get("event"))
     else:
         return "Failed to retrieve event." + response.get("error")
 
 @tool
-def add_calendar_event(title: str, start: str, end: str, description: Optional[str] = None, location: Optional[str] = None) -> str:
+def add_calendar_event(title: str, start: str, end: Optional[str] = None, description: Optional[str] = None, location: Optional[str] = None) -> str:
     """Add an event to the calendar.
 
     Args:
         title (str): The title of the event.
         start (str): The start date and time of the event
-        end (str): The end date and time of the event
+        end (Optional[str], optional): The end date and time of the event. Defaults to one hour after the start time.
         description (Optional[str], optional): A description of the event. Defaults to None.
         location (Optional[str], optional): The location of the event. Defaults to None.
     """ 
 
     start_UTC = text_to_utc(start)
-    end_UTC = text_to_utc(end)
+    
+    # If no end date is provided, set teh end time to an hour after the start time
+    if end is None:
+        end_UTC = add_time_to_UTC_text(start_UTC, timedelta(hours=1))
+    else:
+        end_UTC = text_to_utc(end)
 
     print(f"Adding event: {title} from {start_UTC} to {end_UTC}")
     print(f"Description: {description}")

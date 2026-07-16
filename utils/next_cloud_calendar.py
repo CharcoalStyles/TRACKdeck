@@ -6,10 +6,10 @@ from requests.auth import HTTPBasicAuth
 # ==========================================
 # CONFIGURATION
 # ==========================================
-NEXTCLOUD_URL = os.environ.get("NEXTCLOUD_URL")
-USERNAME = os.environ.get("NEXTCLOUD_USERNAME")
-APP_PASSWORD = os.environ.get("NEXTCLOUD_APP_PASSWORD")
-CALENDAR_SLUG = os.environ.get("NEXTCLOUD_CALENDAR_SLUG")
+NEXTCLOUD_URL = os.getenv("NEXTCLOUD_URL")
+USERNAME = os.getenv("NEXTCLOUD_USERNAME")
+APP_PASSWORD = os.getenv("NEXTCLOUD_APP_PASSWORD")
+CALENDAR_SLUG = os.getenv("NEXTCLOUD_CALENDAR_SLUG")
 
 BASE_URL = f"{NEXTCLOUD_URL}/remote.php/dav/calendars/{USERNAME}/{CALENDAR_SLUG}/"
 AUTH = HTTPBasicAuth(USERNAME, APP_PASSWORD)

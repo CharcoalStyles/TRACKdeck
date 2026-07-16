@@ -96,6 +96,28 @@ class MemoryStore:
         )
         return results["documents"][0] if results["documents"] else []
 
+    def get_conversations_between(self, start_ts: int, end_ts: int) -> list[str]:
+        """
+        Return raw conversation summaries recorded within [start_ts, end_ts]
+        (UTC epoch seconds, inclusive), oldest first. Used by the daily
+        digest job — a direct metadata-filtered fetch, not a similarity
+        search.
+        """
+        if self.conversations.count() == 0:
+            return []
+
+        results = self.conversations.get(
+            where={
+                "$and": [
+                    {"timestamp": {"$gte": start_ts}},
+                    {"timestamp": {"$lte": end_ts}},
+                ]
+            },
+        )
+        pairs = list(zip(results.get("documents", []), results.get("metadatas", [])))
+        pairs.sort(key=lambda p: p[1].get("timestamp", 0))
+        return [doc for doc, _ in pairs]
+
     # ------------------------------------------------------------------
     # Notes
     # ------------------------------------------------------------------

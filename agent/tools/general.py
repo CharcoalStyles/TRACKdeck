@@ -35,7 +35,7 @@ def web_search(query: str) -> str:
 
     if not instance_url:
         print("No SearXNG instance URL found. Skipping web search.")
-        return f"Web search not yet connected. Query was: '{query}'"
+        return "Web search not yet connected. Query was: '{query}'"
     else:
         print(f"Searching for: {query}")
         

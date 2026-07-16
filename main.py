@@ -1,16 +1,17 @@
 """
 Personal Assistant — FastAPI + LangGraph
 ----------------------------------------
-Environment variables are loaded from .env at startup via python-dotenv.
-Required vars: LM_STUDIO_URL, CHAT_MODEL, EMBEDDING_MODEL
 """
 import os
-import asyncio
 from contextlib import asynccontextmanager
+from typing import Annotated
+from zoneinfo import ZoneInfo
 
 import uvicorn
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -20,28 +21,20 @@ load_dotenv()
 
 from agent.graph import build_graph
 from agent.memory import MemoryStore, make_chroma_client, make_embedding_function
+from agent.runtime import app_state, run_agent
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
-from voice import router as voice_router
+from jobs.digest import send_daily_digest
 
+from voice import router as voice_router
 from routes.synth import router as synth_router
 
 # ---------------------------------------------------------------------------
-# App state
+# Scheduler — daily digest at 20:45 local time (see jobs/digest.py for why)
 # ---------------------------------------------------------------------------
 
-class AppState:
-    graph = None
-    memory: MemoryStore = None
-
-app_state = AppState()
-
-_thread_locks: dict[str, asyncio.Lock] = {}
-
-def get_thread_lock(thread_id: str) -> asyncio.Lock:
-    if thread_id not in _thread_locks:
-        _thread_locks[thread_id] = asyncio.Lock()
-    return _thread_locks[thread_id]
+LOCAL_TZ = ZoneInfo("Australia/Canberra")
+scheduler = AsyncIOScheduler(timezone=LOCAL_TZ)
 
 
 # ---------------------------------------------------------------------------
@@ -56,12 +49,24 @@ async def lifespan(app: FastAPI):
 
     async with AsyncSqliteSaver.from_conn_string("memory.db") as checkpointer:
         app_state.graph = build_graph(checkpointer, app_state.memory)
+
+        scheduler.add_job(
+            send_daily_digest,
+            trigger=CronTrigger(hour=20, minute=45, timezone=LOCAL_TZ),
+            args=[app_state.memory],
+            id="daily_digest",
+            replace_existing=True,
+        )
+        scheduler.start()
+
         yield
+
+        scheduler.shutdown(wait=False)
 
 
 app = FastAPI(lifespan=lifespan)
-app.include_router(voice_router) # /voice
-app.include_router(synth_router) # /synthesize
+app.include_router(voice_router)  # /voice
+app.include_router(synth_router)  # /synthesize
 
 
 # ---------------------------------------------------------------------------
@@ -70,50 +75,14 @@ app.include_router(synth_router) # /synthesize
 
 class TextRequest(BaseModel):
     text: str
-    thread_id: str = "main"
+    # Optional manual override for testing conversation continuity from the
+    # browser UI. The ESP32 never sends this — its calls always go through
+    # agent.runtime.resolve_thread_id()'s automatic session logic.
+    thread_id: str | None = None
+
 
 class AssistantResponse(BaseModel):
     reply: str
-
-
-# ---------------------------------------------------------------------------
-# Shared agent runner
-# ---------------------------------------------------------------------------
-
-async def run_agent(text: str, thread_id: str = "main") -> str:
-    if app_state.graph is None:
-        raise HTTPException(status_code=503, detail="Agent not initialised")
-
-    config = {"configurable": {"thread_id": thread_id}}
-
-    print("Agent initialised and ready to run")
-    async with get_thread_lock(thread_id):
-        print("Invoking agent...")
-        result = await app_state.graph.ainvoke(
-            {"messages": [{"role": "user", "content": text}]},
-            config=config,
-        )
-
-    for msg in result["messages"]:
-    # Check if the LLM made a tool call
-      if hasattr(msg, "tool_calls") and msg.tool_calls:
-        for tool_call in msg.tool_calls:
-            print(f"🛠️ Tool Called: {tool_call['name']}")
-            print(f"   Arguments:   {tool_call['args']}")
-            
-    # Optional: Check the corresponding tool response
-      elif msg.type == "tool":
-          print(f"🔄 Tool Output: {msg.content}\n")
-
-    reply = next(
-        (m.content for m in reversed(result["messages"]) if m.content),
-        "Done.",
-    )
-
-    summary = f"User: {text}\nAssistant: {reply}"
-    app_state.memory.save_conversation_summary(summary, thread_id=thread_id)
-
-    return reply
 
 
 # ---------------------------------------------------------------------------
@@ -128,23 +97,26 @@ async def serve_frontend():
             return f.read()
     return HTMLResponse(content="<h1>static/index.html not found</h1>", status_code=404)
 
-# 3. Mount the rest of the static folder for any assets/css/js if you add them later
+# Mount the rest of the static folder for any assets/css/js if you add them later
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 @app.post("/text", response_model=AssistantResponse)
 async def handle_text(request: TextRequest):
-    print(request)
     reply = await run_agent(request.text, thread_id=request.thread_id)
     return AssistantResponse(reply=reply)
 
+@app.post("/debug/digest")
+async def trigger_digest_now(auth: Annotated[str | None, Header()] = None):
+    """
+    Manually fires today's digest immediately, without waiting for the
+    20:45 schedule. Gated behind the same token as /voice since it sends
+    a real email on every call — remove or comment this out once you're
+    done testing the pipeline end to end.
+    """
 
-@app.get("/health")
-async def health():
-    return {
-        "status": "ok",
-        "graph_ready": app_state.graph is not None,
-        "memory_ready": app_state.memory is not None,
-    }
+    await send_daily_digest(app_state.memory)
+    return {"status": "sent"}
 
 
 # ---------------------------------------------------------------------------
