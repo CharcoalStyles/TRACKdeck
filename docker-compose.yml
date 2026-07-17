@@ -7,9 +7,18 @@
 #   docker compose up --build          # first run
 #   docker compose up -d               # background
 #   docker compose logs -f assistant   # tail logs
- 
+#
+# One-time manual step after first `docker compose up`: Syncthing's device
+# ID is generated per-instance, so pairing this instance with your other
+# devices has to be done once via its web GUI — that GUI is deliberately
+# NOT published below (see the syncthing service comments). To reach it
+# for setup, either temporarily add `- "127.0.0.1:8384:8384"` to its ports
+# and browse to http://localhost:8384, or SSH-tunnel to the host:
+#   ssh -L 8384:localhost:8384 your-host
+# and remove the temporary port mapping again once pairing is done.
+
 services:
- 
+
   assistant:
     build: .
     container_name: pa-assistant
@@ -19,10 +28,41 @@ services:
       # Persist SQLite and Chroma outside the container so they survive rebuilds
       - ./data/memory.db:/app/memory.db
       - ./data/chroma_db:/app/chroma_db
+      # The notes vault — shared with the syncthing service below so both
+      # containers see the same files. Must match VAULT_PATH in .env.
+      - ./data/vault:/app/vault
     env_file:
       # Docker will read your .env file automatically — same vars, no duplication
-      - .env
-    extra_hosts:
-      # Allows the container to reach LM Studio running on the Mac host
-      - "host.docker.internal:host-gateway"
+      - .env.docker
+    restart: unless-stopped
+    depends_on:
+      - syncthing
+
+  syncthing:
+    image: syncthing/syncthing:latest
+    container_name: pa-syncthing
+    hostname: pa-syncthing
+    environment:
+      # Match these to the UID/GID that owns ./data on the host (`id -u`,
+      # `id -g`) so the assistant container (running as its own user) and
+      # Syncthing don't fight over file ownership in the shared vault.
+      - PUID=1000
+      - PGID=1000
+    volumes:
+      - ./data/syncthing-config:/var/syncthing/config
+      # Same host path as the assistant service's vault mount above —
+      # this is what makes it a *shared* volume between the two containers.
+      - ./data/vault:/var/syncthing/vault
+    ports:
+      # Sync protocol — needs to be reachable from your other devices for
+      # them to actually sync with this instance.
+      - "22000:22000/tcp"
+      - "22000:22000/udp"
+      #- "21027:21027/udp"  # local discovery
+      #- "8384:8384"
+      # Deliberately NOT publishing 8384 (the web GUI) here. By default
+      # Syncthing only binds its GUI to localhost *inside* the container,
+      # so leaving this unpublished means it isn't reachable from the
+      # network at all — see the one-time setup note above for how to
+      # reach it when you actually need to pair a device.
     restart: unless-stopped

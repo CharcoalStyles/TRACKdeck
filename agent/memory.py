@@ -122,23 +122,55 @@ class MemoryStore:
     # Notes
     # ------------------------------------------------------------------
 
-    def save_note(self, content: str, title: Optional[str] = None) -> str:
-        """Store a user note. Returns the generated note ID."""
-        doc_id = f"note_{int(time.time())}"
+    def upsert_note(self, note_id: str, content: str, title: str, path: str, mtime: float) -> None:
+        """
+        Index (or re-index) a note file by its stable frontmatter id. The
+        markdown file on disk is the source of truth — this just keeps the
+        search index current with it. Safe to call repeatedly for the same
+        note; always overwrites rather than duplicating.
+        """
+        if not content or not str(content).strip():
+            content = title or "Untitled"
         embedding = self._embed(content)
-        self.notes.add(
-            ids=[doc_id],
+        self.notes.upsert(
+            ids=[note_id],
             embeddings=[embedding],
             documents=[content],
-            metadatas=[{
-                "title": title or "Untitled",
-                "timestamp": int(time.time()),
-            }],
+            metadatas=[{"title": title, "path": path, "mtime": mtime}],
         )
-        return doc_id
+
+    def delete_note(self, note_id: str) -> None:
+        try:
+            self.notes.delete(ids=[note_id])
+        except Exception:
+            pass  # already gone / never indexed — fine either way
+
+    def delete_note_by_path(self, path: str) -> None:
+        """Used by the live watcher on delete events, where we don't have
+        the file (and therefore its id) available anymore."""
+        results = self.notes.get(where={"path": path})
+        ids = results.get("ids", [])
+        if ids:
+            self.notes.delete(ids=ids)
+
+    def list_indexed_notes(self) -> dict:
+        """id -> metadata for every indexed note. Used by reconciliation to
+        find orphaned entries (file deleted) and stale ones (file changed
+        since last indexed)."""
+        if self.notes.count() == 0:
+            return {}
+        results = self.notes.get()
+        return {
+            note_id: meta
+            for note_id, meta in zip(results.get("ids", []), results.get("metadatas", []))
+        }
 
     def search_notes(self, query: str, n_results: int = 5) -> list[dict]:
-        """Semantic search over saved notes."""
+        """
+        Semantic search over the notes index. Returns short excerpts, not
+        full bodies — deliberately, to keep search results cheap on
+        context. Callers should use read_note for the complete note.
+        """
         if self.notes.count() == 0:
             return []
         embedding = self._embed(query)
@@ -147,12 +179,13 @@ class MemoryStore:
             n_results=min(n_results, self.notes.count()),
         )
         output = []
-        for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
-            output.append({
-                "title": meta.get("title", "Untitled"),
-                "content": doc,
-                "timestamp": meta.get("timestamp"),
-            })
+        for note_id, doc, meta in zip(
+            results["ids"][0], results["documents"][0], results["metadatas"][0]
+        ):
+            excerpt = doc.strip().replace("\n", " ")
+            if len(excerpt) > 400:
+                excerpt = excerpt[:400].rsplit(" ", 1)[0] + "…"
+            output.append({"id": note_id, "title": meta.get("title", "Untitled"), "excerpt": excerpt})
         return output
 
     # ------------------------------------------------------------------

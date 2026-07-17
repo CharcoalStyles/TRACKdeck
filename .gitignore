@@ -141,6 +141,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.docker
 .venv
 env/
 venv/
@@ -216,3 +217,4 @@ chroma_db/
 received_notes/
 memory.db
 .models/
+data/
