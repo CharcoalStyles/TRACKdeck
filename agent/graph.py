@@ -8,6 +8,7 @@ LLM connection is configured via environment variables.
 import os
 
 from langchain_core.messages import SystemMessage
+from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -56,6 +57,27 @@ When in doubt about whether a fact is current, real, or time-sensitive, treat it
 unknown and use a tool to verify it. Never present a guessed or fabricated fact as if it 
 were verified."""
 
+ONE_SHOT_ADDENDUM = """
+
+## MANDATORY: One-Shot Mode
+This request is arriving through a device with no way to hear a follow-up question and no 
+way to continue the conversation — this is your only chance to respond. You MUST NOT end 
+your final reply with a clarifying question, and you MUST NOT leave the task incomplete 
+waiting for more information.
+
+Instead:
+1. Make the most reasonable assumption for anything ambiguous or unspecified (e.g. an 
+   unspecified time defaults to a sensible near-future slot; an unspecified duration 
+   defaults to something typical for that kind of event).
+2. Complete the requested action fully using that assumption.
+3. In your final reply, briefly state what you assumed, so it can be corrected next time 
+   if it's wrong — but always still complete the action rather than only asking about it.
+
+Only decline to guess if a piece of information is truly required and no reasonable 
+default exists (e.g. you cannot invent a business name that doesn't exist). In that case, 
+say clearly what's missing and what you did anyway with the rest of the request, rather 
+than leaving everything undone."""
+
 def build_graph(checkpointer, memory: MemoryStore):
     llm = ChatOpenAI(
         base_url=os.environ["LM_STUDIO_URL"],
@@ -67,7 +89,7 @@ def build_graph(checkpointer, memory: MemoryStore):
     tools = get_tools(memory)
     llm_with_tools = llm.bind_tools(tools)
 
-    def call_llm(state: MessagesState):
+    def call_llm(state: MessagesState, config: RunnableConfig):
         last_user_msg = next(
             (m.content for m in reversed(state["messages"])
              if hasattr(m, "type") and m.type == "human"),
@@ -79,7 +101,10 @@ def build_graph(checkpointer, memory: MemoryStore):
         if recalled:
             memory_block = "\n\nRELEVANT PAST CONTEXT:\n" + "\n---\n".join(recalled)
 
-        system = SystemMessage(content=SYSTEM_PROMPT + memory_block)
+        one_shot = (config or {}).get("configurable", {}).get("one_shot", False)
+        addendum = ONE_SHOT_ADDENDUM if one_shot else ""
+
+        system = SystemMessage(content=SYSTEM_PROMPT + addendum + memory_block)
         response = llm_with_tools.invoke([system] + state["messages"])
         return {"messages": [response]}
 

@@ -67,6 +67,67 @@
       word-wrap: break-word;
       display: none;
     }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      margin-top: 0.5rem;
+      max-width: 340px;
+    }
+
+    #oneShotLabel {
+      font-size: 0.85rem;
+      color: #aaa;
+      text-align: left;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #444;
+      transition: 0.2s;
+      border-radius: 24px;
+    }
+
+    .slider::before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: 0.2s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: #00adb5;
+    }
+
+    input:checked + .slider::before {
+      transform: translateX(20px);
+    }
   </style>
 </head>
 
@@ -75,6 +136,13 @@
   <div class="container">
     <h2>Voice Agent Command</h2>
     <button id="recordBtn">Hold or Click to Record</button>
+    <div class="toggle-row">
+      <label class="switch">
+        <input type="checkbox" id="oneShotToggle">
+        <span class="slider"></span>
+      </label>
+      <span id="oneShotLabel">One-shot mode (simulate ESP32 — no follow-up questions)</span>
+    </div>
     <div id="status">Ready</div>
     <div id="response-box"></div>
   </div>
@@ -83,13 +151,11 @@
     const recordBtn = document.getElementById('recordBtn');
     const statusText = document.getElementById('status');
     const responseBox = document.getElementById('response-box');
+    const oneShotToggle = document.getElementById('oneShotToggle');
 
     let mediaRecorder;
     let audioChunks = [];
     let isRecording = false;
-
-    // TARGET BACKEND ENDPOINT: Update this URL to match your backend route
-    const BACKEND_URL = '/voice';
 
     recordBtn.addEventListener('click', async () => {
       if (!isRecording) {
@@ -146,15 +212,19 @@
 
     async function sendAudioToBackend(blob) {
       const formData = new FormData();
-
-      // FIX 1: Change 'audio' to 'file' to match FastAPI's parameter name
       formData.append('file', blob, 'command.webm');
 
+      // This webpage is a testing tool, not the ESP32 — it always waits
+      // for the actual result ("sync") so you have something to look at.
+      // The one-shot toggle controls whether the agent is allowed to end
+      // on a clarifying question, which is what real hardware will need.
+      formData.append('sync', 'true');
+      formData.append('one_shot', oneShotToggle.checked ? 'true' : 'false');
+
       try {
-        const response = await fetch('/voice', { // Pointing to your router's path
+        const response = await fetch('/voice', {
           method: 'POST',
           headers: {
-            // FIX 2: Send the required API token in the Header
             'auth': 'YOUR_SUPER_SECRET_SECURE_TOKEN'
           },
           body: formData
@@ -163,41 +233,17 @@
         if (!response.ok) throw new Error(`Server returned ${response.status}`);
 
         const data = await response.json();
-        statusText.textContent = 'Sending to LLM!';
+        statusText.textContent = 'Done!';
         responseBox.style.display = 'block';
-        responseBox.innerHTML = `<strong>Transcription:</strong><br>${data.transcription || JSON.stringify(data)}`;
+        responseBox.innerHTML =
+          `<strong>Transcription:</strong><br>${data.transcription || '(none)'}` +
+          `<hr/><strong>Response:</strong><br>${data.reply}`;
 
         console.log(data);
-        sendTextToLlm(data.transcription);
 
       } catch (error) {
         console.error('Transmission failed:', error);
         statusText.textContent = 'Error sending audio to backend.';
-      }
-    }
-
-    async function sendTextToLlm(text) {
-      try {
-        const response = await fetch('/text', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            "text": text
-          })
-        });
-
-        if (!response.ok) throw new Error(`Server returned ${response.status}`);
-
-        const data = await response.json();
-        statusText.textContent = 'Done!';
-        responseBox.style.display = 'block';
-        responseBox.innerHTML = responseBox.innerHTML + "<hr/>" + `<strong>Response:</strong><br>${data.reply}`;
-
-      } catch (error) {
-        console.error('Transmission failed:', error);
-        statusText.textContent = 'Error sending text to backend.';
       }
     }
   </script>

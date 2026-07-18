@@ -103,6 +103,10 @@ class TextRequest(BaseModel):
     # browser UI. The ESP32 never sends this — its calls always go through
     # agent.runtime.resolve_thread_id()'s automatic session logic.
     thread_id: str | None = None
+    # For testing the ESP32's eventual behavior: forces the agent to never
+    # end on a clarifying question, since real hardware has no way to hear
+    # a follow-up.
+    one_shot: bool = False
 
 
 class AssistantResponse(BaseModel):
@@ -127,7 +131,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.post("/text", response_model=AssistantResponse)
 async def handle_text(request: TextRequest):
-    reply = await run_agent(request.text, thread_id=request.thread_id)
+    reply = await run_agent(request.text, thread_id=request.thread_id, one_shot=request.one_shot)
     return AssistantResponse(reply=reply)
 
 
@@ -149,7 +153,9 @@ async def trigger_digest_now(auth: Annotated[str | None, Header()] = None):
     a real email on every call — remove or comment this out once you're
     done testing the pipeline end to end.
     """
-    
+    if auth != os.environ["API_TOKEN"]:
+        raise HTTPException(status_code=401, detail="Unauthorized request source")
+
     await send_daily_digest(app_state.memory)
     return {"status": "sent"}
 

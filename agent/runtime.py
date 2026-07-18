@@ -61,13 +61,20 @@ def resolve_thread_id() -> str:
     return app_state.current_thread_id
 
 
-async def run_agent(text: str, thread_id: str | None = None) -> str:
+async def run_agent(text: str, thread_id: str | None = None, one_shot: bool = False) -> str:
     """
     Runs one turn through the agent graph and returns the reply text.
 
     If thread_id isn't given, it's resolved automatically via the
     inactivity-based session rule above. Callers that want a specific
     thread (e.g. manual testing) can still pass one explicitly.
+
+    one_shot=True switches the system prompt to a mode that never ends on
+    a clarifying question — for testing the behavior real hardware will
+    need, where there's no way to hear a follow-up. This is deliberately
+    passed via config rather than folded into the persisted message
+    state: it's a per-request setting, not something that should get
+    saved into this thread's checkpoint and silently affect later turns.
     """
     if app_state.graph is None:
         raise HTTPException(status_code=503, detail="Agent not initialised")
@@ -75,7 +82,7 @@ async def run_agent(text: str, thread_id: str | None = None) -> str:
     if thread_id is None:
         thread_id = resolve_thread_id()
 
-    config = {"configurable": {"thread_id": thread_id}}
+    config = {"configurable": {"thread_id": thread_id, "one_shot": one_shot}}
 
     async with get_thread_lock(thread_id):
         result = await app_state.graph.ainvoke(
