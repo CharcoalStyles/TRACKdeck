@@ -111,6 +111,8 @@ class TextRequest(BaseModel):
 
 class AssistantResponse(BaseModel):
     reply: str
+    thread_id: str
+    keyword: str
 
 
 # ---------------------------------------------------------------------------
@@ -131,8 +133,8 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.post("/text", response_model=AssistantResponse)
 async def handle_text(request: TextRequest):
-    reply = await run_agent(request.text, thread_id=request.thread_id, one_shot=request.one_shot)
-    return AssistantResponse(reply=reply)
+    result = await run_agent(request.text, thread_id=request.thread_id, one_shot=request.one_shot)
+    return AssistantResponse(reply=result.reply, thread_id=result.thread_id, keyword=result.keyword)
 
 
 @app.get("/health")

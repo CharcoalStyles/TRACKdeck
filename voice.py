@@ -9,15 +9,22 @@ immediately — it doesn't wait around for a reply, to avoid keeping wifi
 agent execution, and logging all happen in a background task *after* the
 202 response has already been sent.
 
-There is currently no feedback path back to the device on success or
-failure in this mode:
+There is no HTTP feedback path back to the device in this mode — but
+that's not the only way you find out what happened:
   - Silence (no speech detected) is discarded quietly — not every button
     press should page anyone.
   - Real failures (transcription errors, agent/tool errors) are reported
-    via Gotify — see utils/notify.py.
-  - Successes are logged via agent.runtime.run_agent's existing
-    save_conversation_summary call, and surfaced later in the end-of-day
-    digest email (jobs/digest.py) rather than in the moment.
+    via Gotify at high priority — see utils/notify.py.
+  - Successes push a low-priority Gotify notification too (see
+    agent.runtime.run_agent), tagged with that turn's thread keyword —
+    e.g. "Copper Wolf, ..." — and are surfaced again in the end-of-day
+    digest email (jobs/digest.py).
+
+Every reply belongs to a thread, addressable later by a two-word keyword
+("Copper Wolf, actually make that 3pm") regardless of how long ago the
+original request happened — see agent/runtime.py and agent/keywords.py.
+Without a keyword prefix, the usual short inactivity window decides
+whether a request continues the most recent thread or starts a new one.
 
 Two optional form fields, both testing conveniences — the ESP32 should
 never set either in production:
@@ -66,23 +73,23 @@ router = APIRouter()
 whisper_model = WhisperModel("small", device="cpu", compute_type="int8")
 
 
-async def _transcribe_and_run(audio_path: str, one_shot: bool) -> tuple[str, str]:
+async def _transcribe_and_run(audio_path: str, one_shot: bool) -> tuple[str, str, str]:
     """
     Transcribe the given audio file and run it through the agent.
-    Returns (transcription, reply) — reply is "" if no speech was
-    detected (not an error, just nothing to do). Raises on real failure;
-    callers decide how to report that (Gotify for the fire-and-forget
-    path, an HTTP error for the synchronous testing path).
+    Returns (transcription, reply, keyword) — reply/keyword are "" if no
+    speech was detected (not an error, just nothing to do). Raises on
+    real failure; callers decide how to report that (Gotify for the
+    fire-and-forget path, an HTTP error for the synchronous testing path).
     """
     segments, _ = whisper_model.transcribe(audio_path, beam_size=5)
     transcription = " ".join(segment.text for segment in segments).strip()
 
     if not transcription:
-        return "", ""
+        return "", "", ""
 
     print(f"Transcribed '{audio_path}': {transcription}")
-    reply = await run_agent(transcription, one_shot=one_shot)
-    return transcription, reply
+    result = await run_agent(transcription, one_shot=one_shot)
+    return transcription, result.reply, result.keyword
 
 
 async def _process_voice_note(audio_path: str, one_shot: bool) -> None:
@@ -91,7 +98,7 @@ async def _process_voice_note(audio_path: str, one_shot: bool) -> None:
     via Gotify since there's no HTTP response left to report them in.
     """
     try:
-        transcription, _ = await _transcribe_and_run(audio_path, one_shot)
+        transcription, _, _ = await _transcribe_and_run(audio_path, one_shot)
         if not transcription:
             print(f"No speech detected in {audio_path} — discarding.")
 
@@ -127,13 +134,13 @@ async def receive_note(
     # 3a. Testing path — wait for the full pipeline, return the result.
     if sync:
         try:
-            transcription, reply = await _transcribe_and_run(audio_path, one_shot)
+            transcription, reply, keyword = await _transcribe_and_run(audio_path, one_shot)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Voice pipeline failed: {str(e)}")
 
         if not transcription:
-            return {"transcription": "", "reply": "(no speech detected)"}
-        return {"transcription": transcription, "reply": reply}
+            return {"transcription": "", "reply": "(no speech detected)", "keyword": ""}
+        return {"transcription": transcription, "reply": reply, "keyword": keyword}
 
     # 3b. Production path — hand off to the background task and respond
     #     immediately. The device doesn't wait for transcription, the

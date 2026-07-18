@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo
 from langchain_openai import ChatOpenAI
 
 from agent.memory import MemoryStore
+from agent.runtime import app_state
 from utils.mailer import send_email
 
 LOCAL_TZ = ZoneInfo("Australia/Canberra")
@@ -77,3 +78,13 @@ async def send_daily_digest(memory: MemoryStore) -> None:
 
     await asyncio.to_thread(send_email, subject, recap)
     print(f"Daily digest sent for {today_str} ({len(entries)} logged entries).")
+
+    # Keyword-addressed threads are a same-day concept — free them all up
+    # now that the day's been recapped. The underlying LangGraph
+    # checkpoint history isn't touched, just the keyword mapping that
+    # makes a thread reachable by name.
+    freed = len(app_state.threads)
+    app_state.threads.clear()
+    app_state.keywords.clear()
+    app_state.default_thread_id = None
+    print(f"Cleared {freed} addressable thread keyword(s) for the new day.")

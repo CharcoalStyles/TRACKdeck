@@ -216,5 +216,7 @@ pyrightconfig.json
 chroma_db/
 received_notes/
 memory.db
+memory.db-shm
+memory.db-wal
 .models/
 data/

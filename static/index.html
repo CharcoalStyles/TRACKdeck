@@ -237,7 +237,11 @@
         responseBox.style.display = 'block';
         responseBox.innerHTML =
           `<strong>Transcription:</strong><br>${data.transcription || '(none)'}` +
-          `<hr/><strong>Response:</strong><br>${data.reply}`;
+          `<hr/><strong>Response:</strong><br>${data.reply}` +
+          (data.keyword
+            ? `<hr/><strong>Thread keyword:</strong> ${data.keyword}<br>`
+              + `<span style="font-size:0.8em;color:#888;">Say "${data.keyword}, ..." to follow up on this later, even after the session times out.</span>`
+            : '');
 
         console.log(data);
 
