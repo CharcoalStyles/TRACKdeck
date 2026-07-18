@@ -70,7 +70,7 @@ router = APIRouter()
 
 # Initialize the model strictly on CPU
 # Options: "tiny", "base", "small", "medium", "large-v3"
-whisper_model = WhisperModel("small", device="cpu", compute_type="int8")
+whisper_model = WhisperModel("medium", device="cpu", compute_type="int8")
 
 
 async def _transcribe_and_run(audio_path: str, one_shot: bool) -> tuple[str, str, str]:
