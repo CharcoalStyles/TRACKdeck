@@ -4,83 +4,181 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Voice Command Agent Portal</title>
+  <title>Assistant Dashboard</title>
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
       background-color: #121212;
       color: #e0e0e0;
       margin: 0;
+      min-height: 100vh;
     }
 
-    .container {
-      text-align: center;
-      padding: 2rem;
-      border-radius: 12px;
+    header {
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid #2a2a2a;
+      background: #171717;
+    }
+
+    header h1 {
+      font-size: 1.1rem;
+      margin: 0;
+      font-weight: 600;
+      color: #f0f0f0;
+      white-space: nowrap;
+    }
+
+    nav {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    nav button {
+      background: none;
+      border: none;
+      color: #999;
+      font-size: 0.95rem;
+      padding: 0.5rem 0.9rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    nav button:hover {
+      color: #e0e0e0;
+      background: #222;
+    }
+
+    nav button.active {
+      color: #00adb5;
+      background: #1c2b2c;
+    }
+
+    main {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+
+    .panel {
+      display: none;
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    .card {
       background: #1e1e1e;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+      margin-bottom: 1.25rem;
     }
 
-    button {
+    .card h2 {
+      font-size: 1rem;
+      margin: 0 0 0.25rem;
+      color: #f0f0f0;
+    }
+
+    .card .description {
+      font-size: 0.85rem;
+      color: #888;
+      margin: 0 0 1rem;
+      line-height: 1.4;
+    }
+
+    .voice-controls {
+      text-align: center;
+    }
+
+    button.record-btn {
       background-color: #00adb5;
       color: white;
       border: none;
       padding: 15px 30px;
-      font-size: 1.2rem;
+      font-size: 1.1rem;
       border-radius: 50px;
       cursor: pointer;
       transition: all 0.2s ease;
-      margin-bottom: 1.5rem;
+      margin-bottom: 1.25rem;
       font-weight: bold;
     }
 
-    button:hover {
+    button.record-btn:hover {
       background-color: #00f5ff;
       box-shadow: 0 0 15px rgba(0, 173, 181, 0.4);
     }
 
-    button.recording {
+    button.record-btn.recording {
       background-color: #ff4141;
       animation: pulse 1.5s infinite;
     }
 
-    button.recording:hover {
+    button.record-btn.recording:hover {
       background-color: #ff0000;
     }
 
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(255, 65, 65, 0.5); }
+      70% { box-shadow: 0 0 0 14px rgba(255, 65, 65, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(255, 65, 65, 0); }
+    }
+
     #status {
-      font-size: 1rem;
+      font-size: 0.9rem;
       color: #888;
+      margin-bottom: 0.75rem;
     }
 
     #response-box {
-      margin-top: 1.5rem;
+      text-align: left;
       padding: 1rem;
       background: #252525;
       border-radius: 6px;
-      max-width: 400px;
       word-wrap: break-word;
       display: none;
+      font-size: 0.92rem;
+      line-height: 1.5;
+    }
+
+    #response-box hr {
+      border: none;
+      border-top: 1px solid #333;
+      margin: 0.6rem 0;
     }
 
     .toggle-row {
       display: flex;
       align-items: center;
-      justify-content: center;
-      gap: 0.6rem;
-      margin-top: 0.5rem;
-      max-width: 340px;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.85rem 0;
+      border-top: 1px solid #2a2a2a;
     }
 
-    #oneShotLabel {
-      font-size: 0.85rem;
-      color: #aaa;
-      text-align: left;
+    .toggle-row:first-of-type {
+      border-top: none;
+      padding-top: 0;
+    }
+
+    .toggle-row .label {
+      font-size: 0.9rem;
+      color: #ddd;
+    }
+
+    .toggle-row .sublabel {
+      font-size: 0.78rem;
+      color: #888;
+      margin-top: 0.15rem;
     }
 
     .switch {
@@ -128,26 +226,153 @@
     input:checked + .slider::before {
       transform: translateX(20px);
     }
+
+    .save-status {
+      font-size: 0.8rem;
+      color: #00adb5;
+      min-height: 1.2em;
+      margin-top: 0.5rem;
+    }
+
+    .voice-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      margin-top: 0.25rem;
+      margin-bottom: 1rem;
+    }
+
+    .voice-toggle-row .label {
+      font-size: 0.85rem;
+      color: #aaa;
+    }
   </style>
 </head>
 
 <body>
 
-  <div class="container">
-    <h2>Voice Agent Command</h2>
-    <button id="recordBtn">Hold or Click to Record</button>
-    <div class="toggle-row">
-      <label class="switch">
-        <input type="checkbox" id="oneShotToggle">
-        <span class="slider"></span>
-      </label>
-      <span id="oneShotLabel">One-shot mode (simulate ESP32 — no follow-up questions)</span>
-    </div>
-    <div id="status">Ready</div>
-    <div id="response-box"></div>
-  </div>
+  <header>
+    <h1>Assistant Dashboard</h1>
+    <nav>
+      <button id="navVoice" class="active">Voice Test</button>
+      <button id="navSettings">Settings</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ===================== Voice Test panel ===================== -->
+    <section id="panelVoice" class="panel active">
+      <div class="card voice-controls">
+        <h2>Voice Agent Command</h2>
+        <p class="description">Test the agent the way real hardware eventually will — records, sends, and shows the full pipeline result.</p>
+        <button id="recordBtn" class="record-btn">Hold or Click to Record</button>
+        <div class="voice-toggle-row">
+          <label class="switch">
+            <input type="checkbox" id="oneShotToggle">
+            <span class="slider"></span>
+          </label>
+          <span class="label">One-shot mode (simulate ESP32 — no follow-up questions)</span>
+        </div>
+        <div id="status">Ready</div>
+        <div id="response-box"></div>
+      </div>
+    </section>
+
+    <!-- ===================== Settings panel ===================== -->
+    <section id="panelSettings" class="panel">
+      <div class="card">
+        <h2>Assistant Behavior</h2>
+        <p class="description">Standing toggles — these apply to every interaction until changed here, unlike per-test options on the Voice Test tab.</p>
+
+        <div class="toggle-row">
+          <div>
+            <div class="label">Learning mode</div>
+            <div class="sublabel">Proactively notices and records durable facts about you into an "About Me" note as they come up in conversation.</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="learningModeToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="save-status" id="settingsStatus"></div>
+      </div>
+    </section>
+  </main>
 
   <script>
+    // ---------------------------------------------------------------
+    // Nav switching
+    // ---------------------------------------------------------------
+    const navVoice = document.getElementById('navVoice');
+    const navSettings = document.getElementById('navSettings');
+    const panelVoice = document.getElementById('panelVoice');
+    const panelSettings = document.getElementById('panelSettings');
+
+    function showPanel(name) {
+      const isVoice = name === 'voice';
+      panelVoice.classList.toggle('active', isVoice);
+      panelSettings.classList.toggle('active', !isVoice);
+      navVoice.classList.toggle('active', isVoice);
+      navSettings.classList.toggle('active', !isVoice);
+      if (!isVoice) loadSettings();
+    }
+
+    navVoice.addEventListener('click', () => showPanel('voice'));
+    navSettings.addEventListener('click', () => showPanel('settings'));
+
+    // ---------------------------------------------------------------
+    // Settings panel
+    // ---------------------------------------------------------------
+    const learningModeToggle = document.getElementById('learningModeToggle');
+    const settingsStatus = document.getElementById('settingsStatus');
+    const AUTH_TOKEN = 'YOUR_SUPER_SECRET_SECURE_TOKEN';
+
+    async function loadSettings() {
+      settingsStatus.textContent = '';
+      try {
+        const response = await fetch('/settings');
+        if (!response.ok) throw new Error(`Server returned ${response.status}`);
+        const data = await response.json();
+        learningModeToggle.checked = !!data.learning_mode;
+      } catch (error) {
+        console.error('Failed to load settings:', error);
+        settingsStatus.textContent = 'Could not load current settings.';
+        settingsStatus.style.color = '#ff6b6b';
+      }
+    }
+
+    async function saveSetting(key, value) {
+      settingsStatus.textContent = 'Saving...';
+      settingsStatus.style.color = '#888';
+      try {
+        const response = await fetch('/settings', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'auth': AUTH_TOKEN
+          },
+          body: JSON.stringify({ [key]: value })
+        });
+        if (!response.ok) throw new Error(`Server returned ${response.status}`);
+        settingsStatus.textContent = 'Saved.';
+        settingsStatus.style.color = '#00adb5';
+      } catch (error) {
+        console.error('Failed to save setting:', error);
+        settingsStatus.textContent = 'Failed to save — reverted.';
+        settingsStatus.style.color = '#ff6b6b';
+        loadSettings(); // revert the toggle to actual server state
+      }
+    }
+
+    learningModeToggle.addEventListener('change', () => {
+      saveSetting('learning_mode', learningModeToggle.checked);
+    });
+
+    // ---------------------------------------------------------------
+    // Voice Test panel (unchanged behavior from before)
+    // ---------------------------------------------------------------
     const recordBtn = document.getElementById('recordBtn');
     const statusText = document.getElementById('status');
     const responseBox = document.getElementById('response-box');
@@ -169,8 +394,6 @@
       audioChunks = [];
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-        // Using standard webaudio containers (webm works seamlessly with Whisper)
         mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
 
         mediaRecorder.ondataavailable = (event) => {
@@ -180,11 +403,8 @@
         };
 
         mediaRecorder.onstop = async () => {
-          // Combine chunks into a single Blob
           const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
           await sendAudioToBackend(audioBlob);
-
-          // Stop all audio tracks to release the microphone hardware link
           stream.getTracks().forEach(track => track.stop());
         };
 
@@ -213,20 +433,13 @@
     async function sendAudioToBackend(blob) {
       const formData = new FormData();
       formData.append('file', blob, 'command.webm');
-
-      // This webpage is a testing tool, not the ESP32 — it always waits
-      // for the actual result ("sync") so you have something to look at.
-      // The one-shot toggle controls whether the agent is allowed to end
-      // on a clarifying question, which is what real hardware will need.
       formData.append('sync', 'true');
       formData.append('one_shot', oneShotToggle.checked ? 'true' : 'false');
 
       try {
         const response = await fetch('/voice', {
           method: 'POST',
-          headers: {
-            'auth': 'YOUR_SUPER_SECRET_SECURE_TOKEN'
-          },
+          headers: { 'auth': AUTH_TOKEN },
           body: formData
         });
 

@@ -14,6 +14,7 @@ from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
 
 from agent.memory import MemoryStore
+from agent.settings import settings
 from agent.tools.all_tools import get_tools
 
 
@@ -52,10 +53,42 @@ know." Examples that require a search:
 If a search returns nothing usable, tell the user you couldn't verify the detail rather 
 than fabricating one.
 
+## MANDATORY: Multi-Part Requests
+Before acting on a request, identify every individual item it implies — each stop on a 
+trip, each event, each separate thing being asked for. Requests are not "done" once 
+you've handled the first one.
+
+After each tool call, check whether items from the original request still remain, and 
+continue until all of them are handled — do not stop partway through and summarize as if 
+finished. This applies across revisions too: if the user corrects or adds to a request 
+that already had multiple parts, track which parts are already done and which still need 
+action, rather than losing track of the ones you haven't gotten to yet.
+
+If part of a multi-part request fails or can't be completed, say so explicitly for that 
+specific part in your final reply — never go quiet about a skipped item.
+
 ## General Rule
 When in doubt about whether a fact is current, real, or time-sensitive, treat it as 
 unknown and use a tool to verify it. Never present a guessed or fabricated fact as if it 
 were verified."""
+
+LEARNING_ADDENDUM = """
+
+## Learning About the User
+As things come up naturally in conversation, notice durable facts about the user worth 
+remembering for later — preferences, recurring people or places, ongoing projects, 
+routines, things they care about. When you notice something like this, record it using 
+search_notes/read_note/append_to_note/update_note_section against a note titled "About 
+Me" (search for it first; create it with save_note if it doesn't exist yet, organized 
+into sections like Preferences, People, Routine, Interests).
+
+Be selective, not exhaustive. Most requests won't contain anything worth recording — a 
+one-off task like "turn off the kitchen light" has nothing to learn from it, and checking 
+should not become a habit that runs on every single message. Only act on this when 
+something genuinely stands out as durable and useful to know later, not routine details of 
+the current request itself. Never let this delay or distract from actually completing 
+what the user asked for — it's a secondary, occasional side effect, not the point of the 
+response."""
 
 ONE_SHOT_ADDENDUM = """
 
@@ -103,6 +136,8 @@ def build_graph(checkpointer, memory: MemoryStore):
 
         one_shot = (config or {}).get("configurable", {}).get("one_shot", False)
         addendum = ONE_SHOT_ADDENDUM if one_shot else ""
+        if settings.learning_mode:
+            addendum += LEARNING_ADDENDUM
 
         system = SystemMessage(content=SYSTEM_PROMPT + addendum + memory_block)
         response = llm_with_tools.invoke([system] + state["messages"])

@@ -23,6 +23,7 @@ load_dotenv()
 from agent.graph import build_graph
 from agent.memory import MemoryStore, make_chroma_client, make_embedding_function
 from agent.runtime import app_state, run_agent
+from agent.settings import settings
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from jobs.digest import send_daily_digest
@@ -145,6 +146,32 @@ async def health():
         "memory_ready": app_state.memory is not None,
         "scheduler_running": scheduler.running,
     }
+
+
+class SettingsUpdate(BaseModel):
+    learning_mode: bool | None = None
+
+
+@app.get("/settings")
+async def get_settings():
+    """Current standing app-level toggles (as opposed to per-request
+    options like one_shot). Read-only, no auth needed — nothing sensitive
+    here, just current state for the dashboard to render."""
+    return {"learning_mode": settings.learning_mode}
+
+
+@app.post("/settings")
+async def update_settings(update: SettingsUpdate, auth: Annotated[str | None, Header()] = None):
+    """Update standing app-level toggles. Only fields present in the
+    request body are changed. Takes effect immediately — settings are
+    read fresh on every agent turn, no restart needed."""
+    if auth != os.environ["API_TOKEN"]:
+        raise HTTPException(status_code=401, detail="Unauthorized request source")
+
+    if update.learning_mode is not None:
+        settings.learning_mode = update.learning_mode
+
+    return {"learning_mode": settings.learning_mode}
 
 
 @app.post("/debug/digest")
