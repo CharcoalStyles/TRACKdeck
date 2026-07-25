@@ -4,7 +4,12 @@ Ideas and follow-ups that came up during other work, not yet scheduled.
 
 <!-- Previous entries here (default location, digest time, and location/timezone as
      onboarding-collected settings) landed — see agent/settings.py, main.py's /settings,
-     static/settings.html, static/onboarding.html. -->
+     static/settings.html, static/onboarding.html.
+
+     Also landed: digest-into-vault (jobs/digest.py's _write_recap_to_vault,
+     alongside the email), the Syncthing conflict-file Gotify alert
+     (agent/vault_watcher.py's _alert_new_conflict_files), and structured
+     logging over print() (utils/logging.py). -->
 
 ## Discussed, intentionally not built yet
 
@@ -16,11 +21,6 @@ Ideas and follow-ups that came up during other work, not yet scheduled.
 - **Gratitude/mood/wins prompting as part of the digest.** Explicitly deferred — "get the
   basics out of the way first" — but was the original motivation for wanting a daily
   digest at all.
-- **Writing the digest into the vault as a daily note**, alongside (or instead of) the
-  email. Deferred with "just email for now," not ruled out.
-- **A Gotify alert when Syncthing conflict files appear.** Right now they're silently
-  ignored by the indexer (correct — they shouldn't be treated as real notes), but a
-  conflict happening at all is a signal worth surfacing, not just suppressing.
 - **Extending linked-note splitting beyond People** — Career/Health/Routine/Interests
   becoming their own linked notes the same way, once About Me's sections have enough
   content to justify it. The mechanism (`get_or_create_linked_note`) is already general
@@ -31,9 +31,6 @@ Ideas and follow-ups that came up during other work, not yet scheduled.
 
 ## Additional suggestions (Claude's own ideas, not discussed)
 
-- **Structured logging over `print()`.** Fine for interactive dev, harder to work with on
-  a headless server — timestamps, log levels, and something greppable would help
-  diagnosing an issue after the fact rather than only while watching the console live.
 - **A privacy pass on what's now flowing through the vault.** The profile system is working
   as intended, which means it now holds real, sensitive information — health/diagnosis
   details about you and your family. Worth a deliberate think about at-rest protection
