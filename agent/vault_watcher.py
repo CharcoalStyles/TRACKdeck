@@ -168,6 +168,48 @@ async def process_inbox_file(memory: MemoryStore, path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Sync-conflict alerts
+# ---------------------------------------------------------------------------
+#
+# is_ignorable() correctly keeps *.sync-conflict-* files out of the note
+# index (they're Syncthing's doing, not a real note) — but silently
+# ignoring them entirely means a genuine multi-device edit conflict could
+# sit in the vault unnoticed indefinitely. This surfaces it via Gotify
+# instead, without changing how they're indexed.
+
+# In-process dedup so a conflict file already alerted on doesn't re-alert
+# every reconciliation sweep (or every debounced watcher event) for as
+# long as it sits there unresolved. Resets on restart — an occasional
+# duplicate alert after a restart is a fine tradeoff for not persisting
+# this anywhere.
+_alerted_conflict_paths: set[Path] = set()
+
+
+def _find_conflict_files() -> list[Path]:
+    root = vault.vault_root()
+    if not root.exists():
+        return []
+    return [p for p in root.rglob("*") if p.is_file() and "sync-conflict" in p.name]
+
+
+async def _alert_new_conflict_files(paths) -> None:
+    new_paths = [p for p in paths if p.resolve() not in _alerted_conflict_paths]
+    if not new_paths:
+        return
+    for p in new_paths:
+        _alerted_conflict_paths.add(p.resolve())
+
+    names = ", ".join(p.name for p in new_paths)
+    logger.warning("Sync-conflict file(s) detected: %s", names)
+    await asyncio.to_thread(
+        send_gotify,
+        "Syncthing conflict file(s) detected",
+        f"{len(new_paths)} conflict file(s) need manual resolution: {names}",
+        5,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Reconciliation — the correctness guarantee
 # ---------------------------------------------------------------------------
 
@@ -201,6 +243,8 @@ async def reconcile_vault(memory: MemoryStore) -> None:
         for path in vault.list_inbox_files():
             await process_inbox_file(memory, path)
 
+        await _alert_new_conflict_files(await asyncio.to_thread(_find_conflict_files))
+
         logger.info("Vault reconciliation complete: %d notes indexed.", len(seen_ids))
 
     except Exception as e:
@@ -225,6 +269,9 @@ async def watch_vault(memory: MemoryStore) -> None:
     async for changes in awatch(root):
         for change_type, changed_path_str in changes:
             path = Path(changed_path_str)
+
+            if "sync-conflict" in path.name and change_type != Change.deleted and path.exists():
+                await _alert_new_conflict_files([path])
 
             if vault.is_ignorable(path):
                 continue
