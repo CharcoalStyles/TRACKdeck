@@ -5,11 +5,11 @@ Personal Assistant — FastAPI + LangGraph
 import os
 import asyncio
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Annotated
 
 import uvicorn
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -41,30 +41,20 @@ if os.environ.get("API_TOKEN") == _PLACEHOLDER_API_TOKEN:
 from agent.graph import build_graph
 from agent.memory import MemoryStore, make_chroma_client, make_embedding_function
 from agent.runtime import app_state, create_new_thread, get_thread_messages, list_threads, run_agent
-from agent.settings import is_valid_digest_time, is_valid_timezone, settings
+from agent.scheduler import bedtime_trigger, calendar_sync_trigger, digest_trigger, scheduler
+from agent.settings import is_valid_digest_time, is_valid_sync_interval_minutes, is_valid_timezone, settings
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
+from jobs.bedtime import send_bedtime_reminder
+from jobs.calendar_sync import sync_calendar_reminders
 from jobs.digest import send_daily_digest
+from jobs.reminders import fire_reminder
 
 from agent.vault_watcher import reconcile_vault, watch_vault
-from utils import vault
+from utils import reminders_store, vault
 
 from voice import router as voice_router
 from routes.synth import router as synth_router
-
-# ---------------------------------------------------------------------------
-# Scheduler — daily digest, time/timezone from settings (jobs/digest.py has
-# the rationale for the ~20:45 default). Rescheduled live by /settings
-# below rather than requiring a restart.
-# ---------------------------------------------------------------------------
-
-scheduler = AsyncIOScheduler(timezone=settings.zoneinfo())
-
-
-def _digest_trigger() -> CronTrigger:
-    hour, minute = (int(p) for p in settings.digest_time.split(":"))
-    return CronTrigger(hour=hour, minute=minute, timezone=settings.zoneinfo())
-
 
 # ---------------------------------------------------------------------------
 # Lifespan
@@ -83,11 +73,48 @@ async def lifespan(app: FastAPI):
 
         scheduler.add_job(
             send_daily_digest,
-            trigger=_digest_trigger(),
+            trigger=digest_trigger(),
             args=[app_state.memory],
             id="daily_digest",
             replace_existing=True,
         )
+        scheduler.add_job(
+            send_bedtime_reminder,
+            trigger=bedtime_trigger(),
+            id="bedtime_reminder",
+            replace_existing=True,
+        )
+        # next_run_time=now: also runs once immediately at startup, so an
+        # event added/changed/removed manually (in Nextcloud, not through
+        # the agent) while the app was down gets picked up right away
+        # rather than waiting up to settings.calendar_sync_interval_minutes.
+        scheduler.add_job(
+            sync_calendar_reminders,
+            trigger=calendar_sync_trigger(),
+            id="calendar_reminder_sync",
+            replace_existing=True,
+            next_run_time=datetime.now(timezone.utc),
+        )
+
+        # Re-hydrate ad-hoc reminders (agent/tools/alerts.py's set_reminder/
+        # set_timer) across restarts — the DB is the source of truth, the
+        # scheduler's in-memory jobs are not. Anything already overdue (the
+        # app was down past its fire time) fires now rather than being
+        # silently dropped.
+        await asyncio.to_thread(reminders_store.init_db)
+        for reminder in await asyncio.to_thread(reminders_store.list_pending):
+            due_local = datetime.fromtimestamp(reminder["due_at"], tz=timezone.utc)
+            if due_local <= datetime.now(timezone.utc):
+                await fire_reminder(reminder["id"])
+            else:
+                scheduler.add_job(
+                    fire_reminder,
+                    trigger=DateTrigger(run_date=due_local),
+                    args=[reminder["id"]],
+                    id=f"reminder:{reminder['id']}",
+                    replace_existing=True,
+                )
+
         scheduler.start()
 
         # Reconciliation runs as a background task rather than being
@@ -230,6 +257,12 @@ class SettingsUpdate(BaseModel):
     # "HH:MM" 24-hour local time the daily digest fires. Changing this
     # reschedules the live APScheduler job, no restart needed.
     digest_time: str | None = None
+    # "HH:MM" 24-hour local time the bedtime reminder fires. Same
+    # rescheduling behavior as digest_time, separate job.
+    bedtime: str | None = None
+    # Minutes between calendar reminder-sync polls (jobs/calendar_sync.py).
+    # Same rescheduling behavior as digest_time/bedtime, separate job.
+    calendar_sync_interval_minutes: int | None = None
 
     @model_validator(mode="after")
     def _check_values(self):
@@ -237,6 +270,12 @@ class SettingsUpdate(BaseModel):
             raise ValueError(f"'{self.timezone}' is not a recognized IANA timezone name")
         if self.digest_time is not None and not is_valid_digest_time(self.digest_time):
             raise ValueError(f"'{self.digest_time}' is not a valid HH:MM 24-hour time")
+        if self.bedtime is not None and not is_valid_digest_time(self.bedtime):
+            raise ValueError(f"'{self.bedtime}' is not a valid HH:MM 24-hour time")
+        if self.calendar_sync_interval_minutes is not None and not is_valid_sync_interval_minutes(
+            self.calendar_sync_interval_minutes
+        ):
+            raise ValueError("calendar_sync_interval_minutes must be between 1 and 1440")
         if self.default_location is not None and not self.default_location.strip():
             raise ValueError("default_location cannot be blank")
         return self
@@ -248,6 +287,8 @@ def _current_settings() -> dict:
         "default_location": settings.default_location,
         "timezone": settings.timezone,
         "digest_time": settings.digest_time,
+        "bedtime": settings.bedtime,
+        "calendar_sync_interval_minutes": settings.calendar_sync_interval_minutes,
     }
 
 
@@ -265,9 +306,9 @@ async def update_settings(update: SettingsUpdate, auth: Annotated[str | None, He
     request body are changed. Takes effect immediately — settings are
     read fresh on every agent turn, no restart needed.
 
-    timezone/digest_time also live-reschedule the daily_digest job, since
-    it's registered with the scheduler as a fixed CronTrigger rather than
-    being read fresh like the other settings.
+    timezone/digest_time/bedtime/calendar_sync_interval_minutes also
+    live-reschedule their APScheduler jobs, since they're registered as
+    fixed triggers rather than being read fresh like the other settings.
     """
     if auth != os.environ["API_TOKEN"]:
         raise HTTPException(status_code=401, detail="Unauthorized request source")
@@ -277,13 +318,23 @@ async def update_settings(update: SettingsUpdate, auth: Annotated[str | None, He
     if update.default_location is not None:
         settings.default_location = update.default_location.strip()
 
-    reschedule = update.timezone is not None or update.digest_time is not None
+    reschedule_digest = update.timezone is not None or update.digest_time is not None
+    reschedule_bedtime = update.timezone is not None or update.bedtime is not None
+    reschedule_calendar_sync = update.calendar_sync_interval_minutes is not None
     if update.timezone is not None:
         settings.timezone = update.timezone
     if update.digest_time is not None:
         settings.digest_time = update.digest_time
-    if reschedule:
-        scheduler.reschedule_job("daily_digest", trigger=_digest_trigger())
+    if update.bedtime is not None:
+        settings.bedtime = update.bedtime
+    if update.calendar_sync_interval_minutes is not None:
+        settings.calendar_sync_interval_minutes = update.calendar_sync_interval_minutes
+    if reschedule_digest:
+        scheduler.reschedule_job("daily_digest", trigger=digest_trigger())
+    if reschedule_bedtime:
+        scheduler.reschedule_job("bedtime_reminder", trigger=bedtime_trigger())
+    if reschedule_calendar_sync:
+        scheduler.reschedule_job("calendar_reminder_sync", trigger=calendar_sync_trigger())
 
     return _current_settings()
 
@@ -301,6 +352,35 @@ async def trigger_digest_now(auth: Annotated[str | None, Header()] = None):
 
     await send_daily_digest(app_state.memory)
     return {"status": "sent"}
+
+
+@app.post("/debug/reminders/fire/{reminder_id}")
+async def trigger_reminder_now(reminder_id: str, auth: Annotated[str | None, Header()] = None):
+    """
+    Manually fires a specific pending reminder immediately, without waiting
+    for its scheduled time — useful for testing delivery without sitting
+    around for the real due time.
+    """
+    if auth != os.environ["API_TOKEN"]:
+        raise HTTPException(status_code=401, detail="Unauthorized request source")
+
+    await fire_reminder(reminder_id)
+    return {"status": "fired"}
+
+
+@app.post("/debug/calendar-sync")
+async def trigger_calendar_sync_now(auth: Annotated[str | None, Header()] = None):
+    """
+    Manually runs a calendar reminder sync pass immediately, without
+    waiting for the CALENDAR_SYNC_INTERVAL_MINUTES schedule — useful for
+    testing that a manually added/changed/removed calendar event (with a
+    native alarm set) picks up correctly.
+    """
+    if auth != os.environ["API_TOKEN"]:
+        raise HTTPException(status_code=401, detail="Unauthorized request source")
+
+    await sync_calendar_reminders()
+    return {"status": "synced"}
 
 
 @app.post("/debug/reconcile-vault")

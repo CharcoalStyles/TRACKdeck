@@ -218,5 +218,8 @@ received_notes/
 memory.db
 memory.db-shm
 memory.db-wal
+reminders.db
+reminders.db-shm
+reminders.db-wal
 .models/
 data/

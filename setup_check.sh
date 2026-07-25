@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # setup_check.sh
 # Verifies (and fixes) the two runtime prerequisites that don't come from
-# `uv sync`: the Piper TTS voice model, and the memory.db/chroma_db paths
-# that docker-compose expects to already exist as the right file types.
+# `uv sync`: the Piper TTS voice model, and the memory.db/reminders.db/
+# chroma_db paths that docker-compose expects to already exist as the
+# right file types.
 #
 # Safe to re-run — every step is idempotent.
 
@@ -35,16 +36,18 @@ else
 fi
 
 echo
-echo "== 2. memory.db / chroma_db (docker-compose bind mounts) =="
+echo "== 2. memory.db / reminders.db / chroma_db (docker-compose bind mounts) =="
 DATA_DIR="./data"
 MEMORY_DB="${DATA_DIR}/memory.db"
+REMINDERS_DB="${DATA_DIR}/reminders.db"
 CHROMA_DIR="${DATA_DIR}/chroma_db"
 
 mkdir -p "$DATA_DIR"
 
-# docker-compose.yml bind-mounts ./data/memory.db as a FILE into the
-# container. If it doesn't exist on the host yet, Docker will create it
-# as a DIRECTORY instead, and AsyncSqliteSaver will fail to open it.
+# docker-compose.yml bind-mounts ./data/memory.db and ./data/reminders.db
+# as FILEs into the container. If either doesn't exist on the host yet,
+# Docker will create it as a DIRECTORY instead, and sqlite will fail to
+# open it.
 if [[ -d "$MEMORY_DB" ]]; then
     echo "  ERROR: $MEMORY_DB exists but is a DIRECTORY, not a file."
     echo "         This happens when docker compose was run before this file existed."
@@ -55,6 +58,18 @@ elif [[ -f "$MEMORY_DB" ]]; then
 else
     echo "  Creating empty $MEMORY_DB so Docker mounts it as a file..."
     touch "$MEMORY_DB"
+fi
+
+if [[ -d "$REMINDERS_DB" ]]; then
+    echo "  ERROR: $REMINDERS_DB exists but is a DIRECTORY, not a file."
+    echo "         This happens when docker compose was run before this file existed."
+    echo "         Remove it and re-run this script: rm -r '$REMINDERS_DB'"
+    exit 1
+elif [[ -f "$REMINDERS_DB" ]]; then
+    echo "  OK: $REMINDERS_DB already exists as a file."
+else
+    echo "  Creating empty $REMINDERS_DB so Docker mounts it as a file..."
+    touch "$REMINDERS_DB"
 fi
 
 if [[ -d "$CHROMA_DIR" ]]; then

@@ -1,5 +1,9 @@
 import os
+import re
 import xml.etree.ElementTree as ET
+from datetime import timedelta
+from typing import Optional
+
 import requests
 from requests.auth import HTTPBasicAuth
 
@@ -21,21 +25,41 @@ def parse_ics(ics_text):
     """
     Parses raw iCalendar text into a clean dictionary.
     Perfect for handing structured data directly to an LLM context.
+
+    "alarms" collects each VALARM's raw relative TRIGGER value (e.g.
+    "-PT30M") — a reminder set via the calendar app's own UI, not
+    something created through this codebase. An absolute (DATE-TIME)
+    trigger, or one relative to DTEND rather than DTSTART, won't match
+    the plain "TRIGGER" key check below and is silently skipped rather
+    than guessed at — see parse_ics_duration.
     """
-    event_details = {}
+    event_details = {"alarms": []}
 
     # 1. Unfold lines (iCalendar spec standardizes splitting long lines with CRLF + Space)
     unfolded_text = ics_text.replace("\r\n ", "").replace("\n ", "")
-    
+
+    in_valarm = False
     for line in unfolded_text.splitlines():
         if not line or ":" not in line:
             continue
-            
+
         # Split only on the first colon to preserve colons inside descriptions/URLs
         key, value = line.split(":", 1)
         key = key.strip()
         value = value.strip().replace(r"\,", ",").replace(r"\;", ";") # Unescape punctuation
-        
+
+        if key == "BEGIN" and value == "VALARM":
+            in_valarm = True
+            continue
+        if key == "END" and value == "VALARM":
+            in_valarm = False
+            continue
+
+        if in_valarm:
+            if key == "TRIGGER":
+                event_details["alarms"].append(value)
+            continue
+
         if key == "SUMMARY":
             event_details["summary"] = value
         elif key == "DTSTART":
@@ -46,8 +70,32 @@ def parse_ics(ics_text):
             event_details["description"] = value
         elif key == "UID":
             event_details["uid"] = value
-            
+
     return event_details
+
+
+_ICS_DURATION_PATTERN = re.compile(
+    r"^(?P<sign>[+-])?P"
+    r"(?:(?P<days>\d+)D)?"
+    r"(?:T(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?)?$"
+)
+
+
+def parse_ics_duration(value: str) -> Optional[timedelta]:
+    """
+    Parses an RFC 5545 DURATION value (as used in a VALARM's TRIGGER,
+    e.g. "-PT30M" = 30 minutes before the thing it's attached to) into a
+    timedelta. Returns None if it doesn't match the expected format.
+    """
+    match = _ICS_DURATION_PATTERN.match(value.strip())
+    if not match or not any(match.group(g) for g in ("days", "hours", "minutes", "seconds")):
+        return None
+    sign = -1 if match.group("sign") == "-" else 1
+    days = int(match.group("days") or 0)
+    hours = int(match.group("hours") or 0)
+    minutes = int(match.group("minutes") or 0)
+    seconds = int(match.group("seconds") or 0)
+    return sign * timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
 
 
 # ==========================================

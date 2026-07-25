@@ -19,8 +19,8 @@ ESP32-S3 (push-to-talk) ──┐
 Browser dashboard ─────────┘         │                        │
                                       │                        ├──> LM Studio (local LLM)
                               APScheduler                      ├──> Tools (calendar, weather,
-                              (daily digest,                   │     notes, web search, ...)
-                               20:45 local)                    └──> Chroma (recall + notes index)
+                              (daily digest, bedtime,           │     notes, reminders, ...)
+                               ad-hoc reminders)                └──> Chroma (recall + notes index)
                                       │
                                       ├──> Gotify (push notifications)
                                       └──> SMTP (daily recap email)
@@ -46,7 +46,7 @@ docker compose up syncthing -d
 VAULT_PATH=./data/vault uv run uvicorn main:app --reload
 
 # Full stack
-./setup_check.sh          # once, before first run — Piper model + memory.db/chroma_db setup
+./setup_check.sh          # once, before first run — Piper model + memory.db/reminders.db/chroma_db setup
 docker compose up --build
 
 # Wipe accumulated memory (Chroma + thread checkpoints), vault preserved unless --vault passed
@@ -132,13 +132,45 @@ Learning mode and the two active modes are mutually exclusive per turn.
 - **Calendar/weather/search** — Calendar is Nextcloud CalDAV
   (`agent/tools/calendar.py`, `utils/next_cloud_calendar.py`). Weather is Open-Meteo, no
   key. Web search is SearXNG, self-hosted, degrades gracefully if `SEARXNG_URL` unset.
-  `set_reminder`/`set_timer` (`agent/tools/alerts.py`) are **stubs** — no real scheduling.
+- **Reminders** — `agent/tools/alerts.py`'s `set_reminder`/`set_timer` are real: `when`
+  arrives as an absolute local date/time (the system prompt's date/time-grounding rule
+  makes the LLM resolve relative language like "in 10 minutes" before calling the tool,
+  parsed via `utils/datetime.py`'s `parse_local_datetime`), persisted in `reminders.db`
+  (`utils/reminders_store.py`) and scheduled as a one-shot APScheduler job
+  (`agent/scheduler.py`'s shared `scheduler`, job id `reminder:<id>`) that calls
+  `jobs/reminders.py`'s `fire_reminder`. `list_reminders`/`cancel_reminder` round out the
+  set. Pending reminders are re-hydrated into the scheduler on startup from the DB;
+  anything overdue while the app was down fires immediately instead of being dropped.
+  Calendar-relative reminders ("30 min before my dentist appointment") also work
+  on-demand — the LLM combines `get_calendar_events`/`get_todays_events` with
+  `set_reminder` itself, no calendar involvement beyond that one turn. One-off only, no
+  recurrence — a recurring need is a calendar event, not a reminder.
+- **Calendar reminder sync** — `jobs/calendar_sync.py`'s `sync_calendar_reminders`, since
+  CalDAV has no push mechanism to notice an event manually added/moved/deleted outside the
+  agent. APScheduler `IntervalTrigger` job (`"calendar_reminder_sync"`, every
+  `settings.calendar_sync_interval_minutes` — default 30, live-reschedulable via
+  `/settings` like `digest_time`/`bedtime` — plus once at startup). Opt-in is the event's own
+  native reminder — a `VALARM` (RFC 5545, the same "remind me" toggle any calendar app's
+  editor exposes) — not a custom tag scheme; `utils/next_cloud_calendar.py`'s `parse_ics`
+  collects each `VALARM`'s `TRIGGER`, `parse_ics_duration` turns it into a `timedelta`
+  applied against the event start. Keyed by event UID
+  (`reminders_store.upsert_calendar_reminder`) so re-syncing an unchanged event is a no-op.
+  Only a UTC (`Z`-suffixed) `DTSTART` is understood — a floating/TZID-local start is
+  silently skipped. Removal is a direct `get_event(uid)` check for any tracked reminder not
+  seen in the latest range query, so an event merely pushed beyond the 14-day lookahead
+  isn't mistaken for a deletion; a fired/cancelled reminder is only revived if the event's
+  computed due time actually changed since.
 - **Notifications** — `utils/notify.py` (Gotify) + `utils/mailer.py` (SMTP), single
   blocking call each via `asyncio.to_thread`. Gotify priority 3 (silent) for routine
-  per-turn pushes (title includes the thread keyword), priority 8 for errors.
+  per-turn pushes (title includes the thread keyword), priority 7 for reminders/bedtime
+  (should actually alert), priority 8 for errors.
 - **Daily digest** — `jobs/digest.py`, APScheduler at 20:45 `Australia/Canberra`. Pulls the
   day's Chroma conversation summaries, has the LLM write a recap, emails it, sweeps the
   thread/keyword registry. `POST /debug/digest` fires it on demand.
+- **Bedtime reminder** — `jobs/bedtime.py`, its own APScheduler cron job
+  (`"bedtime_reminder"`) at `settings.bedtime` (default 21:20) — a fixed, simple Gotify
+  push, deliberately separate from the digest (different trigger, different purpose: the
+  digest recaps the day, this just says it's time to wind down).
 - **Dashboard** (`static/`) — plain HTML/CSS/JS, no build step, no framework, native ES
   modules (`static/js/api.js`, `static/js/chat.js`). Deliberate choice over a React/Vue app
   given the added complexity for a single-user tool. `chat.js`'s `ChatWidget` is the shared
@@ -154,22 +186,27 @@ agent/
   runtime.py                AppState, thread resolution, run_agent()
   keywords.py               Wordlist + fuzzy prefix matching
   settings.py                Standing app-level toggles
+  scheduler.py                Shared APScheduler instance + cron trigger builders
   memory.py                  Chroma wrapper (conversations + notes collections)
   vault_watcher.py            Live watcher, Inbox ingestion, reconciliation
   tools/
     calendar.py, weather.py, general.py, alerts.py, notes.py, all_tools.py
 jobs/
   digest.py                 Daily recap + keyword sweep
+  bedtime.py                 Fixed nightly wind-down nudge
+  reminders.py                Fires a single ad-hoc reminder
+  calendar_sync.py             Polls for manually added/changed/removed calendar events
 utils/
   vault.py                  Frontmatter, atomic writes, section editing, About Me/linked notes
   next_cloud_calendar.py     CalDAV client
-  datetime.py                 Calendar day-boundary helpers
+  datetime.py                 Calendar day-boundary helpers, parse_local_datetime
+  reminders_store.py           sqlite3 CRUD for reminders.db
   notify.py, mailer.py        Gotify, SMTP
 routes/
   synth.py                    Piper TTS (built, not wired into the production voice flow)
 static/                       Dashboard (index/voice/onboarding/profile/settings .html)
 docker-compose.yml            assistant + syncthing services, shared vault volume
-setup_check.sh                 Verifies/downloads Piper models, fixes the memory.db bind-mount gotcha
+setup_check.sh                 Verifies/downloads Piper models, fixes the memory.db/reminders.db bind-mount gotcha
 reset_knowledge.sh              Wipes memory/index/checkpoints; vault wipe gated behind --vault
 ```
 
@@ -189,13 +226,17 @@ See `.env.example` for the full list. Notable ones:
   no auth at all** — known gap, see below.
 - **`LEARNING_MODE_DEFAULT`** — startup default for `agent/settings.py`'s `learning_mode`;
   live-changeable via `/settings`.
-- **`default_location`, `timezone`, `digest_time`** — standing settings in
-  `agent/settings.py`, deliberately *not* env-backed (unlike `learning_mode`) — they're
-  meant to be set from the frontend (the onboarding "Basics" form, or the Settings page),
-  so .env isn't a second source of truth for them. `timezone` (IANA name) drives date/time
-  grounding (`agent/tools/general.py`, `utils/datetime.py`), calendar day boundaries, and
-  the digest schedule; `digest_time` (`HH:MM`) is when the daily digest fires. Both changes
-  live-reschedule the `daily_digest` APScheduler job via `/settings`.
+- **`default_location`, `timezone`, `digest_time`, `bedtime`,
+  `calendar_sync_interval_minutes`** — standing settings in `agent/settings.py`,
+  deliberately *not* env-backed (unlike `learning_mode`) — they're meant to be set from the
+  frontend (the onboarding "Basics" form, or the Settings page), so .env isn't a second
+  source of truth for them. `timezone` (IANA name) drives date/time grounding
+  (`agent/tools/general.py`, `utils/datetime.py`), calendar day boundaries, and the cron
+  jobs below; `digest_time` (`HH:MM`) is when the daily digest fires, `bedtime` (`HH:MM`)
+  is when the bedtime reminder fires, `calendar_sync_interval_minutes` (int, 1–1440) is how
+  often the calendar reminder sync polls. All four changes live-reschedule their respective
+  APScheduler jobs (`daily_digest`/`bedtime_reminder`/`calendar_reminder_sync`) via
+  `/settings`.
 
 ## Known limitations (true today, not proposals — don't "fix" without asking)
 

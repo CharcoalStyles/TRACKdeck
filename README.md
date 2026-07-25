@@ -21,6 +21,9 @@ light, and don't make the model do more reasoning than it needs to for a given s
   - [Notes vault](#notes-vault)
   - [About Me / profile](#about-me-profile)
   - [Calendar, weather, web search](#calendar-weather-web-search)
+  - [Reminders](#reminders)
+  - [Calendar reminder sync](#calendar-reminder-sync)
+  - [Bedtime reminder](#bedtime-reminder)
   - [Notifications](#notifications)
   - [Daily digest](#daily-digest)
   - [Dashboard](#dashboard)
@@ -190,8 +193,81 @@ find-and-replace, so it structurally can't mangle prose it wasn't asked to touch
 - **Weather** (`agent/tools/weather.py`) — Open-Meteo, no API key needed.
 - **Web search** (`agent/tools/general.py`) — SearXNG, self-hosted. Falls back to a plain
   "not connected" message if `SEARXNG_URL` isn't set.
-- `set_reminder`/`set_timer` (`agent/tools/alerts.py`) are **stubs** — they print and
-  return a canned response, no real scheduling behind them yet.
+
+### Reminders
+
+`agent/tools/alerts.py`'s `set_reminder`/`set_timer` are real. `when` arrives as an
+absolute local date/time — the system prompt's mandatory date/time-grounding rule (see
+[System prompt modes](#system-prompt-modes)) already makes the LLM resolve relative
+language ("in 10 minutes", "tomorrow at 9am") into an absolute value before calling any
+tool, the same convention `add_calendar_event`'s `start` param already relies on. Parsing
+is shared: `utils/datetime.py`'s `parse_local_datetime` does the work, and `text_to_utc`
+(used by the calendar tools) is now a thin wrapper around it.
+
+A reminder is a row in `reminders.db` (`utils/reminders_store.py`, plain stdlib `sqlite3`
+— no new dependency, matches the sync style the tool functions already use) plus a one-shot
+APScheduler job (`agent/scheduler.py`'s shared `scheduler`, job id `reminder:<id>`,
+`DateTrigger`) that calls `jobs/reminders.py`'s `fire_reminder` at the due time.
+`list_reminders`/`cancel_reminder` round out the tool set — cancellation matches by
+substring against the reminder's message text.
+
+On startup, `main.py`'s `lifespan` re-hydrates every pending reminder from the DB into the
+scheduler (the DB, not the in-memory scheduler, is the source of truth across restarts).
+Anything already overdue — the app was down past its fire time — fires immediately instead
+of being silently dropped.
+
+Calendar-relative reminders ("remind me 30 minutes before my dentist appointment") also
+work **on-demand**: the agent already has `get_todays_events`/`get_calendar_events`, so it
+computes the offset itself and calls `set_reminder` with the resulting absolute time — no
+calendar involvement needed beyond that single turn. Reminders are **one-off only**, no
+recurrence rules; a genuinely recurring need is a calendar event, not a reminder.
+
+`POST /debug/reminders/fire/{reminder_id}` fires a specific pending reminder immediately,
+for testing delivery without waiting on the real due time.
+
+### Calendar reminder sync
+
+Events are also often added, moved, or deleted directly in a calendar app — outside any
+conversation with the agent — and CalDAV has no push mechanism to notify this app when
+that happens. `jobs/calendar_sync.py`'s `sync_calendar_reminders` polls for it instead, on
+its own APScheduler `IntervalTrigger` job (`"calendar_reminder_sync"`), plus one immediate
+run at startup via `next_run_time`. The poll interval is
+`settings.calendar_sync_interval_minutes` (default 30, 1–1440 valid range) —
+live-reschedulable via `/settings`, same pattern as `digest_time`/`bedtime`.
+
+The opt-in is the calendar's own native reminder: an event with a `VALARM` (RFC 5545 — the
+same "remind me" toggle any calendar app's event editor already exposes, Nextcloud's web UI
+included) gets a matching row in `reminders.db`, keyed by the event's UID
+(`upsert_calendar_reminder`) so re-syncing the same unchanged event is a no-op rather than
+piling up duplicate reminders. `utils/next_cloud_calendar.py`'s `parse_ics` now also
+collects each `VALARM`'s `TRIGGER` value; `parse_ics_duration` turns the RFC 5545 duration
+string (e.g. `-PT30M`) into a `timedelta`, applied against the event's start time. An event
+with more than one alarm uses whichever is closest to the start time — a calendar app's
+basic reminder picker only ever sets one, so this is a rare case. Only a UTC (`Z`-suffixed)
+`DTSTART` is understood; an event whose calendar app wrote a floating/TZID-local start
+instead won't parse and is silently skipped rather than guessed at — worth checking against
+whatever client actually creates the event if reminders seem to be missing.
+
+Removal is handled by checking directly rather than assuming: any already-tracked
+calendar-linked reminder not seen in the latest range query gets a direct `get_event(uid)`
+check before anything happens to it, so an event that was simply pushed further out than
+the 14-day lookahead (still real, still has its alarm) doesn't get its reminder cancelled
+by mistake — only a genuinely deleted event, or one whose alarm was removed, does.
+Once a reminder has fired or been cancelled (including by hand, via `cancel_reminder`), a
+later sync pass leaves it alone unless the event's computed due time has actually changed,
+so cancelling a calendar-derived reminder sticks rather than being silently recreated on
+the next poll.
+
+`POST /debug/calendar-sync` runs a sync pass immediately, for testing.
+
+### Bedtime reminder
+
+`jobs/bedtime.py`, its own APScheduler cron job (`"bedtime_reminder"`) at
+`settings.bedtime` (default 21:20, see [Daily digest](#daily-digest) for why 20:45 is
+offset 35 minutes earlier). A fixed, simple Gotify push — no calendar cross-referencing,
+that would be scope beyond what was asked for. Deliberately a separate mechanism from both
+the digest and ad-hoc reminders: same delivery channel, different trigger, different
+purpose (the digest recaps the day; this just says it's time to wind down).
 
 ### Notifications
 
@@ -200,8 +276,9 @@ one blocking call each, run via `asyncio.to_thread` from async code.
 
 Gotify priority tiers map to Android notification channels (configured in the Gotify app's
 own settings, not in this code): routine per-turn pushes use priority 3 (the low/silent
-tier) and include the thread's keyword in the title; errors use priority 8 (the tier that
-actually interrupts you).
+tier) and include the thread's keyword in the title; reminders and the bedtime push use
+priority 7 (should actually alert you); errors use priority 8 (the tier that actually
+interrupts you).
 
 ### Daily digest
 
@@ -241,22 +318,27 @@ agent/
   runtime.py                AppState, thread resolution, run_agent()
   keywords.py               Wordlist + fuzzy prefix matching
   settings.py                Standing app-level toggles
+  scheduler.py                Shared APScheduler instance + cron trigger builders
   memory.py                  Chroma wrapper (conversations + notes collections)
   vault_watcher.py            Live watcher, Inbox ingestion, reconciliation
   tools/
     calendar.py, weather.py, general.py, alerts.py, notes.py, all_tools.py
 jobs/
   digest.py                 Daily recap + keyword sweep
+  bedtime.py                 Fixed nightly wind-down nudge
+  reminders.py                Fires a single ad-hoc reminder
+  calendar_sync.py             Polls for manually added/changed/removed calendar events
 utils/
   vault.py                  Frontmatter, atomic writes, section editing, About Me/linked notes
   next_cloud_calendar.py     CalDAV client
-  datetime.py                 Calendar day-boundary helpers
+  datetime.py                 Calendar day-boundary helpers, parse_local_datetime
+  reminders_store.py           sqlite3 CRUD for reminders.db
   notify.py, mailer.py        Gotify, SMTP
 routes/
   synth.py                    Piper TTS (built, not wired into the production voice flow)
 static/                       Dashboard (see above)
 docker-compose.yml            assistant + syncthing services, shared vault volume
-setup_check.sh                 Verifies/downloads Piper models, fixes the memory.db bind-mount gotcha
+setup_check.sh                 Verifies/downloads Piper models, fixes the memory.db/reminders.db bind-mount gotcha
 reset_knowledge.sh              Wipes memory/index/checkpoints; vault wipe gated behind --vault
 ```
 
@@ -289,6 +371,8 @@ See `.env.example` for the full list. Grouped by what needs external setup:
 | `/settings` | POST | `API_TOKEN` | Update standing toggles |
 | `/health` | GET | none | Liveness/readiness check |
 | `/debug/digest` | POST | `API_TOKEN` | Fire the daily digest on demand |
+| `/debug/reminders/fire/{id}` | POST | `API_TOKEN` | Fire a specific pending reminder on demand |
+| `/debug/calendar-sync` | POST | `API_TOKEN` | Run a calendar reminder sync pass on demand |
 | `/debug/reconcile-vault` | POST | `API_TOKEN` | Force a full vault/index reconciliation |
 | `/synthesize` | POST | none | Piper TTS — built, unused in the production voice flow |
 

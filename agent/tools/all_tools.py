@@ -11,7 +11,7 @@ from langchain_core.tools import tool
 
 from agent.memory import MemoryStore
 
-from agent.tools.alerts import set_reminder, set_timer
+from agent.tools.alerts import cancel_reminder, list_reminders, set_reminder, set_timer
 from agent.tools.calendar import get_tools as get_calendar_tools
 from agent.tools.general import get_current_datetime, web_search
 from agent.tools.notes import make_note_tools
@@ -32,6 +32,8 @@ def get_tools(memory: MemoryStore):
         get_current_datetime,
         set_reminder,
         set_timer,
+        list_reminders,
+        cancel_reminder,
         web_search,
     ])
 

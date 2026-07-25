@@ -27,6 +27,7 @@ services:
     volumes:
       # Persist SQLite and Chroma outside the container so they survive rebuilds
       - ./data/memory.db:/app/memory.db
+      - ./data/reminders.db:/app/reminders.db
       - ./data/chroma_db:/app/chroma_db
       # The notes vault — shared with the syncthing service below so both
       # containers see the same files. Must match VAULT_PATH in .env.

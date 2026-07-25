@@ -32,6 +32,13 @@ def is_valid_digest_time(value: str) -> bool:
         return False
 
 
+def is_valid_sync_interval_minutes(value: int) -> bool:
+    # Upper bound is a sanity check, not a hard technical limit — a
+    # multi-day interval would defeat the point of "poll for manual
+    # calendar edits" (jobs/calendar_sync.py).
+    return 1 <= value <= 1440
+
+
 class Settings:
     # When on, the agent proactively notices and records durable facts
     # about you into a canonical "About Me" note as they come up in
@@ -56,6 +63,19 @@ class Settings:
     # in main.py's /settings handler, not here. No env var, same reasoning
     # as default_location above.
     digest_time: str = "20:45"
+
+    # "HH:MM" 24-hour local time the bedtime reminder push fires (see
+    # jobs/bedtime.py) — a distinct nudge from the digest, timed close to
+    # it but not the same trigger. Same rescheduling/validation pattern as
+    # digest_time. No env var, same reasoning as default_location above.
+    bedtime: str = "21:20"
+
+    # How often (minutes) jobs/calendar_sync.py polls Nextcloud for
+    # manually added/changed/removed calendar events — CalDAV has no push
+    # mechanism, so this is the only way it notices. Same
+    # rescheduling/validation pattern as digest_time/bedtime. No env var,
+    # same reasoning as default_location above.
+    calendar_sync_interval_minutes: int = 30
 
     def zoneinfo(self) -> ZoneInfo:
         return ZoneInfo(self.timezone)

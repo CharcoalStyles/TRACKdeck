@@ -22,10 +22,10 @@ def get_todays_datetime():
 
     return today_start_utc, today_end_utc
 
-def text_to_utc(date_str, local_timezone_str=None):
+def parse_local_datetime(date_str: str, local_timezone_str: str | None = None) -> datetime:
     """
-    Converts an agent/user friendly ISO or natural string format into Nextcloud UTC format.
-    Example: '2026-07-10 15:00:00' -> '20260710T050000Z'
+    Parses an agent/user friendly ISO or 12-hour string into a tz-aware datetime.
+    Example: '2026-07-10 15:00:00' or '2026-07-10 3:00 PM'.
     """
     local_timezone_str = local_timezone_str or settings.timezone
 
@@ -44,12 +44,20 @@ def text_to_utc(date_str, local_timezone_str=None):
     else:
         # Accept standard ISO format from the LLM
         dt = datetime.fromisoformat(date_str.replace(" ", "T"))
-    
+
     # If the LLM didn't provide timezone info, assume the user's local timezone
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=ZoneInfo(local_timezone_str))
-        
-    # Convert to UTC and format for CalDAV
+
+    return dt
+
+
+def text_to_utc(date_str, local_timezone_str=None):
+    """
+    Converts an agent/user friendly ISO or natural string format into Nextcloud UTC format.
+    Example: '2026-07-10 15:00:00' -> '20260710T050000Z'
+    """
+    dt = parse_local_datetime(date_str, local_timezone_str)
     utc_dt = dt.astimezone(ZoneInfo("UTC"))
     return utc_dt.strftime("%Y%m%dT%H%M%SZ")
 
