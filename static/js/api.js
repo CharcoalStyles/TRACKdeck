@@ -53,7 +53,10 @@ export async function listThreads() {
 
 /** @returns {Promise<{thread_id: string, keyword: string}>} */
 export async function createNewThread() {
-  const response = await fetch('/threads/new', { method: 'POST' });
+  const response = await fetch('/threads/new', {
+    method: 'POST',
+    headers: { 'auth': AUTH_TOKEN },
+  });
   if (!response.ok) throw new Error(`Server returned ${response.status}`);
   return response.json();
 }

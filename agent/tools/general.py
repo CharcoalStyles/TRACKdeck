@@ -1,9 +1,12 @@
+import json
 from typing import Optional
 from datetime import datetime
 
 from langchain_core.tools import tool
 import requests
 import os
+
+from agent.settings import settings
 
 
 # ---------------------------------------------------------------------------
@@ -14,7 +17,7 @@ import os
 def get_current_datetime() -> str:
     """Returns the current date and time. Use this whenever you need to know the current time or date. It can help with finding the nearest specific day"""
 
-    now = datetime.now()
+    now = datetime.now(settings.zoneinfo())
     now_string = now.strftime("%-I:%M %p on %A %-d %B %Y")
     print(f"Current date and time: {now_string}")
     return f"The current date and time is: {now_string}"
@@ -49,7 +52,7 @@ def web_search(query: str) -> str:
     try:
         response = requests.get(f"{instance_url}/search", params=params, timeout=10)
         response.raise_for_status()
-        return response.json()
+        return json.dumps(response.json())
     except requests.exceptions.RequestException as e:
         print(f"Error connecting to SearXNG: {e}")
         return f"Web search failed. Query was: '{query}'"

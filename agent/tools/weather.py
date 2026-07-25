@@ -4,6 +4,8 @@ from langchain_core.tools import tool
 import requests
 import json
 
+from agent.settings import settings
+
 def call_open_meteo_search(location: str) -> dict:
     """Call the Open-Meteo API and return the response."""
 
@@ -28,19 +30,19 @@ def get_current_weather(location: Optional[str] = None) -> str:
     """Get the current weather.
 
     Args:
-        location: City or suburb. If not provided, uses the default of Canberra.
+        location: City or suburb. If not provided, uses the user's configured default location.
 
     Returns:
         A string containing the current weather in the specified location.
     """
-    loc = location or "Canberra"
+    loc = location or settings.default_location
     print(f"Fetching weather for: {loc}")
 
     try:
-        location_data = call_open_meteo_search(location)
+        location_data = call_open_meteo_search(loc)
         if len(location_data["results"]) == 0:
             return f"Weather for {loc}: No results found."
-        
+
         latitude = location_data["results"][0]['latitude']
         longitude = location_data["results"][0]['longitude']
 
@@ -73,20 +75,20 @@ def get_weather_forecast(location: Optional[str] = None) -> str:
     """Get the forecast weather for the next 7 days.
 
     Args:
-        location: City or suburb. If not provided, uses the default of Canberra.
+        location: City or suburb. If not provided, uses the user's configured default location.
 
     Returns:
         A list of dictionaries containing the forecast for the next 7 days.
     """
 
-    loc = location or "Canberra"
+    loc = location or settings.default_location
     print(f"Fetching weather for: {loc}")
 
     try:
-        location_data = call_open_meteo_search(location)
+        location_data = call_open_meteo_search(loc)
         if len(location_data["results"]) == 0:
             return f"Weather for {loc}: No results found."
-        
+
         print(f"Found location: {location_data['results']}")
 
         latitude = location_data["results"][0]['latitude']
@@ -132,20 +134,20 @@ def get_range_forecast(start: str, end: str, location: Optional[str] = None) -> 
     Args:
         start: Start date in ISO format (e.g., "2023-01-01")
         end: End date in ISO format (e.g., "2023-01-05")
-        location: City or suburb. If not provided, uses the default of Canberra.
+        location: City or suburb. If not provided, uses the user's configured default location.
 
     Returns:
         A list of dictionaries containing the forecast for the specified range of days.
     """
 
-    loc = location or "Canberra"
+    loc = location or settings.default_location
     print(f"Fetching weather for: {loc}")
 
     try:
-        location_data = call_open_meteo_search(location)
+        location_data = call_open_meteo_search(loc)
         if len(location_data["results"]) == 0:
             return f"Weather for {loc}: No results found."
-        
+
         print(f"Found location: {location_data['results']}")
 
         latitude = location_data["results"][0]['latitude']

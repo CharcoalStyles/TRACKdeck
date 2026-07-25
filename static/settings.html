@@ -39,6 +39,47 @@
 
       <div class="save-status" id="settingsStatus"></div>
     </div>
+
+    <div class="card">
+      <h2>Location & Time</h2>
+      <p class="description">Used for weather lookups when you don't name a place, and for grounding the assistant's sense of "today"/"now" (calendar day boundaries, the daily digest).</p>
+
+      <div class="field-row">
+        <label for="defaultLocationInput">Default location</label>
+        <input type="text" id="defaultLocationInput" placeholder="e.g. Canberra">
+      </div>
+
+      <div class="field-row">
+        <label for="timezoneInput">Timezone</label>
+        <div class="field-with-button">
+          <input type="text" id="timezoneInput" list="timezoneOptions" placeholder="e.g. Australia/Canberra">
+          <button type="button" id="detectTimezoneBtn" class="secondary-btn">Detect</button>
+        </div>
+        <datalist id="timezoneOptions"></datalist>
+      </div>
+
+      <div class="field-row">
+        <button type="button" id="saveLocationTimeBtn" class="primary-btn">Save</button>
+      </div>
+
+      <div class="save-status" id="locationStatus"></div>
+    </div>
+
+    <div class="card">
+      <h2>Daily Digest</h2>
+      <p class="description">Local time the end-of-day recap email is sent (see the Timezone above). Takes effect immediately, no restart needed.</p>
+
+      <div class="field-row">
+        <label for="digestTimeInput">Send time</label>
+        <input type="time" id="digestTimeInput">
+      </div>
+
+      <div class="field-row">
+        <button type="button" id="saveDigestTimeBtn" class="primary-btn">Save</button>
+      </div>
+
+      <div class="save-status" id="digestStatus"></div>
+    </div>
   </main>
 
   <script type="module">
@@ -47,11 +88,40 @@
     const learningModeToggle = document.getElementById('learningModeToggle');
     const settingsStatus = document.getElementById('settingsStatus');
 
+    const defaultLocationInput = document.getElementById('defaultLocationInput');
+    const timezoneInput = document.getElementById('timezoneInput');
+    const timezoneOptions = document.getElementById('timezoneOptions');
+    const detectTimezoneBtn = document.getElementById('detectTimezoneBtn');
+    const saveLocationTimeBtn = document.getElementById('saveLocationTimeBtn');
+    const locationStatus = document.getElementById('locationStatus');
+
+    const digestTimeInput = document.getElementById('digestTimeInput');
+    const saveDigestTimeBtn = document.getElementById('saveDigestTimeBtn');
+    const digestStatus = document.getElementById('digestStatus');
+
+    // Common IANA zones as datalist suggestions — the input still accepts
+    // any valid IANA name, this just helps autocomplete.
+    if (typeof Intl.supportedValuesOf === 'function') {
+      for (const tz of Intl.supportedValuesOf('timeZone')) {
+        const opt = document.createElement('option');
+        opt.value = tz;
+        timezoneOptions.appendChild(opt);
+      }
+    }
+
+    function showStatus(el, text, ok = true) {
+      el.textContent = text;
+      el.style.color = ok ? '#00adb5' : '#ff6b6b';
+    }
+
     async function loadSettings() {
       settingsStatus.textContent = '';
       try {
         const data = await getSettings();
         learningModeToggle.checked = !!data.learning_mode;
+        defaultLocationInput.value = data.default_location || '';
+        timezoneInput.value = data.timezone || '';
+        digestTimeInput.value = data.digest_time || '';
       } catch (error) {
         console.error('Failed to load settings:', error);
         settingsStatus.textContent = 'Could not load current settings.';
@@ -76,6 +146,37 @@
 
     learningModeToggle.addEventListener('change', () => {
       saveSetting('learning_mode', learningModeToggle.checked);
+    });
+
+    detectTimezoneBtn.addEventListener('click', () => {
+      timezoneInput.value = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    });
+
+    saveLocationTimeBtn.addEventListener('click', async () => {
+      showStatus(locationStatus, 'Saving...', true);
+      locationStatus.style.color = '#888';
+      try {
+        await updateSettings({
+          default_location: defaultLocationInput.value,
+          timezone: timezoneInput.value,
+        });
+        showStatus(locationStatus, 'Saved.');
+      } catch (error) {
+        console.error('Failed to save location/timezone:', error);
+        showStatus(locationStatus, 'Failed to save — check the timezone name is a valid IANA zone.', false);
+      }
+    });
+
+    saveDigestTimeBtn.addEventListener('click', async () => {
+      showStatus(digestStatus, 'Saving...', true);
+      digestStatus.style.color = '#888';
+      try {
+        await updateSettings({ digest_time: digestTimeInput.value });
+        showStatus(digestStatus, 'Saved.');
+      } catch (error) {
+        console.error('Failed to save digest time:', error);
+        showStatus(digestStatus, 'Failed to save.', false);
+      }
     });
 
     loadSettings();
