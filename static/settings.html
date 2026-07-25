@@ -80,6 +80,22 @@
 
       <div class="save-status" id="digestStatus"></div>
     </div>
+
+    <div class="card">
+      <h2>Mental-Health Check-Ins</h2>
+      <p class="description">Local time short reflective prompts may start firing each day (paired with the existing bedtime setting as the end of the window). Takes effect immediately, no restart needed.</p>
+
+      <div class="field-row">
+        <label for="wakeTimeInput">Earliest check-in time</label>
+        <input type="time" id="wakeTimeInput">
+      </div>
+
+      <div class="field-row">
+        <button type="button" id="saveWakeTimeBtn" class="primary-btn">Save</button>
+      </div>
+
+      <div class="save-status" id="wakeTimeStatus"></div>
+    </div>
   </main>
 
   <script type="module">
@@ -98,6 +114,10 @@
     const digestTimeInput = document.getElementById('digestTimeInput');
     const saveDigestTimeBtn = document.getElementById('saveDigestTimeBtn');
     const digestStatus = document.getElementById('digestStatus');
+
+    const wakeTimeInput = document.getElementById('wakeTimeInput');
+    const saveWakeTimeBtn = document.getElementById('saveWakeTimeBtn');
+    const wakeTimeStatus = document.getElementById('wakeTimeStatus');
 
     // Common IANA zones as datalist suggestions — the input still accepts
     // any valid IANA name, this just helps autocomplete.
@@ -122,6 +142,7 @@
         defaultLocationInput.value = data.default_location || '';
         timezoneInput.value = data.timezone || '';
         digestTimeInput.value = data.digest_time || '';
+        wakeTimeInput.value = data.wake_time || '';
       } catch (error) {
         console.error('Failed to load settings:', error);
         settingsStatus.textContent = 'Could not load current settings.';
@@ -176,6 +197,18 @@
       } catch (error) {
         console.error('Failed to save digest time:', error);
         showStatus(digestStatus, 'Failed to save.', false);
+      }
+    });
+
+    saveWakeTimeBtn.addEventListener('click', async () => {
+      showStatus(wakeTimeStatus, 'Saving...', true);
+      wakeTimeStatus.style.color = '#888';
+      try {
+        await updateSettings({ wake_time: wakeTimeInput.value });
+        showStatus(wakeTimeStatus, 'Saved.');
+      } catch (error) {
+        console.error('Failed to save wake time:', error);
+        showStatus(wakeTimeStatus, 'Failed to save.', false);
       }
     });
 

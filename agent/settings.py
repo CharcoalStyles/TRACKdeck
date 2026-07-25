@@ -77,6 +77,13 @@ class Settings:
     # same reasoning as default_location above.
     calendar_sync_interval_minutes: int = 30
 
+    # "HH:MM" 24-hour local time check-in prompts may start firing (see
+    # jobs/checkin.py, jobs/day_start.py) — paired with `bedtime` as the
+    # end of the waking-hours window. Same rescheduling/validation pattern
+    # as digest_time/bedtime. No env var, same reasoning as
+    # default_location above.
+    wake_time: str = "07:00"
+
     def zoneinfo(self) -> ZoneInfo:
         return ZoneInfo(self.timezone)
 

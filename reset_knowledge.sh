@@ -17,6 +17,11 @@
 # Syncthing — deleting it here would delete it everywhere once sync
 # runs. Pass --vault if you genuinely want that too.
 #
+# checkins.db (mental-health check-in history, see utils/checkins_store.py)
+# is also NOT touched, deliberately and unconditionally — it's a structured
+# log meant to persist for future trend/digest use, not disposable state
+# like Chroma/memory.db are.
+#
 # Usage:
 #   ./reset_knowledge.sh                 reset memory/index/checkpoints only
 #   ./reset_knowledge.sh --vault         also wipe the vault (dangerous, see above)

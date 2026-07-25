@@ -4,6 +4,7 @@ Personal Assistant — FastAPI + LangGraph
 """
 import os
 import asyncio
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Annotated
@@ -41,17 +42,25 @@ if os.environ.get("API_TOKEN") == _PLACEHOLDER_API_TOKEN:
 from agent.graph import build_graph
 from agent.memory import MemoryStore, make_chroma_client, make_embedding_function
 from agent.runtime import app_state, create_new_thread, get_thread_messages, list_threads, run_agent
-from agent.scheduler import bedtime_trigger, calendar_sync_trigger, digest_trigger, scheduler
+from agent.scheduler import (
+    bedtime_trigger,
+    calendar_sync_trigger,
+    digest_trigger,
+    scheduler,
+    wake_trigger,
+)
 from agent.settings import is_valid_digest_time, is_valid_sync_interval_minutes, is_valid_timezone, settings
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
+from jobs import checkin as checkin_jobs
 from jobs.bedtime import send_bedtime_reminder
 from jobs.calendar_sync import sync_calendar_reminders
+from jobs.day_start import start_of_day_setup
 from jobs.digest import send_daily_digest
 from jobs.reminders import fire_reminder
 
 from agent.vault_watcher import reconcile_vault, watch_vault
-from utils import reminders_store, vault
+from utils import checkins_store, reminders_store, vault
 
 from voice import router as voice_router
 from routes.synth import router as synth_router
@@ -114,6 +123,45 @@ async def lifespan(app: FastAPI):
                     id=f"reminder:{reminder['id']}",
                     replace_existing=True,
                 )
+
+        scheduler.add_job(
+            start_of_day_setup,
+            trigger=wake_trigger(),
+            id="day_start",
+            replace_existing=True,
+        )
+
+        # Re-hydrate mental-health check-in jobs (jobs/checkin.py) across
+        # restarts, same reasoning as the reminders block above — the DB is
+        # the source of truth. Expiry timers first, then not-yet-fired
+        # one-shots, then a startup catch-up call in case the app was down
+        # through today's wake_time (start_of_day_setup is idempotent).
+        await asyncio.to_thread(checkins_store.init_db)
+        for fired in await asyncio.to_thread(checkins_store.list_fired_awaiting_response):
+            expire_at = datetime.fromtimestamp(fired["fired_at"], tz=timezone.utc) + checkin_jobs.CHECKIN_EXPIRY
+            if expire_at <= datetime.now(timezone.utc):
+                await checkin_jobs.expire_checkin(fired["id"])
+            else:
+                scheduler.add_job(
+                    checkin_jobs.expire_checkin,
+                    trigger=DateTrigger(run_date=expire_at),
+                    args=[fired["id"]],
+                    id=f"checkin_expire:{fired['id']}",
+                    replace_existing=True,
+                )
+        for pending in await asyncio.to_thread(checkins_store.list_pending_unfired):
+            due = datetime.fromtimestamp(pending["scheduled_at"], tz=timezone.utc)
+            if due <= datetime.now(timezone.utc):
+                await checkin_jobs.fire_checkin(pending["id"])
+            else:
+                scheduler.add_job(
+                    checkin_jobs.fire_checkin,
+                    trigger=DateTrigger(run_date=due),
+                    args=[pending["id"]],
+                    id=f"checkin:{pending['id']}",
+                    replace_existing=True,
+                )
+        await start_of_day_setup()
 
         scheduler.start()
 
@@ -280,6 +328,10 @@ class SettingsUpdate(BaseModel):
     # Minutes between calendar reminder-sync polls (jobs/calendar_sync.py).
     # Same rescheduling behavior as digest_time/bedtime, separate job.
     calendar_sync_interval_minutes: int | None = None
+    # "HH:MM" 24-hour local time check-in prompts may start firing (see
+    # jobs/checkin.py, jobs/day_start.py). Same rescheduling behavior as
+    # digest_time/bedtime, separate job.
+    wake_time: str | None = None
 
     @model_validator(mode="after")
     def _check_values(self):
@@ -293,6 +345,8 @@ class SettingsUpdate(BaseModel):
             self.calendar_sync_interval_minutes
         ):
             raise ValueError("calendar_sync_interval_minutes must be between 1 and 1440")
+        if self.wake_time is not None and not is_valid_digest_time(self.wake_time):
+            raise ValueError(f"'{self.wake_time}' is not a valid HH:MM 24-hour time")
         if self.default_location is not None and not self.default_location.strip():
             raise ValueError("default_location cannot be blank")
         return self
@@ -306,6 +360,7 @@ def _current_settings() -> dict:
         "digest_time": settings.digest_time,
         "bedtime": settings.bedtime,
         "calendar_sync_interval_minutes": settings.calendar_sync_interval_minutes,
+        "wake_time": settings.wake_time,
     }
 
 
@@ -323,9 +378,9 @@ async def update_settings(update: SettingsUpdate, auth: Annotated[str | None, He
     request body are changed. Takes effect immediately — settings are
     read fresh on every agent turn, no restart needed.
 
-    timezone/digest_time/bedtime/calendar_sync_interval_minutes also
-    live-reschedule their APScheduler jobs, since they're registered as
-    fixed triggers rather than being read fresh like the other settings.
+    timezone/digest_time/bedtime/calendar_sync_interval_minutes/wake_time
+    also live-reschedule their APScheduler jobs, since they're registered
+    as fixed triggers rather than being read fresh like the other settings.
     """
     if auth != os.environ["API_TOKEN"]:
         raise HTTPException(status_code=401, detail="Unauthorized request source")
@@ -338,6 +393,7 @@ async def update_settings(update: SettingsUpdate, auth: Annotated[str | None, He
     reschedule_digest = update.timezone is not None or update.digest_time is not None
     reschedule_bedtime = update.timezone is not None or update.bedtime is not None
     reschedule_calendar_sync = update.calendar_sync_interval_minutes is not None
+    reschedule_day_start = update.timezone is not None or update.wake_time is not None
     if update.timezone is not None:
         settings.timezone = update.timezone
     if update.digest_time is not None:
@@ -346,12 +402,16 @@ async def update_settings(update: SettingsUpdate, auth: Annotated[str | None, He
         settings.bedtime = update.bedtime
     if update.calendar_sync_interval_minutes is not None:
         settings.calendar_sync_interval_minutes = update.calendar_sync_interval_minutes
+    if update.wake_time is not None:
+        settings.wake_time = update.wake_time
     if reschedule_digest:
         scheduler.reschedule_job("daily_digest", trigger=digest_trigger())
     if reschedule_bedtime:
         scheduler.reschedule_job("bedtime_reminder", trigger=bedtime_trigger())
     if reschedule_calendar_sync:
         scheduler.reschedule_job("calendar_reminder_sync", trigger=calendar_sync_trigger())
+    if reschedule_day_start:
+        scheduler.reschedule_job("day_start", trigger=wake_trigger())
 
     return _current_settings()
 
@@ -412,6 +472,61 @@ async def trigger_reconcile_now(auth: Annotated[str | None, Header()] = None):
 
     await reconcile_vault(app_state.memory)
     return {"status": "reconciled"}
+
+
+@app.get("/device/sync")
+async def device_sync(auth: Annotated[str | None, Header()] = None):
+    """
+    Polled by the (not-yet-built) ESP32-S3 check-in device on every wake —
+    scheduled RTC wake alarm or an incidental wake for a normal voice
+    command. The device is deep-sleep the rest of the time, so this is its
+    only chance to learn what's pending and when to wake next; the server
+    stays authoritative on scheduling (jobs/checkin.py), the device just
+    executes. Check-in-only for now — see jobs/checkin.py's module
+    docstring for the state machine behind this list.
+    """
+    if auth != os.environ["API_TOKEN"]:
+        raise HTTPException(status_code=401, detail="Unauthorized request source")
+
+    now = int(time.time())
+    upcoming = await asyncio.to_thread(checkins_store.list_next_24h, now)
+    return {
+        "checkins": [
+            {
+                "id": c["id"],
+                "category": c["category"],
+                "prompt_text": c["prompt_text"],
+                "scheduled_at": c["scheduled_at"],
+                "fired_at": c["fired_at"],
+            }
+            for c in upcoming
+        ],
+        "next_wake_at": await checkin_jobs.next_wake_at(),
+    }
+
+
+@app.post("/device/checkin/{checkin_id}/skip")
+async def skip_checkin(checkin_id: str, auth: Annotated[str | None, Header()] = None):
+    """
+    Called by the check-in device before going back to sleep, in lieu of
+    answering — deep sleep means the server can't infer "no reply" from
+    silence, so this is an explicit signal. Triggers jobs/checkin.py's
+    fallback-retry/cooldown rescheduling.
+    """
+    if auth != os.environ["API_TOKEN"]:
+        raise HTTPException(status_code=401, detail="Unauthorized request source")
+
+    checkin = await asyncio.to_thread(checkins_store.get_checkin, checkin_id)
+    if checkin is None:
+        raise HTTPException(status_code=404, detail="Unknown check-in")
+    if checkin["status"] != "pending" or checkin["fired_at"] is None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Check-in is '{checkin['status']}', not awaiting a response",
+        )
+
+    await checkin_jobs.resolve_checkin(checkin_id, outcome="skipped")
+    return {"status": "skipped"}
 
 
 # ---------------------------------------------------------------------------

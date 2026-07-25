@@ -221,5 +221,8 @@ memory.db-wal
 reminders.db
 reminders.db-shm
 reminders.db-wal
+checkins.db
+checkins.db-shm
+checkins.db-wal
 .models/
 data/

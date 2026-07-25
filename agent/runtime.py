@@ -112,6 +112,21 @@ def create_new_thread() -> ThreadInfo:
     return info
 
 
+def create_background_thread() -> ThreadInfo:
+    """
+    Mint a new addressable thread without touching the default/recency
+    pointer (app_state.default_thread_id/default_last_activity) — for
+    threads created by a background process (jobs/checkin.py firing a
+    mental-health check-in prompt) rather than direct user action.
+
+    create_new_thread() is NOT a substitute here: it deliberately hijacks
+    the default thread pointer for the dashboard's "New Chat" button, which
+    would misroute the user's next unprefixed voice command into a
+    check-in's thread instead of their actual last conversation.
+    """
+    return _start_new_thread(time.time())
+
+
 def list_threads() -> list[ThreadInfo]:
     """All currently addressable threads, most recently active first."""
     return sorted(app_state.threads.values(), key=lambda t: t.last_activity, reverse=True)

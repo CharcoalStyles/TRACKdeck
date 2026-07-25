@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # setup_check.sh
 # Verifies (and fixes) the two runtime prerequisites that don't come from
-# `uv sync`: the Piper TTS voice model, and the memory.db/reminders.db/
-# chroma_db paths that docker-compose expects to already exist as the
-# right file types.
+# `uv sync`: the Piper TTS voice model, and the
+# memory.db/reminders.db/checkins.db/chroma_db paths that docker-compose
+# expects to already exist as the right file types.
 #
 # Safe to re-run — every step is idempotent.
 
@@ -36,10 +36,11 @@ else
 fi
 
 echo
-echo "== 2. memory.db / reminders.db / chroma_db (docker-compose bind mounts) =="
+echo "== 2. memory.db / reminders.db / checkins.db / chroma_db (docker-compose bind mounts) =="
 DATA_DIR="./data"
 MEMORY_DB="${DATA_DIR}/memory.db"
 REMINDERS_DB="${DATA_DIR}/reminders.db"
+CHECKINS_DB="${DATA_DIR}/checkins.db"
 CHROMA_DIR="${DATA_DIR}/chroma_db"
 
 mkdir -p "$DATA_DIR"
@@ -70,6 +71,18 @@ elif [[ -f "$REMINDERS_DB" ]]; then
 else
     echo "  Creating empty $REMINDERS_DB so Docker mounts it as a file..."
     touch "$REMINDERS_DB"
+fi
+
+if [[ -d "$CHECKINS_DB" ]]; then
+    echo "  ERROR: $CHECKINS_DB exists but is a DIRECTORY, not a file."
+    echo "         This happens when docker compose was run before this file existed."
+    echo "         Remove it and re-run this script: rm -r '$CHECKINS_DB'"
+    exit 1
+elif [[ -f "$CHECKINS_DB" ]]; then
+    echo "  OK: $CHECKINS_DB already exists as a file."
+else
+    echo "  Creating empty $CHECKINS_DB so Docker mounts it as a file..."
+    touch "$CHECKINS_DB"
 fi
 
 if [[ -d "$CHROMA_DIR" ]]; then

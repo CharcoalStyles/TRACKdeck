@@ -13,6 +13,10 @@ Jobs currently registered against this scheduler (see main.py's lifespan):
     calendar_sync_trigger()
   - "reminder:<id>" — jobs/reminders.py, one-shot DateTrigger per ad-hoc
     reminder, added/removed directly by agent/tools/alerts.py
+  - "day_start" — jobs/day_start.py, cron via wake_trigger()
+  - "checkin:<id>" / "checkin_expire:<id>" — jobs/checkin.py, one-shot
+    DateTrigger per mental-health check-in prompt and its answer-window
+    expiry, added/removed directly by jobs/checkin.py
 """
 from __future__ import annotations
 
@@ -37,3 +41,8 @@ def bedtime_trigger() -> CronTrigger:
 
 def calendar_sync_trigger() -> IntervalTrigger:
     return IntervalTrigger(minutes=settings.calendar_sync_interval_minutes)
+
+
+def wake_trigger() -> CronTrigger:
+    hour, minute = (int(p) for p in settings.wake_time.split(":"))
+    return CronTrigger(hour=hour, minute=minute, timezone=settings.zoneinfo())

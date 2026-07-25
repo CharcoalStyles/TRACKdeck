@@ -26,8 +26,8 @@ original request happened — see agent/runtime.py and agent/keywords.py.
 Without a keyword prefix, the usual short inactivity window decides
 whether a request continues the most recent thread or starts a new one.
 
-Two optional form fields, both testing conveniences — the ESP32 should
-never set either in production:
+Two optional form fields are testing conveniences — the ESP32 should never
+set either in production:
 
   one_shot: forces the agent into one-shot mode (see agent/graph.py's
     ONE_SHOT_ADDENDUM) — no ending on a clarifying question, since real
@@ -41,6 +41,13 @@ never set either in production:
     the fire-and-forget design (the caller has to hold the connection
     open for as long as the agent takes to respond), so it must stay a
     manual, opt-in testing path, never something real hardware sends.
+
+A third optional field, checkin_id, IS meant for real hardware: it tags a
+reply as answering a specific mental-health check-in prompt
+(jobs/checkin.py) the device just displayed, so the reply is routed to
+that check-in's own thread (agent.runtime.run_agent's explicit thread_id
+path) instead of being resolved by keyword/recency, and the check-in gets
+marked answered.
 """
 import asyncio
 import logging
@@ -60,7 +67,9 @@ from fastapi import (
 )
 from faster_whisper import WhisperModel
 
+from jobs import checkin as checkin_jobs
 from agent.runtime import run_agent
+from utils import checkins_store
 from utils.notify import notify_error
 
 logger = logging.getLogger(__name__)
@@ -76,13 +85,20 @@ router = APIRouter()
 whisper_model = WhisperModel("medium", device="cpu", compute_type="int8")
 
 
-async def _transcribe_and_run(audio_path: str, one_shot: bool) -> tuple[str, str, str]:
+async def _transcribe_and_run(
+    audio_path: str, one_shot: bool, checkin_id: str | None = None
+) -> tuple[str, str, str]:
     """
     Transcribe the given audio file and run it through the agent.
     Returns (transcription, reply, keyword) — reply/keyword are "" if no
     speech was detected (not an error, just nothing to do). Raises on
     real failure; callers decide how to report that (Gotify for the
     fire-and-forget path, an HTTP error for the synchronous testing path).
+
+    checkin_id, when set, tags this as an answer to a specific
+    jobs/checkin.py mental-health check-in prompt: the reply is routed to
+    that check-in's own thread instead of resolved by keyword/recency, and
+    the check-in is marked answered.
     """
     segments, _ = whisper_model.transcribe(audio_path, beam_size=5)
     transcription = " ".join(segment.text for segment in segments).strip()
@@ -91,17 +107,33 @@ async def _transcribe_and_run(audio_path: str, one_shot: bool) -> tuple[str, str
         return "", "", ""
 
     logger.info("Transcribed '%s': %s", audio_path, transcription)
+
+    if checkin_id is not None:
+        checkin = await asyncio.to_thread(checkins_store.get_checkin, checkin_id)
+        if checkin is None or checkin["status"] != "pending" or checkin["thread_id"] is None:
+            # Stale/expired checkin_id (e.g. it expired server-side while
+            # the device was recording) — don't drop the user's spoken
+            # reply, just fall through to normal resolution.
+            logger.warning("checkin_id %s not resolvable — falling back to normal resolution", checkin_id)
+        else:
+            text_for_agent = f'(Replying to check-in prompt: "{checkin["prompt_text"]}") {transcription}'
+            # Forced one_shot regardless of the form field — an eink-display
+            # check-in reply has no multi-turn UI on the device side.
+            result = await run_agent(text_for_agent, thread_id=checkin["thread_id"], one_shot=True)
+            await checkin_jobs.resolve_checkin(checkin_id, outcome="answered")
+            return transcription, result.reply, result.keyword
+
     result = await run_agent(transcription, one_shot=one_shot)
     return transcription, result.reply, result.keyword
 
 
-async def _process_voice_note(audio_path: str, one_shot: bool) -> None:
+async def _process_voice_note(audio_path: str, one_shot: bool, checkin_id: str | None = None) -> None:
     """
     Background task (production path): fire-and-forget, reports failures
     via Gotify since there's no HTTP response left to report them in.
     """
     try:
-        transcription, _, _ = await _transcribe_and_run(audio_path, one_shot)
+        transcription, _, _ = await _transcribe_and_run(audio_path, one_shot, checkin_id)
         if not transcription:
             logger.info("No speech detected in %s — discarding.", audio_path)
 
@@ -118,6 +150,7 @@ async def receive_note(
     file: UploadFile = File(...),
     one_shot: Annotated[bool, Form()] = False,
     sync: Annotated[bool, Form()] = False,
+    checkin_id: Annotated[str | None, Form()] = None,
     auth: Annotated[str | None, Header()] = None,
 ):
     # 1. Enforce token security
@@ -137,7 +170,7 @@ async def receive_note(
     # 3a. Testing path — wait for the full pipeline, return the result.
     if sync:
         try:
-            transcription, reply, keyword = await _transcribe_and_run(audio_path, one_shot)
+            transcription, reply, keyword = await _transcribe_and_run(audio_path, one_shot, checkin_id)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Voice pipeline failed: {str(e)}")
 
@@ -148,5 +181,5 @@ async def receive_note(
     # 3b. Production path — hand off to the background task and respond
     #     immediately. The device doesn't wait for transcription, the
     #     agent, or anything else.
-    background_tasks.add_task(_process_voice_note, audio_path, one_shot)
+    background_tasks.add_task(_process_voice_note, audio_path, one_shot, checkin_id)
     return Response(status_code=202)
