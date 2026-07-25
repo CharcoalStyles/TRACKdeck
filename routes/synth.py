@@ -3,7 +3,8 @@ import io
 import time
 import wave
 import base64
-from fastapi import APIRouter, HTTPException
+from typing import Annotated
+from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from piper import PiperVoice
@@ -14,6 +15,11 @@ router = APIRouter()
 # Update paths to your downloaded model files
 MODEL_PATH = ".models/en_US-lessac-medium.onnx"
 CONFIG_PATH = ".models/en_US-lessac-medium.onnx.json"
+
+# CPU-bound synthesis cost scales with input length, and this route has no
+# rate limiting — cap it so a single request can't tie up the synthesis
+# thread indefinitely.
+MAX_TEXT_LENGTH = 2000
 
 # Load the model into memory at startup
 if not os.path.exists(MODEL_PATH):
@@ -32,10 +38,19 @@ class TTSResponse(BaseModel):
     generation_time: float
 
 @router.post("/synthesize", response_model=TTSResponse)
-async def synthesize_text_json(request: TTSRequest):
+async def synthesize_text_json(request: TTSRequest, auth: Annotated[str | None, Header()] = None):
+    if auth != os.environ["API_TOKEN"]:
+        raise HTTPException(status_code=401, detail="Unauthorized request source")
+
     if not request.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
-    
+
+    if len(request.text) > MAX_TEXT_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Text too long ({len(request.text)} chars, max {MAX_TEXT_LENGTH}).",
+        )
+
     try:
         start = time.time()
         # 1. Create an in-memory stream for the WAV construction

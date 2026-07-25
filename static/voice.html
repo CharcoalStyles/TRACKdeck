@@ -34,7 +34,18 @@
         <span class="label">One-shot mode (simulate ESP32 — no follow-up questions)</span>
       </div>
       <div id="status">Ready</div>
-      <div id="response-box"></div>
+      <div id="response-box" style="display:none">
+        <strong>Transcription:</strong><br>
+        <span id="transcriptionText"></span>
+        <hr/>
+        <strong>Response:</strong><br>
+        <span id="replyText"></span>
+        <div id="keywordSection" style="display:none">
+          <hr/>
+          <strong>Thread keyword:</strong> <span id="keywordText"></span><br>
+          <span style="font-size:0.8em;color:#888;">Say "<span id="keywordSayText"></span>, ..." to follow up on this later, even after the session times out.</span>
+        </div>
+      </div>
     </div>
   </main>
 
@@ -44,6 +55,11 @@
     const recordBtn = document.getElementById('recordBtn');
     const statusText = document.getElementById('status');
     const responseBox = document.getElementById('response-box');
+    const transcriptionText = document.getElementById('transcriptionText');
+    const replyText = document.getElementById('replyText');
+    const keywordSection = document.getElementById('keywordSection');
+    const keywordText = document.getElementById('keywordText');
+    const keywordSayText = document.getElementById('keywordSayText');
     const oneShotToggle = document.getElementById('oneShotToggle');
 
     let mediaRecorder;
@@ -116,13 +132,15 @@
         const data = await response.json();
         statusText.textContent = 'Done!';
         responseBox.style.display = 'block';
-        responseBox.innerHTML =
-          `<strong>Transcription:</strong><br>${data.transcription || '(none)'}` +
-          `<hr/><strong>Response:</strong><br>${data.reply}` +
-          (data.keyword
-            ? `<hr/><strong>Thread keyword:</strong> ${data.keyword}<br>`
-              + `<span style="font-size:0.8em;color:#888;">Say "${data.keyword}, ..." to follow up on this later, even after the session times out.</span>`
-            : '');
+        transcriptionText.textContent = data.transcription || '(none)';
+        replyText.textContent = data.reply;
+        if (data.keyword) {
+          keywordSection.style.display = '';
+          keywordText.textContent = data.keyword;
+          keywordSayText.textContent = data.keyword;
+        } else {
+          keywordSection.style.display = 'none';
+        }
 
         console.log(data);
 
