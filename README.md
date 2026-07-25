@@ -30,7 +30,6 @@ light, and don't make the model do more reasoning than it needs to for a given s
 - [Running it](#running-it)
 - [Known limitations](#known-limitations)
 - [Things we've talked about adding](#things-weve-talked-about-adding)
-- [Additional suggestions](#additional-suggestions)
 
 ---
 
@@ -321,24 +320,10 @@ device IDs are generated per-instance.
 
 Things that are true about the current code, not proposals:
 
-- **`get_current_datetime` doesn't know the local timezone.** It uses naive
-  `datetime.now()`, while `utils/datetime.py` and `utils/next_cloud_calendar.py` hardcode
-  `Australia/Canberra`. In Docker this is almost certainly UTC, meaning the agent's sense
-  of "now" and the calendar's actual day boundaries can disagree. See
-  [Things we've talked about adding](#things-weve-talked-about-adding).
-- **`web_search`'s "not connected" fallback string is missing its `f`-prefix**
-  (`agent/tools/general.py`) — only shows up if `SEARXNG_URL` isn't set, so low-impact, but
-  it'll print the literal text `'{query}'` instead of the actual query.
-- **`get_todays_events` doesn't check `.get("success")`** the way its sibling calendar
-  tools do, so a failure returns a raw dict instead of a clean error string.
 - **`routes/synth.py` raises at import time if the Piper model files are missing**, which
   takes down the whole app, not just TTS, since it's imported at module load. Mitigated
   operationally by `setup_check.sh` downloading the model first, but not fixed at the code
   level.
-- **`/text` has no authentication.** Anyone who can reach the port can talk to the agent as
-  text. `/voice` and the mutating debug/settings routes are gated by `API_TOKEN`; `/text`
-  isn't, and the dashboard's own `AUTH_TOKEN` in `static/js/api.js` is a hardcoded
-  placeholder string that needs manually swapping for the real token before deployment.
 - **Threads (and their keyword addressability) are swept nightly regardless of origin** —
   a conversation started from the dashboard has the same one-day lifespan as a voice
   command's keyword. This was a deliberate, explicit choice ("threads are threads") rather
@@ -353,70 +338,12 @@ Things that are true about the current code, not proposals:
 
 ## Things we've talked about adding
 
-Discussed, intentionally not built yet:
+Discussed-but-not-yet-built ideas, and Claude's own follow-up suggestions, live in
+[`UPCOMING.md`](UPCOMING.md) rather than being duplicated here — check there for the
+current list rather than this file, which only records decisions, not a backlog.
 
-- **Centralize the timezone.** Pull `Australia/Canberra` into one place — a
-  `LOCAL_TIMEZONE` env var, read by `get_current_datetime`, `utils/datetime.py`, and
-  `text_to_utc` alike — instead of it being hardcoded in two places and absent in a third.
-  (There's already an unused `TIMEZONE` var sitting in `.env.example` from when this was
-  first discussed.)
-- **Bedtime / proactive reminders.** A push-based nudge (Gotify, or the ESP32's eInk)
-  around a set time, separate from the passive digest — this is presumably where
-  `set_reminder`/`set_timer` stop being stubs and start doing real work. Discussed as a
-  distinct mechanism from the digest, timed close to it but not the same trigger.
-- **Gratitude/mood/wins prompting as part of the digest.** Explicitly deferred — "get the
-  basics out of the way first" — but was the original motivation for wanting a daily
-  digest at all.
-- **Writing the digest into the vault as a daily note**, alongside (or instead of) the
-  email. Deferred with "just email for now," not ruled out.
-- **A Gotify alert when Syncthing conflict files appear.** Right now they're silently
-  ignored by the indexer (correct — they shouldn't be treated as real notes), but a
-  conflict happening at all is a signal worth surfacing, not just suppressing.
-- **Extending linked-note splitting beyond People** — Career/Health/Routine/Interests
-  becoming their own linked notes the same way, once About Me's sections have enough
-  content to justify it. The mechanism (`get_or_create_linked_note`) is already general
-  enough to do this; it just hasn't been specifically prompted for or exercised beyond
-  People yet.
-- **Dialing learning mode**, not just toggling it — some notion of intensity/selectivity
-  beyond on/off, once there's a real sense of what "too aggressive" looks like in practice.
-
-Two things were seriously considered and explicitly decided against, worth recording so
-they don't get re-litigated from scratch:
+One thing was seriously considered and explicitly decided against, worth recording here so
+it doesn't get re-litigated from scratch:
 - **A React/Vue frontend in its own container** — decided against in favor of the current
   modular-vanilla-JS approach, given the added build/networking complexity for a
   single-user tool. Not off the table forever if the dashboard's needs outgrow this.
-
-## Additional suggestions
-
-My own ideas, not something either of us has proposed in conversation — kept separate
-deliberately.
-
-- **A small test suite.** A lot of genuinely subtle logic has accumulated —
-  `resolve_thread`'s recency/keyword interplay, `append_to_section`/`replace_section`'s
-  boundary handling, keyword fuzzy-matching's false-positive resistance, reconciliation's
-  orphan/staleness detection. All of it has been manually verified at least once while
-  building it, but none of that verification lives in the repo as a `pytest` suite that'd
-  catch a regression automatically.
-- **Structured logging over `print()`.** Fine for interactive dev, harder to work with on
-  a headless server — timestamps, log levels, and something greppable would help
-  diagnosing an issue after the fact rather than only while watching the console live.
-- **A privacy pass on what's now flowing through the vault.** The profile system is working
-  as intended, which means it now holds real, sensitive information — health/diagnosis
-  details about you and your family. Worth a deliberate think about at-rest protection
-  (vault encryption, or at least confirming Syncthing's transport security settings) given
-  that data now syncs across every paired device by default.
-- **A backup strategy distinct from Syncthing sync.** Syncthing keeps devices in sync, and
-  file versioning gives you an undo button — neither is a backup in the sense of surviving
-  a lost/corrupted primary copy propagating everywhere. A periodic off-site copy of the
-  vault would close that gap.
-- **Graceful degradation when LM Studio is unreachable.** Several paths (digest generation,
-  Inbox title/tag generation, ordinary chat) will currently just throw if the local model
-  is down or restarting. Some of this is already caught (the `/voice` background path
-  reports via Gotify), but not uniformly — a shared retry/backoff or a consistent
-  "LM Studio unreachable" user-facing message would make failures easier to diagnose.
-- **A read-only "browse the vault" dashboard page.** Chat/Voice/Onboarding/Profile/Settings
-  cover creating and updating; there's no page for just looking through what's accumulated
-  without opening Obsidian.
-- **Rate limiting on the unauthenticated routes**, if this is ever reachable outside your
-  home network — worth pairing with the `/text` auth gap noted above rather than treating
-  them as separate problems.
