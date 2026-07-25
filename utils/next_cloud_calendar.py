@@ -54,12 +54,29 @@ def parse_ics(ics_text):
 # CALENDAR CRUD & QUERY FUNCTIONS
 # ==========================================
 
+def _escape_ics_text(value):
+    """Escapes a value for use in an RFC5545 TEXT property (SUMMARY/DESCRIPTION/LOCATION)."""
+    return (
+        value.replace("\\", "\\\\")
+        .replace(",", "\\,")
+        .replace(";", "\\;")
+        .replace("\r\n", "\\n")
+        .replace("\n", "\\n")
+    )
+
+
 def create_or_update_event(uid, summary, start_iso, end_iso, description="", location=""):
     """
     Creates or updates an event.
     """
     url = f"{BASE_URL}{uid}.ics"
-    
+
+    # Callers may pass explicit None (overriding these defaults) when the
+    # user didn't provide a description/location — without this they'd be
+    # written into the ICS as the literal string "None".
+    description = description or ""
+    location = location or ""
+
     # Base event structure
     ics_lines = [
         "BEGIN:VCALENDAR",
@@ -69,9 +86,9 @@ def create_or_update_event(uid, summary, start_iso, end_iso, description="", loc
         f"UID:{uid}",
         f"DTSTART:{start_iso}",
         f"DTEND:{end_iso}",
-        f"SUMMARY:{summary}",
-        f"DESCRIPTION:{description}",
-        f"LOCATION:{location}"
+        f"SUMMARY:{_escape_ics_text(summary)}",
+        f"DESCRIPTION:{_escape_ics_text(description)}",
+        f"LOCATION:{_escape_ics_text(location)}"
     ]
         
     ics_lines.extend(["END:VEVENT", "END:VCALENDAR"])

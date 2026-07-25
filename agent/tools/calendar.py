@@ -33,7 +33,7 @@ def get_calendar_event(uid: str) -> str:
     if response.get("success"):
         return json.dumps(response.get("event"))
     else:
-        return "Failed to retrieve event." + response.get("error")
+        return f"Failed to retrieve event. {response.get('error') or response.get('message') or 'Unknown error'}"
 
 @tool
 def add_calendar_event(title: str, start: str, end: Optional[str] = None, description: Optional[str] = None, location: Optional[str] = None) -> str:
@@ -74,7 +74,7 @@ def add_calendar_event(title: str, start: str, end: Optional[str] = None, descri
     if response.get("success"):
         return f"Event added successfully. UID: {uid}"
     else:
-        return "Failed to add event." + response.get("error")
+        return f"Failed to add event. {response.get('error') or response.get('message') or 'Unknown error'}"
     
 @tool
 def delete_calendar_event(uid: str) -> str:
@@ -90,7 +90,7 @@ def delete_calendar_event(uid: str) -> str:
     if response.get("success"):
         return "Event deleted successfully."
     else:
-        return "Failed to delete event." + response.get("error")
+        return f"Failed to delete event. {response.get('error') or response.get('message') or 'Unknown error'}"
     
 @tool
 def get_calendar_events(start: str, end: str) -> str:
@@ -111,7 +111,7 @@ def get_calendar_events(start: str, end: str) -> str:
     if response.get("success"):
         return json.dumps(response.get("events"))
     else:
-        return "Failed to retrieve events." + response.get("error")
+        return f"Failed to retrieve events. {response.get('error') or response.get('message') or 'Unknown error'}"
 
 @tool
 def update_calendar_event(uid: str, title: str, start: str, end: str, description: Optional[str] = None, location: Optional[str] = None) -> str:
@@ -144,7 +144,7 @@ def update_calendar_event(uid: str, title: str, start: str, end: str, descriptio
     if response.get("success"):
         return "Event updated successfully."
     else:
-        return "Failed to update event." + response.get("error")  
+        return f"Failed to update event. {response.get('error') or response.get('message') or 'Unknown error'}"
 
 def get_tools():
     return [
