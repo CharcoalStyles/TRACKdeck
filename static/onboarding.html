@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Onboarding — Assistant Dashboard</title>
+  <link rel="stylesheet" href="/static/css/theme.css">
+</head>
+
+<body>
+
+  <header>
+    <h1>Assistant Dashboard</h1>
+    <nav>
+      <a href="/static/index.html">Chat</a>
+      <a href="/static/voice.html">Voice Test</a>
+      <a href="/static/onboarding.html" class="active">Onboarding</a>
+      <a href="/static/profile.html">Profile</a>
+      <a href="/static/settings.html">Settings</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="card">
+      <h2>Get to Know You</h2>
+      <p class="description">
+        A guided conversation to help build out your profile — the agent will ask about
+        things worth remembering, but you can stop at any point. Whatever's been said
+        already stays saved. This picks up where you left off, so it's fine to come back
+        to this later or after something big changes.
+      </p>
+      <div class="chat-widget" id="chat-root"></div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { ChatWidget } from '/static/js/chat.js';
+
+    new ChatWidget(document.getElementById('chat-root'), {
+      threadId: 'onboarding',
+      mode: 'onboarding',
+      greeting: "Hey — let's get to know you a bit. Nothing here is required, and you can stop whenever you like. To start, what do you do for work, or spend most of your time on?",
+    });
+  </script>
+</body>
+
+</html>

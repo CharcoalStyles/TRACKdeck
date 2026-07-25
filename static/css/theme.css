@@ -1,0 +1,465 @@
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #121212;
+      color: #e0e0e0;
+      margin: 0;
+      min-height: 100vh;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid #2a2a2a;
+      background: #171717;
+    }
+
+    header h1 {
+      font-size: 1.1rem;
+      margin: 0;
+      font-weight: 600;
+      color: #f0f0f0;
+      white-space: nowrap;
+    }
+
+    nav {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    nav button {
+      background: none;
+      border: none;
+      color: #999;
+      font-size: 0.95rem;
+      padding: 0.5rem 0.9rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    nav button:hover {
+      color: #e0e0e0;
+      background: #222;
+    }
+
+    nav button.active {
+      color: #00adb5;
+      background: #1c2b2c;
+    }
+
+    main {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+
+    .panel {
+      display: none;
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    .card {
+      background: #1e1e1e;
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+      margin-bottom: 1.25rem;
+    }
+
+    .card h2 {
+      font-size: 1rem;
+      margin: 0 0 0.25rem;
+      color: #f0f0f0;
+    }
+
+    .card .description {
+      font-size: 0.85rem;
+      color: #888;
+      margin: 0 0 1rem;
+      line-height: 1.4;
+    }
+
+    .voice-controls {
+      text-align: center;
+    }
+
+    button.record-btn {
+      background-color: #00adb5;
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      font-size: 1.1rem;
+      border-radius: 50px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-bottom: 1.25rem;
+      font-weight: bold;
+    }
+
+    button.record-btn:hover {
+      background-color: #00f5ff;
+      box-shadow: 0 0 15px rgba(0, 173, 181, 0.4);
+    }
+
+    button.record-btn.recording {
+      background-color: #ff4141;
+      animation: pulse 1.5s infinite;
+    }
+
+    button.record-btn.recording:hover {
+      background-color: #ff0000;
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(255, 65, 65, 0.5); }
+      70% { box-shadow: 0 0 0 14px rgba(255, 65, 65, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(255, 65, 65, 0); }
+    }
+
+    #status {
+      font-size: 0.9rem;
+      color: #888;
+      margin-bottom: 0.75rem;
+    }
+
+    #response-box {
+      text-align: left;
+      padding: 1rem;
+      background: #252525;
+      border-radius: 6px;
+      word-wrap: break-word;
+      display: none;
+      font-size: 0.92rem;
+      line-height: 1.5;
+    }
+
+    #response-box hr {
+      border: none;
+      border-top: 1px solid #333;
+      margin: 0.6rem 0;
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.85rem 0;
+      border-top: 1px solid #2a2a2a;
+    }
+
+    .toggle-row:first-of-type {
+      border-top: none;
+      padding-top: 0;
+    }
+
+    .toggle-row .label {
+      font-size: 0.9rem;
+      color: #ddd;
+    }
+
+    .toggle-row .sublabel {
+      font-size: 0.78rem;
+      color: #888;
+      margin-top: 0.15rem;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #444;
+      transition: 0.2s;
+      border-radius: 24px;
+    }
+
+    .slider::before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: 0.2s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: #00adb5;
+    }
+
+    input:checked + .slider::before {
+      transform: translateX(20px);
+    }
+
+    .save-status {
+      font-size: 0.8rem;
+      color: #00adb5;
+      min-height: 1.2em;
+      margin-top: 0.5rem;
+    }
+
+    .voice-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      margin-top: 0.25rem;
+      margin-bottom: 1rem;
+    }
+
+    .voice-toggle-row .label {
+      font-size: 0.85rem;
+      color: #aaa;
+    }
+  
+
+/* ===================================================================
+   Shared header nav — now real links between separate pages, rather
+   than just tab-switching within one file.
+   =================================================================== */
+
+nav a {
+  color: #999;
+  font-size: 0.95rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  text-decoration: none;
+  display: inline-block;
+}
+
+nav a:hover {
+  color: #e0e0e0;
+  background: #222;
+}
+
+nav a.active {
+  color: #00adb5;
+  background: #1c2b2c;
+}
+
+/* ===================================================================
+   Chat widget (static/js/chat.js)
+   =================================================================== */
+
+.chat-widget {
+  display: flex;
+  flex-direction: column;
+  height: 60vh;
+  min-height: 360px;
+}
+
+.chat-log {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.25rem 0.1rem 1rem;
+}
+
+.chat-bubble {
+  max-width: 80%;
+  padding: 0.6rem 0.9rem;
+  border-radius: 12px;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.chat-bubble-user {
+  align-self: flex-end;
+  background: #00adb5;
+  color: #06181a;
+  border-bottom-right-radius: 3px;
+}
+
+.chat-bubble-assistant {
+  align-self: flex-start;
+  background: #252525;
+  color: #e0e0e0;
+  border-bottom-left-radius: 3px;
+}
+
+.chat-bubble-loading {
+  color: #888;
+  font-style: italic;
+}
+
+.chat-input-row {
+  display: flex;
+  gap: 0.6rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #2a2a2a;
+}
+
+.chat-input {
+  flex: 1;
+  background: #252525;
+  border: 1px solid #333;
+  color: #e0e0e0;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  font-size: 0.92rem;
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: #00adb5;
+}
+
+.chat-input-row button {
+  background-color: #00adb5;
+  color: white;
+  border: none;
+  padding: 0.6rem 1.1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.chat-input-row button:hover {
+  background-color: #00c9d4;
+}
+
+.chat-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  padding-top: 0.75rem;
+}
+
+.chat-actions button.secondary {
+  background: none;
+  border: 1px solid #444;
+  color: #aaa;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.chat-actions button.secondary:hover {
+  border-color: #666;
+  color: #e0e0e0;
+}
+
+/* ===================================================================
+   Sidebar chat layout (index.html)
+   =================================================================== */
+
+.chat-page {
+  display: flex;
+  height: calc(100vh - 57px); /* full height minus the header */
+}
+
+.sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: #171717;
+  border-right: 1px solid #2a2a2a;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+}
+
+.new-chat-btn {
+  background: none;
+  border: 1px solid #00adb5;
+  color: #00adb5;
+  padding: 0.55rem 0.8rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.new-chat-btn:hover {
+  background: #1c2b2c;
+}
+
+.thread-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.thread-item {
+  background: none;
+  border: none;
+  color: #aaa;
+  text-align: left;
+  padding: 0.55rem 0.7rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.88rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.thread-item:hover {
+  background: #222;
+  color: #e0e0e0;
+}
+
+.thread-item.active {
+  background: #1c2b2c;
+  color: #00adb5;
+  font-weight: 600;
+}
+
+.thread-empty {
+  color: #666;
+  font-size: 0.82rem;
+  padding: 0.5rem 0.7rem;
+  line-height: 1.4;
+}
+
+.chat-page main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  max-width: none;
+  padding: 1.25rem 1.5rem;
+}
+
+.chat-page .chat-widget {
+  height: 100%;
+  flex: 1;
+}

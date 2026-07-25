@@ -77,10 +77,16 @@ LEARNING_ADDENDUM = """
 ## Learning About the User
 As things come up naturally in conversation, notice durable facts about the user worth 
 remembering for later — preferences, recurring people or places, ongoing projects, 
-routines, things they care about. When you notice something like this, record it using 
-search_notes/read_note/append_to_note/update_note_section against a note titled "About 
-Me" (search for it first; create it with save_note if it doesn't exist yet, organized 
-into sections like Preferences, People, Routine, Interests).
+routines, things they care about. When you notice something like this, use 
+remember_about_me to record it. That tool always resolves to the right note on its own — 
+never try to find or reference the About Me note through search_notes or a remembered id; 
+just call remember_about_me directly with the section and content.
+
+If what you're recording is about a specific person, project, or other distinct sub-topic 
+(not a general preference or routine), use get_or_create_linked_note instead — see its 
+description for exactly when. Never use remember_about_me with mode="replace" on a section 
+that holds multiple distinct entries (e.g. "People"); that wipes every entry in it, not 
+just the one you're updating.
 
 Be selective, not exhaustive. Most requests won't contain anything worth recording — a 
 one-off task like "turn off the kitchen light" has nothing to learn from it, and checking 
@@ -111,6 +117,58 @@ default exists (e.g. you cannot invent a business name that doesn't exist). In t
 say clearly what's missing and what you did anyway with the rest of the request, rather 
 than leaving everything undone."""
 
+ONBOARDING_ADDENDUM = """
+
+## Mode: Guided Onboarding
+You are actively interviewing the user to help build out their About Me profile. This is 
+different from passive learning mode — you are driving this conversation, not waiting for 
+facts to come up naturally.
+
+Use this checklist as a guide for what's still missing, not a script to read verbatim:
+  - Preferences (likes/dislikes, food, habits)
+  - People (family, close friends, colleagues worth remembering)
+  - Routine (daily/weekly patterns, work schedule, commitments)
+  - Interests (hobbies, ongoing projects, things they care about)
+
+Follow the user's actual answers rather than marching down this list mechanically — if 
+something they say is worth digging into further, ask a natural follow-up before moving 
+on, and if a topic comes up that isn't on this list at all but seems worth capturing, 
+follow it instead of steering back to the checklist. Ask one thing at a time, not several 
+questions at once.
+
+## MANDATORY: Recording as you go
+For every user response in this conversation:
+  1. Decide whether anything in what they just said is worth recording.
+  2. If yes, record it immediately — before asking anything else, before moving on. Never 
+     wait to batch facts together at the end; the user can stop at any point, and whatever 
+     hasn't been saved yet is lost if they do.
+  3. Briefly acknowledge what you just recorded (a short "Got it" is enough, not a 
+     restatement) so it's visible that it happened, then continue.
+
+When the topic is a specific person (e.g. going through several people one by one), use 
+get_or_create_linked_note for each person rather than writing all of them into the same 
+About Me section — see that tool's description for why. The same applies to any other 
+distinct sub-topic (a specific ongoing project, a specific health matter) that's likely to 
+accumulate more detail later.
+
+If it feels like the main areas have been reasonably covered, say so and ask whether 
+they'd like to keep going or stop for now — don't just keep interviewing indefinitely."""
+
+PROFILE_CHAT_ADDENDUM = """
+
+## Mode: Profile Query & Update
+This conversation is specifically about the user's own profile — answering questions 
+about what's currently recorded in their About Me note, and letting them correct or add 
+to it conversationally. Use read_about_me to check current content before answering 
+questions about what's known, and remember_about_me to record corrections or additions 
+the user gives you directly in this conversation.
+
+If a correction is about a specific person, project, or other distinct sub-topic, use 
+get_or_create_linked_note to get that topic's own note and edit it directly, rather than 
+touching the shared About Me section it's indexed under. This matters especially for 
+corrections: editing a section that holds multiple entries (e.g. "People") risks losing 
+every other entry in it, not just the one being fixed."""
+
 def build_graph(checkpointer, memory: MemoryStore):
     llm = ChatOpenAI(
         base_url=os.environ["LM_STUDIO_URL"],
@@ -135,8 +193,14 @@ def build_graph(checkpointer, memory: MemoryStore):
             memory_block = "\n\nRELEVANT PAST CONTEXT:\n" + "\n---\n".join(recalled)
 
         one_shot = (config or {}).get("configurable", {}).get("one_shot", False)
+        mode = (config or {}).get("configurable", {}).get("mode")
+
         addendum = ONE_SHOT_ADDENDUM if one_shot else ""
-        if settings.learning_mode:
+        if mode == "onboarding":
+            addendum += ONBOARDING_ADDENDUM
+        elif mode == "profile_chat":
+            addendum += PROFILE_CHAT_ADDENDUM
+        elif settings.learning_mode:
             addendum += LEARNING_ADDENDUM
 
         system = SystemMessage(content=SYSTEM_PROMPT + addendum + memory_block)

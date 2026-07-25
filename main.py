@@ -22,7 +22,7 @@ load_dotenv()
 
 from agent.graph import build_graph
 from agent.memory import MemoryStore, make_chroma_client, make_embedding_function
-from agent.runtime import app_state, run_agent
+from agent.runtime import app_state, create_new_thread, get_thread_messages, list_threads, run_agent
 from agent.settings import settings
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
@@ -108,6 +108,11 @@ class TextRequest(BaseModel):
     # end on a clarifying question, since real hardware has no way to hear
     # a follow-up.
     one_shot: bool = False
+    # "onboarding" | "profile_chat" | None — switches to a different active
+    # system-prompt mode. Used by the dashboard's onboarding/profile pages,
+    # which also pass a fixed thread_id ("onboarding"/"profile_chat") so
+    # those conversations stay continuous across visits.
+    mode: str | None = None
 
 
 class AssistantResponse(BaseModel):
@@ -134,8 +139,37 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.post("/text", response_model=AssistantResponse)
 async def handle_text(request: TextRequest):
-    result = await run_agent(request.text, thread_id=request.thread_id, one_shot=request.one_shot)
+    result = await run_agent(
+        request.text,
+        thread_id=request.thread_id,
+        one_shot=request.one_shot,
+        mode=request.mode,
+    )
     return AssistantResponse(reply=result.reply, thread_id=result.thread_id, keyword=result.keyword)
+
+
+@app.get("/threads")
+async def get_threads():
+    """Sidebar thread list, most recently active first. Threads are
+    threads regardless of whether they started from a voice command or
+    typed here — same keyword addressing, same nightly sweep."""
+    return [
+        {"thread_id": t.thread_id, "keyword": t.keyword, "last_activity": t.last_activity}
+        for t in list_threads()
+    ]
+
+
+@app.post("/threads/new")
+async def new_thread():
+    """Explicitly mint a new thread before any message is sent, so a
+    fresh 'New Chat' shows up in the sidebar immediately."""
+    info = create_new_thread()
+    return {"thread_id": info.thread_id, "keyword": info.keyword}
+
+
+@app.get("/threads/{thread_id}/messages")
+async def thread_messages(thread_id: str):
+    return {"messages": await get_thread_messages(thread_id)}
 
 
 @app.get("/health")

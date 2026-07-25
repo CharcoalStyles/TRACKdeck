@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Test — Assistant Dashboard</title>
+  <link rel="stylesheet" href="/static/css/theme.css">
+</head>
+
+<body>
+
+  <header>
+    <h1>Assistant Dashboard</h1>
+    <nav>
+      <a href="/static/index.html">Chat</a>
+      <a href="/static/voice.html" class="active">Voice Test</a>
+      <a href="/static/onboarding.html">Onboarding</a>
+      <a href="/static/profile.html">Profile</a>
+      <a href="/static/settings.html">Settings</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="card voice-controls">
+      <h2>Voice Agent Command</h2>
+      <p class="description">Test the agent the way real hardware eventually will — records, sends, and shows the full pipeline result.</p>
+      <button id="recordBtn" class="record-btn">Hold or Click to Record</button>
+      <div class="voice-toggle-row">
+        <label class="switch">
+          <input type="checkbox" id="oneShotToggle">
+          <span class="slider"></span>
+        </label>
+        <span class="label">One-shot mode (simulate ESP32 — no follow-up questions)</span>
+      </div>
+      <div id="status">Ready</div>
+      <div id="response-box"></div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { AUTH_TOKEN } from '/static/js/api.js';
+
+    const recordBtn = document.getElementById('recordBtn');
+    const statusText = document.getElementById('status');
+    const responseBox = document.getElementById('response-box');
+    const oneShotToggle = document.getElementById('oneShotToggle');
+
+    let mediaRecorder;
+    let audioChunks = [];
+    let isRecording = false;
+
+    recordBtn.addEventListener('click', async () => {
+      if (!isRecording) {
+        startRecording();
+      } else {
+        stopRecording();
+      }
+    });
+
+    async function startRecording() {
+      audioChunks = [];
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunks.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = async () => {
+          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          await sendAudioToBackend(audioBlob);
+          stream.getTracks().forEach(track => track.stop());
+        };
+
+        mediaRecorder.start();
+        isRecording = true;
+        recordBtn.textContent = 'Stop Recording';
+        recordBtn.classList.add('recording');
+        statusText.textContent = 'Listening...';
+        responseBox.style.display = 'none';
+      } catch (err) {
+        console.error('Microphone access denied or unsupported:', err);
+        statusText.textContent = 'Error: Mic access denied.';
+      }
+    }
+
+    function stopRecording() {
+      if (mediaRecorder && isRecording) {
+        mediaRecorder.stop();
+        isRecording = false;
+        recordBtn.textContent = 'Record';
+        recordBtn.classList.remove('recording');
+        statusText.textContent = 'Processing audio...';
+      }
+    }
+
+    async function sendAudioToBackend(blob) {
+      const formData = new FormData();
+      formData.append('file', blob, 'command.webm');
+      formData.append('sync', 'true');
+      formData.append('one_shot', oneShotToggle.checked ? 'true' : 'false');
+
+      try {
+        const response = await fetch('/voice', {
+          method: 'POST',
+          headers: { 'auth': AUTH_TOKEN },
+          body: formData
+        });
+
+        if (!response.ok) throw new Error(`Server returned ${response.status}`);
+
+        const data = await response.json();
+        statusText.textContent = 'Done!';
+        responseBox.style.display = 'block';
+        responseBox.innerHTML =
+          `<strong>Transcription:</strong><br>${data.transcription || '(none)'}` +
+          `<hr/><strong>Response:</strong><br>${data.reply}` +
+          (data.keyword
+            ? `<hr/><strong>Thread keyword:</strong> ${data.keyword}<br>`
+              + `<span style="font-size:0.8em;color:#888;">Say "${data.keyword}, ..." to follow up on this later, even after the session times out.</span>`
+            : '');
+
+        console.log(data);
+
+      } catch (error) {
+        console.error('Transmission failed:', error);
+        statusText.textContent = 'Error sending audio to backend.';
+      }
+    }
+  </script>
+</body>
+
+</html>

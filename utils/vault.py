@@ -48,6 +48,15 @@ import yaml
 INBOX_DIRNAME = "Inbox"
 FRONTMATTER_DELIM = "---"
 
+# The About Me note is a singleton with a fixed, known location, unlike
+# ordinary notes. It's referenced constantly (every turn learning mode is
+# on), so it deliberately doesn't go through search_notes/find_note_by_id
+# at all — no dependency on embedding similarity, and no risk of an id
+# remembered from an earlier turn going stale or getting hallucinated.
+# See agent/tools/notes.py's remember_about_me/read_about_me.
+ABOUT_ME_FILENAME = "about-me.md"
+ABOUT_ME_TITLE = "About Me"
+
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -112,9 +121,15 @@ class Note:
     source: str = "agent"
     body: str = ""
     path: Path | None = None  # populated when loaded from / written to disk
+    # topic name -> note id. Only meaningfully used on About Me today (see
+    # get_or_create_linked_note in agent/tools/notes.py) — a deterministic
+    # registry so a specific person/project/topic can always be found the
+    # same reliable way About Me itself is found, rather than through
+    # search or a remembered id that can go stale or get hallucinated.
+    linked_notes: dict = field(default_factory=dict)
 
     def frontmatter_dict(self) -> dict:
-        return {
+        fm = {
             "id": self.id,
             "title": self.title,
             "created": self.created,
@@ -123,6 +138,9 @@ class Note:
             "aliases": self.aliases,
             "source": self.source,
         }
+        if self.linked_notes:
+            fm["linked_notes"] = self.linked_notes
+        return fm
 
 
 def serialize_note(note: Note) -> str:
@@ -169,6 +187,7 @@ def parse_note(path: Path) -> Note | None:
         source=fm.get("source") or "agent",
         body=body.lstrip("\n"),
         path=path,
+        linked_notes=fm.get("linked_notes") or {},
     )
 
 
@@ -219,6 +238,54 @@ def find_note_by_id(note_id: str) -> Path | None:
         if note is not None and note.id == note_id:
             return path
     return None
+
+
+def about_me_path() -> Path:
+    return vault_root() / ABOUT_ME_FILENAME
+
+
+def find_linked_note_id(linked_notes: dict, topic: str) -> str | None:
+    """
+    Look up `topic` in a linked_notes registry, tolerant of case/whitespace
+    differences (the model may not phrase a topic identically every time).
+    Exact match first, then a case-insensitive fallback.
+    """
+    if topic in linked_notes:
+        return linked_notes[topic]
+    topic_lower = topic.strip().lower()
+    for key, note_id in linked_notes.items():
+        if key.strip().lower() == topic_lower:
+            return note_id
+    return None
+
+
+def get_or_create_about_me() -> Note:
+    """
+    Always resolves to the same file, every time, regardless of what any
+    tool call earlier in the conversation thought its id was. If it
+    doesn't exist yet, it's created empty (with a starter set of section
+    headings) rather than requiring a separate create-vs-update decision
+    upstream.
+    """
+    path = about_me_path()
+    note = parse_note(path)
+    if note is not None:
+        return note
+
+    now = now_iso()
+    note = Note(
+        id=generate_id(),
+        title=ABOUT_ME_TITLE,
+        created=now,
+        updated=now,
+        tags=["about-me"],
+        aliases=[],
+        source="agent",
+        body="## Preferences\n\n## People\n\n## Routine\n\n## Interests\n",
+        path=path,
+    )
+    write_note_atomic(path, serialize_note(note))
+    return note
 
 
 # ---------------------------------------------------------------------------

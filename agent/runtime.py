@@ -78,6 +78,57 @@ def _start_new_thread(now: float) -> ThreadInfo:
     return info
 
 
+def create_new_thread() -> ThreadInfo:
+    """
+    Explicitly mint a new addressable thread with no message sent yet —
+    used by the main chat page's "New Chat" button, so a fresh thread
+    shows up in the sidebar immediately rather than only appearing after
+    the first reply. Threads made this way are identical to ones started
+    by voice — same keyword addressing, same nightly sweep, no special
+    casing by origin.
+    """
+    now = time.time()
+    info = _start_new_thread(now)
+    app_state.default_thread_id = info.thread_id
+    app_state.default_last_activity = now
+    return info
+
+
+def list_threads() -> list[ThreadInfo]:
+    """All currently addressable threads, most recently active first."""
+    return sorted(app_state.threads.values(), key=lambda t: t.last_activity, reverse=True)
+
+
+async def get_thread_messages(thread_id: str) -> list[dict]:
+    """
+    Reads a thread's conversation history directly from the checkpointer
+    (not from the memory.py conversation-summary log, which is a
+    separate, lossier long-term-recall mechanism). Filtered down to just
+    human/assistant turns with real content — internal tool-call and
+    tool-result messages are left out, since they wouldn't make sense
+    rendered as chat bubbles.
+    """
+    if app_state.graph is None:
+        raise HTTPException(status_code=503, detail="Agent not initialised")
+
+    config = {"configurable": {"thread_id": thread_id}}
+    snapshot = await app_state.graph.aget_state(config)
+    messages = snapshot.values.get("messages", []) if snapshot else []
+
+    history = []
+    for m in messages:
+        content = getattr(m, "content", None)
+        if not content:
+            continue  # tool-call-only AI messages, empty messages
+        msg_type = getattr(m, "type", None)
+        if msg_type == "human":
+            history.append({"role": "user", "content": content})
+        elif msg_type == "ai":
+            history.append({"role": "assistant", "content": content})
+        # msg_type == "tool" (tool results) intentionally skipped
+    return history
+
+
 def resolve_thread(text: str) -> tuple[str, str, str]:
     """
     Figures out which thread `text` belongs to, and strips any keyword
@@ -123,15 +174,26 @@ class AgentResult:
     keyword: str
 
 
-async def run_agent(text: str, thread_id: str | None = None, one_shot: bool = False) -> AgentResult:
+async def run_agent(
+    text: str,
+    thread_id: str | None = None,
+    one_shot: bool = False,
+    mode: str | None = None,
+) -> AgentResult:
     """
     Runs one turn through the agent graph and returns the reply, along
     with which thread it landed in and that thread's keyword.
 
     If thread_id isn't given, it's resolved automatically: a keyword
     prefix in `text` takes priority, otherwise the recency rule applies.
-    Passing thread_id explicitly (e.g. manual testing) skips keyword
-    resolution entirely and uses that thread as-is.
+    Passing thread_id explicitly (e.g. manual testing, or the fixed
+    "onboarding"/"profile_chat" threads used by the dashboard's chat
+    pages) skips keyword resolution entirely and uses that thread as-is.
+
+    mode switches the system prompt into a different active behavior —
+    "onboarding" (driving a getting-to-know-you interview) or
+    "profile_chat" (answering/updating questions about the profile) —
+    mutually exclusive with passive learning mode.
     """
     if app_state.graph is None:
         raise HTTPException(status_code=503, detail="Agent not initialised")
@@ -143,7 +205,7 @@ async def run_agent(text: str, thread_id: str | None = None, one_shot: bool = Fa
     else:
         thread_id, keyword, cleaned_text = resolve_thread(text)
 
-    config = {"configurable": {"thread_id": thread_id, "one_shot": one_shot}}
+    config = {"configurable": {"thread_id": thread_id, "one_shot": one_shot, "mode": mode}}
 
     async with get_thread_lock(thread_id):
         result = await app_state.graph.ainvoke(

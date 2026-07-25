@@ -131,7 +131,12 @@ class MemoryStore:
         """
         if not content or not str(content).strip():
             content = title or "Untitled"
-        embedding = self._embed(content)
+        # Embed the title together with the body, not just the body — a
+        # query that's really just the note's name (e.g. searching for a
+        # note by something close to its title) should match reliably,
+        # not only queries that happen to resemble the body's content.
+        embedding_text = f"{title}\n\n{content}" if title else content
+        embedding = self._embed(embedding_text)
         self.notes.upsert(
             ids=[note_id],
             embeddings=[embedding],

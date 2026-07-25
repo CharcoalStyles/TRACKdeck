@@ -21,10 +21,19 @@ meant to be used:
 Manual, precise corrections (fixing a typo, a wrong number) are expected
 to happen by hand directly in Obsidian — these tools don't try to do
 find-and-replace edits against arbitrary note text.
+
+remember_about_me/read_about_me are a special case: unlike ordinary notes
+(found via search_notes, referenced by whatever id that search returns),
+the About Me note is a singleton at a fixed, known path
+(utils.vault.get_or_create_about_me). Routing it through search — and
+requiring the model to correctly remember an id from an earlier tool
+call — turned out to be exactly the kind of multi-step chain a smaller
+local model doesn't reliably get right. These tools resolve it directly
+every time, so there's nothing to remember and nothing to get wrong.
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from langchain_core.tools import tool
 
@@ -147,4 +156,127 @@ def make_note_tools(memory: MemoryStore):
         await index_note_file(memory, path)
         return f"Updated '{section}' in '{note.title}'."
 
-    return save_note, search_notes, read_note, append_to_note, update_note_section
+    @tool
+    async def remember_about_me(
+        section: str, content: str, mode: Literal["append", "replace"] = "append"
+    ) -> str:
+        """Record or update something learned about the user in their
+        permanent About Me note. This is the ONLY tool to use for that —
+        it always finds or creates the right note automatically, so there
+        is no need to search for it first or keep track of its id.
+
+        Do NOT use this for a section that holds multiple distinct entries
+        (e.g. "People" covering several different people, or any section
+        that's really a collection rather than one coherent topic). Using
+        mode="replace" on a collection section wipes every entry in it, not
+        just the one being corrected. For that situation, use
+        get_or_create_linked_note instead to get a dedicated note for the
+        specific person/topic, and edit that note directly.
+
+        Args:
+            section: Which part of the profile this belongs to (e.g.
+                "Preferences", "Routine", "Interests" — single-topic
+                sections only). Created automatically if it doesn't
+                already exist.
+            content: The fact or update to record.
+            mode: "append" (default) adds to what's already under that
+                heading without touching it — use for new facts. "replace"
+                overwrites that heading's content entirely — use only when
+                something supersedes an old value, not for adding new facts,
+                and never on a section holding multiple distinct entries.
+        """
+        note = vault.get_or_create_about_me()
+        if mode == "replace":
+            note.body = vault.replace_section(note.body, section, content)
+        else:
+            note.body = vault.append_to_section(note.body, section, content)
+        note.updated = vault.now_iso()
+        vault.write_note_atomic(note.path, vault.serialize_note(note))
+        await index_note_file(memory, note.path)
+        return f"Recorded under '{section}' in About Me."
+
+    @tool
+    async def get_or_create_linked_note(topic: str, category: str) -> str:
+        """Get (or create) a dedicated note for one specific person, project,
+        or other distinct sub-topic, linked from About Me. Returns that
+        note's id — use read_note/append_to_note/update_note_section with
+        that id for everything about this topic afterward, exactly as you
+        would for any other note.
+
+        Use this instead of writing into a shared About Me section whenever:
+          - The relevant section holds multiple distinct entries (e.g.
+            "People" has several different people) and you're about to add
+            or correct information about ONE of them specifically.
+          - A single topic (a person, an ongoing project, a specific health
+            matter) is accumulating enough detail that it no longer fits as
+            a short line in About Me.
+
+        This always finds the same note for the same topic — never search
+        for it, never guess an id from earlier in the conversation, never
+        create a second note for something that already has one. If in
+        doubt whether a topic already has a note, call this first; it's
+        safe to call even when one already exists.
+
+        Args:
+            topic: The specific name of the person/project/topic (e.g.
+                "Alex", not "People"). Use the exact same name consistently
+                once created — it's the key used to find this note again.
+            category: Which About Me section this gets indexed under (e.g.
+                "People", "Career", "Health").
+        """
+        about_me = vault.get_or_create_about_me()
+        existing_id = vault.find_linked_note_id(about_me.linked_notes, topic)
+        if existing_id is not None:
+            return (
+                f"'{topic}' already has a note (id: {existing_id}). "
+                f"Use read_note/append_to_note/update_note_section with this id — "
+                f"do not create a new note for this topic."
+            )
+
+        now = vault.now_iso()
+        note = vault.Note(
+            id=vault.generate_id(),
+            title=topic,
+            created=now,
+            updated=now,
+            tags=[category.lower()],
+            source="agent",
+            body="",
+        )
+        path = vault.unique_note_path(topic)
+        note.path = path
+        vault.write_note_atomic(path, vault.serialize_note(note))
+        await index_note_file(memory, path)
+
+        about_me.linked_notes[topic] = note.id
+        about_me.body = vault.append_to_section(about_me.body, category, f"- [[{topic}]]")
+        about_me.updated = now
+        vault.write_note_atomic(about_me.path, vault.serialize_note(about_me))
+        await index_note_file(memory, about_me.path)
+
+        return (
+            f"Created a new note for '{topic}' (id: {note.id}), linked from About Me's "
+            f"'{category}' section. Use read_note/append_to_note/update_note_section "
+            f"with this id to add details."
+        )
+
+    @tool
+    def read_about_me() -> str:
+        """Read everything currently known about the user from their About
+        Me note. Use this to check what's already recorded before deciding
+        whether something new is actually worth adding."""
+        note = vault.get_or_create_about_me()
+        if not note.body.strip():
+            return "About Me note exists but is empty — nothing recorded yet."
+        return note.body
+
+    return (
+        save_note,
+        search_notes,
+        read_note,
+        append_to_note,
+        update_note_section,
+        remember_about_me,
+        get_or_create_linked_note,
+        read_about_me,
+    )

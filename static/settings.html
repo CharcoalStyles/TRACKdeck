@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings — Assistant Dashboard</title>
+  <link rel="stylesheet" href="/static/css/theme.css">
+</head>
+
+<body>
+
+  <header>
+    <h1>Assistant Dashboard</h1>
+    <nav>
+      <a href="/static/index.html">Chat</a>
+      <a href="/static/voice.html">Voice Test</a>
+      <a href="/static/onboarding.html">Onboarding</a>
+      <a href="/static/profile.html">Profile</a>
+      <a href="/static/settings.html" class="active">Settings</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="card">
+      <h2>Assistant Behavior</h2>
+      <p class="description">Standing toggles — these apply to every interaction until changed here, unlike per-test options on the Voice Test page.</p>
+
+      <div class="toggle-row">
+        <div>
+          <div class="label">Learning mode</div>
+          <div class="sublabel">Proactively notices and records durable facts about you into your About Me profile as they come up in conversation.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="learningModeToggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="save-status" id="settingsStatus"></div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { getSettings, updateSettings } from '/static/js/api.js';
+
+    const learningModeToggle = document.getElementById('learningModeToggle');
+    const settingsStatus = document.getElementById('settingsStatus');
+
+    async function loadSettings() {
+      settingsStatus.textContent = '';
+      try {
+        const data = await getSettings();
+        learningModeToggle.checked = !!data.learning_mode;
+      } catch (error) {
+        console.error('Failed to load settings:', error);
+        settingsStatus.textContent = 'Could not load current settings.';
+        settingsStatus.style.color = '#ff6b6b';
+      }
+    }
+
+    async function saveSetting(key, value) {
+      settingsStatus.textContent = 'Saving...';
+      settingsStatus.style.color = '#888';
+      try {
+        await updateSettings({ [key]: value });
+        settingsStatus.textContent = 'Saved.';
+        settingsStatus.style.color = '#00adb5';
+      } catch (error) {
+        console.error('Failed to save setting:', error);
+        settingsStatus.textContent = 'Failed to save — reverted.';
+        settingsStatus.style.color = '#ff6b6b';
+        loadSettings();
+      }
+    }
+
+    learningModeToggle.addEventListener('change', () => {
+      saveSetting('learning_mode', learningModeToggle.checked);
+    });
+
+    loadSettings();
+  </script>
+</body>
+
+</html>

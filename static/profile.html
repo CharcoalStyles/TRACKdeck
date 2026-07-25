@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profile — Assistant Dashboard</title>
+  <link rel="stylesheet" href="/static/css/theme.css">
+</head>
+
+<body>
+
+  <header>
+    <h1>Assistant Dashboard</h1>
+    <nav>
+      <a href="/static/index.html">Chat</a>
+      <a href="/static/voice.html">Voice Test</a>
+      <a href="/static/onboarding.html">Onboarding</a>
+      <a href="/static/profile.html" class="active">Profile</a>
+      <a href="/static/settings.html">Settings</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="card">
+      <h2>Your Profile</h2>
+      <p class="description">
+        Ask what's currently known about you, or just tell it something to add or correct —
+        this talks directly to your About Me note, separate from the guided onboarding flow.
+      </p>
+      <div class="chat-widget" id="chat-root"></div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { ChatWidget } from '/static/js/chat.js';
+
+    new ChatWidget(document.getElementById('chat-root'), {
+      threadId: 'profile_chat',
+      mode: 'profile_chat',
+      greeting: "What would you like to know, or is there something to add or correct?",
+    });
+  </script>
+</body>
+
+</html>
