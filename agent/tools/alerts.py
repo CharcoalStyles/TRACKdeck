@@ -1,6 +1,9 @@
+import logging
 from typing import Optional
 
 from langchain_core.tools import tool
+
+logger = logging.getLogger(__name__)
 
 @tool
 def set_reminder(message: str, when: str) -> str:
@@ -16,7 +19,7 @@ def set_reminder(message: str, when: str) -> str:
     #   - Store in SQLite with a timestamp
     #   - Use asyncio.create_task() or APScheduler to fire the reminder
     #   - Deliver via a WebSocket push, TTS on the ESP32, or a macOS notification
-    print(f"[STUB] Reminder set: '{message}' at '{when}'")
+    logger.info("[STUB] Reminder set: '%s' at '%s'", message, when)
     return f"Got it — I'll remind you to '{message}' {when}."
 
 @tool
@@ -34,8 +37,8 @@ def set_timer(when: str, message: Optional[str] = None) -> str:
     #   - Use asyncio.create_task() or APScheduler to fire the reminder
     #   - Deliver via a WebSocket push, TTS on the ESP32, or a macOS notification
     if message:
-        print(f"[STUB] Timer set: '{message}' at '{when}'")
+        logger.info("[STUB] Timer set: '%s' at '%s'", message, when)
         return f"Timer set for '{when}'."
     else:
-        print(f"[STUB] Timer set at '{when}'")
+        logger.info("[STUB] Timer set at '%s'", when)
         return f"Timer set for '{when}'."

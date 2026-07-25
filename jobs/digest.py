@@ -15,6 +15,7 @@ write a short recap, rather than emailing the raw log.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import time
 from datetime import datetime
@@ -29,6 +30,8 @@ from agent.settings import settings
 from utils.mailer import send_email
 from utils.notify import notify_error
 from voice import UPLOAD_DIR
+
+logger = logging.getLogger(__name__)
 
 RECEIVED_NOTES_MAX_AGE_SECONDS = 24 * 60 * 60
 
@@ -111,9 +114,9 @@ async def send_daily_digest(memory: MemoryStore) -> None:
         subject = f"Daily recap — {today_str}"
 
         await asyncio.to_thread(send_email, subject, recap)
-        print(f"Daily digest sent for {today_str} ({len(entries)} logged entries).")
+        logger.info("Daily digest sent for %s (%d logged entries).", today_str, len(entries))
     except Exception as e:
-        print(f"⚠️ Daily digest failed: {e}")
+        logger.error("Daily digest failed: %s", e)
         notify_error("Daily digest failed to send", e)
     finally:
         # Keyword-addressed threads are a same-day concept — free them all
@@ -125,11 +128,14 @@ async def send_daily_digest(memory: MemoryStore) -> None:
         app_state.keywords.clear()
         app_state.default_thread_id = None
         pruned = prune_thread_locks()
-        print(f"Cleared {freed} addressable thread keyword(s) for the new day ({pruned} stale lock(s) pruned).")
+        logger.info(
+            "Cleared %d addressable thread keyword(s) for the new day (%d stale lock(s) pruned).",
+            freed, pruned,
+        )
 
         try:
             notes_pruned = await asyncio.to_thread(_prune_received_notes)
-            print(f"Pruned {notes_pruned} received voice recording(s) older than a day.")
+            logger.info("Pruned %d received voice recording(s) older than a day.", notes_pruned)
         except Exception as e:
-            print(f"⚠️ Failed to prune received_notes: {e}")
+            logger.error("Failed to prune received_notes: %s", e)
             notify_error("Received-notes cleanup failed", e)

@@ -16,6 +16,7 @@ The embedding model is configured via the EMBEDDING_MODEL env var.
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from typing import Optional
@@ -23,6 +24,8 @@ from typing import Optional
 import chromadb
 from chromadb import Settings
 from langchain_openai import OpenAIEmbeddings
+
+logger = logging.getLogger(__name__)
 
 
 def make_embedding_function():
@@ -70,12 +73,11 @@ class MemoryStore:
         """Store a short summary of a completed conversation turn."""
         # Clean the string and check if it's empty
         if not summary or not str(summary).strip():
-            print(f"⚠️ Warning: Attempted to save an empty summary for thread {thread_id}. Skipping embedding.")
+            logger.warning("Attempted to save an empty summary for thread %s. Skipping embedding.", thread_id)
             return
-        
+
         doc_id = f"conv_{thread_id}_{int(time.time())}"
-        print(f"Summary: {summary}")
-        print(f"Doc ID: {doc_id}")
+        logger.debug("Saving conversation summary %s: %s", doc_id, summary)
 
         embedding = self._embed(summary)
         self.conversations.add(

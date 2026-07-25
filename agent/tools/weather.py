@@ -3,8 +3,11 @@ from typing import Optional
 from langchain_core.tools import tool
 import requests
 import json
+import logging
 
 from agent.settings import settings
+
+logger = logging.getLogger(__name__)
 
 def call_open_meteo_search(location: str) -> dict:
     """Call the Open-Meteo API and return the response."""
@@ -21,7 +24,7 @@ def call_open_meteo_forecast(latitude: float, longitude: float, params: dict) ->
 
 
     response = requests.get(f"https://api.open-meteo.com/v1/forecast", params=params, timeout=10)
-    print(response.url)
+    logger.debug("Open-Meteo request URL: %s", response.url)
     response.raise_for_status()
     return response.json()
 
@@ -36,7 +39,7 @@ def get_current_weather(location: Optional[str] = None) -> str:
         A string containing the current weather in the specified location.
     """
     loc = location or settings.default_location
-    print(f"Fetching weather for: {loc}")
+    logger.info("Fetching weather for: %s", loc)
 
     try:
         location_data = call_open_meteo_search(loc)
@@ -67,7 +70,7 @@ def get_current_weather(location: Optional[str] = None) -> str:
         return f"Weather for {loc}: {temperature}°C, {cloud_cover}% cloud cover, {precipitation}mm precipitation."
 
     except requests.exceptions.RequestException as e:
-        print(f"Error connecting to Open-Meteo: {e}")
+        logger.error("Error connecting to Open-Meteo: %s", e)
         return f"Weather for {loc}: No results found."
 
 @tool
@@ -82,14 +85,14 @@ def get_weather_forecast(location: Optional[str] = None) -> str:
     """
 
     loc = location or settings.default_location
-    print(f"Fetching weather for: {loc}")
+    logger.info("Fetching weather for: %s", loc)
 
     try:
         location_data = call_open_meteo_search(loc)
         if len(location_data["results"]) == 0:
             return f"Weather for {loc}: No results found."
 
-        print(f"Found location: {location_data['results']}")
+        logger.debug("Found location: %s", location_data['results'])
 
         latitude = location_data["results"][0]['latitude']
         longitude = location_data["results"][0]['longitude']
@@ -124,7 +127,7 @@ def get_weather_forecast(location: Optional[str] = None) -> str:
         return json.dumps(forecast)
 
     except requests.exceptions.RequestException as e:
-        print(f"Error connecting to Open-Meteo: {e}")
+        logger.error("Error connecting to Open-Meteo: %s", e)
         return f"Weather for {loc}: No results found."
 
 @tool
@@ -141,14 +144,14 @@ def get_range_forecast(start: str, end: str, location: Optional[str] = None) -> 
     """
 
     loc = location or settings.default_location
-    print(f"Fetching weather for: {loc}")
+    logger.info("Fetching weather for: %s", loc)
 
     try:
         location_data = call_open_meteo_search(loc)
         if len(location_data["results"]) == 0:
             return f"Weather for {loc}: No results found."
 
-        print(f"Found location: {location_data['results']}")
+        logger.debug("Found location: %s", location_data['results'])
 
         latitude = location_data["results"][0]['latitude']
         longitude = location_data["results"][0]['longitude']
@@ -184,7 +187,7 @@ def get_range_forecast(start: str, end: str, location: Optional[str] = None) -> 
         return json.dumps(forecast)
 
     except requests.exceptions.RequestException as e:
-        print(f"Error connecting to Open-Meteo: {e}")
+        logger.error("Error connecting to Open-Meteo: %s", e)
         return f"Weather for {loc}: No results found."
     
 

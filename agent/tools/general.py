@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Optional
 from datetime import datetime
 
@@ -7,6 +8,8 @@ import requests
 import os
 
 from agent.settings import settings
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -19,7 +22,7 @@ def get_current_datetime() -> str:
 
     now = datetime.now(settings.zoneinfo())
     now_string = now.strftime("%-I:%M %p on %A %-d %B %Y")
-    print(f"Current date and time: {now_string}")
+    logger.info("Current date and time: %s", now_string)
     return f"The current date and time is: {now_string}"
 
 # ---------------------------------------------------------------------------
@@ -37,11 +40,12 @@ def web_search(query: str) -> str:
     instance_url = os.environ.get("SEARXNG_URL")
 
     if not instance_url:
-        print("No SearXNG instance URL found. Skipping web search.")
-        return "Web search not yet connected. Query was: '{query}'"
+        logger.info("No SearXNG instance URL found. Skipping web search.")
+        return f"Web search not yet connected. Query was: '{query}'"
     else:
-        print(f"Searching for: {query}")
-        
+        logger.info("Searching for: %s", query)
+
+
     # SearXNG: self-hosted, fully private
     # Define API parameters
     params = {
@@ -54,5 +58,5 @@ def web_search(query: str) -> str:
         response.raise_for_status()
         return json.dumps(response.json())
     except requests.exceptions.RequestException as e:
-        print(f"Error connecting to SearXNG: {e}")
+        logger.error("Error connecting to SearXNG: %s", e)
         return f"Web search failed. Query was: '{query}'"

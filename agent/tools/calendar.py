@@ -1,5 +1,6 @@
 from typing import Optional
 import json
+import logging
 import uuid
 
 from datetime import timedelta
@@ -9,13 +10,15 @@ from langchain_core.tools import tool
 from utils.datetime import get_todays_datetime, text_to_utc, add_time_to_UTC_text
 from utils.next_cloud_calendar import get_event, get_events_in_range, create_or_update_event, delete_event
 
+logger = logging.getLogger(__name__)
+
 @tool
 def get_todays_events() -> str:
     """Retrieves today's calendar events. Use this when the user asks what's
     on their schedule, agenda, or calendar today."""
 
     start, end = get_todays_datetime()
-    print(f"Retrieving events from {start} to {end}")
+    logger.info("Retrieving events from %s to %s", start, end)
 
     response = get_events_in_range(start, end)
 
@@ -31,7 +34,7 @@ def get_calendar_event(uid: str) -> str:
     Args:
         uid (str): The unique ID of the event to retrieve.
     """ 
-    print(f"Retrieving event with UID: {uid}")
+    logger.info("Retrieving event with UID: %s", uid)
     
     response = get_event(uid)
     
@@ -60,10 +63,10 @@ def add_calendar_event(title: str, start: str, end: Optional[str] = None, descri
     else:
         end_UTC = text_to_utc(end)
 
-    print(f"Adding event: {title} from {start_UTC} to {end_UTC}")
-    print(f"Description: {description}")
-    print(f"Location: {location}")
-    
+    logger.info("Adding event: %s from %s to %s", title, start_UTC, end_UTC)
+    logger.debug("Description: %s", description)
+    logger.debug("Location: %s", location)
+
 
     uid = str(uuid.uuid4())
 
@@ -88,7 +91,7 @@ def delete_calendar_event(uid: str) -> str:
     Args:
         uid (str): The unique ID of the event to delete.
     """ 
-    print(f"Deleting event with UID: {uid}")
+    logger.info("Deleting event with UID: %s", uid)
     
     response = delete_event(uid)
     
@@ -109,7 +112,7 @@ def get_calendar_events(start: str, end: str) -> str:
     start_UTC = text_to_utc(start)
     end_UTC = text_to_utc(end)
 
-    print(f"Retrieving events from {start_UTC} to {end_UTC}")
+    logger.info("Retrieving events from %s to %s", start_UTC, end_UTC)
     
     response = get_events_in_range(start_UTC, end_UTC)
     
@@ -134,7 +137,7 @@ def update_calendar_event(uid: str, title: str, start: str, end: str, descriptio
     start_UTC = text_to_utc(start)
     end_UTC = text_to_utc(end)
 
-    print(f"Updating event with UID: {uid} to {title} from {start_UTC} to {end_UTC}")
+    logger.info("Updating event with UID: %s to %s from %s to %s", uid, title, start_UTC, end_UTC)
 
 
     response = create_or_update_event(

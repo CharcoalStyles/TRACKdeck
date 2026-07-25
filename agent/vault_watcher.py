@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -28,6 +29,8 @@ from watchfiles import Change, awatch
 from agent.memory import MemoryStore
 from utils import vault
 from utils.notify import notify_error, send_gotify
+
+logger = logging.getLogger(__name__)
 
 INGEST_PROMPT = """You are filing a raw note into a personal knowledge vault. Read the \
 content below and respond with ONLY a JSON object (no other text, no markdown fences) \
@@ -158,7 +161,7 @@ async def process_inbox_file(memory: MemoryStore, path: Path) -> None:
         )
 
     except Exception as e:
-        print(f"⚠️ Failed to process inbox file {path}: {e}")
+        logger.error("Failed to process inbox file %s: %s", path, e)
         await asyncio.to_thread(notify_error, f"Inbox processing failed for {path.name}", e)
     finally:
         _processing_inbox_files.discard(key)
@@ -198,10 +201,10 @@ async def reconcile_vault(memory: MemoryStore) -> None:
         for path in vault.list_inbox_files():
             await process_inbox_file(memory, path)
 
-        print(f"Vault reconciliation complete: {len(seen_ids)} notes indexed.")
+        logger.info("Vault reconciliation complete: %d notes indexed.", len(seen_ids))
 
     except Exception as e:
-        print(f"⚠️ Vault reconciliation failed: {e}")
+        logger.error("Vault reconciliation failed: %s", e)
         await asyncio.to_thread(notify_error, "Vault reconciliation failed", e)
 
 
@@ -239,5 +242,5 @@ async def watch_vault(memory: MemoryStore) -> None:
                         await asyncio.to_thread(memory.delete_note_by_path, rel_path)
 
             except Exception as e:
-                print(f"⚠️ Vault watcher failed handling {path}: {e}")
+                logger.error("Vault watcher failed handling %s: %s", path, e)
                 await asyncio.to_thread(notify_error, f"Vault watcher failed on {path.name}", e)

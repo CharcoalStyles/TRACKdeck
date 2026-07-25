@@ -8,9 +8,12 @@ Required env vars: GOTIFY_URL, GOTIFY_TOKEN
 """
 from __future__ import annotations
 
+import logging
 import os
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 def send_gotify(title: str, message: str, priority: int = 5) -> None:
@@ -31,7 +34,7 @@ def send_gotify(title: str, message: str, priority: int = 5) -> None:
         response = httpx.post(url, params=params, json=payload, timeout=10.0)
         response.raise_for_status()
     except Exception as e:
-        print(f"⚠️ Failed to send Gotify notification: {e}")
+        logger.error("Failed to send Gotify notification: %s", e)
 
 
 def notify_error(context: str, error: Exception) -> None:

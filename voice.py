@@ -43,6 +43,7 @@ never set either in production:
     manual, opt-in testing path, never something real hardware sends.
 """
 import asyncio
+import logging
 import os
 import time
 from typing import Annotated
@@ -61,6 +62,8 @@ from faster_whisper import WhisperModel
 
 from agent.runtime import run_agent
 from utils.notify import notify_error
+
+logger = logging.getLogger(__name__)
 
 API_TOKEN = os.environ["API_TOKEN"]
 UPLOAD_DIR = "./received_notes"
@@ -87,7 +90,7 @@ async def _transcribe_and_run(audio_path: str, one_shot: bool) -> tuple[str, str
     if not transcription:
         return "", "", ""
 
-    print(f"Transcribed '{audio_path}': {transcription}")
+    logger.info("Transcribed '%s': %s", audio_path, transcription)
     result = await run_agent(transcription, one_shot=one_shot)
     return transcription, result.reply, result.keyword
 
@@ -100,10 +103,10 @@ async def _process_voice_note(audio_path: str, one_shot: bool) -> None:
     try:
         transcription, _, _ = await _transcribe_and_run(audio_path, one_shot)
         if not transcription:
-            print(f"No speech detected in {audio_path} — discarding.")
+            logger.info("No speech detected in %s — discarding.", audio_path)
 
     except Exception as e:
-        print(f"⚠️ Voice pipeline failed for {audio_path}: {e}")
+        logger.error("Voice pipeline failed for %s: %s", audio_path, e)
         await asyncio.to_thread(
             notify_error, f"Voice pipeline failed processing {audio_path}", e
         )

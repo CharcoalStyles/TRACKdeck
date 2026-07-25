@@ -19,6 +19,13 @@ from pydantic import BaseModel, model_validator
 # Load .env before anything that reads os.environ (i.e. before agent imports)
 load_dotenv()
 
+from utils.logging import configure_logging
+
+# Configured before any other app module is imported, so every logger
+# created at import time (module-level `logging.getLogger(__name__)`
+# calls) already has the right level/handler via the root logger.
+configure_logging()
+
 # The dashboard's static/js/api.js ships this same string as its default
 # AUTH_TOKEN, and .env.example documents it as the sample value — so an
 # unedited API_TOKEN isn't just "unset", it's a real, publicly-known

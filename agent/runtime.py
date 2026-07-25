@@ -23,6 +23,7 @@ apply.
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 import uuid
 from dataclasses import dataclass
@@ -33,6 +34,8 @@ from agent.keywords import generate_keyword, match_keyword_prefix
 from agent.memory import MemoryStore
 
 from utils.notify import send_gotify, notify_error
+
+logger = logging.getLogger(__name__)
 
 # A new default thread starts if more than this many seconds pass with
 # no request and no keyword-addressed continuation.
@@ -244,10 +247,9 @@ async def run_agent(
     for msg in result["messages"]:
         if hasattr(msg, "tool_calls") and msg.tool_calls:
             for tool_call in msg.tool_calls:
-                print(f"🛠️ Tool Called: {tool_call['name']}")
-                print(f"   Arguments:   {tool_call['args']}")
+                logger.info("Tool called: %s(%s)", tool_call["name"], tool_call["args"])
         elif msg.type == "tool":
-            print(f"🔄 Tool Output: {msg.content}\n")
+            logger.debug("Tool output: %s", msg.content)
 
     reply = next(
         (m.content for m in reversed(result["messages"]) if m.content),
@@ -271,7 +273,7 @@ async def run_agent(
     try:
         app_state.memory.save_conversation_summary(summary, thread_id=thread_id)
     except Exception as e:
-        print(f"⚠️ Failed to save conversation summary for thread {thread_id}: {e}")
+        logger.error("Failed to save conversation summary for thread %s: %s", thread_id, e)
         notify_error("Conversation memory save failed (reply was still delivered)", e)
 
     return AgentResult(reply=reply, thread_id=thread_id, keyword=keyword)
