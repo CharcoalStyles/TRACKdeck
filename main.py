@@ -13,7 +13,7 @@ from apscheduler.triggers.date import DateTrigger
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, model_validator
 
 # Load .env before anything that reads os.environ (i.e. before agent imports)
@@ -192,6 +192,23 @@ async def serve_frontend():
         with open(static_file_path, "r", encoding="utf-8") as f:
             return f.read()
     return HTMLResponse(content="<h1>static/index.html not found</h1>", status_code=404)
+
+
+@app.get("/static/js/api.js")
+async def api_js():
+    """
+    Registered ahead of the StaticFiles mount below so it wins for this
+    exact path. api.js on disk keeps _PLACEHOLDER_API_TOKEN (safe to
+    commit) — the real API_TOKEN is substituted in per-request from the
+    environment, so it's never written to disk. no-store since the
+    response is credential-bearing and must not be cached by the browser.
+    """
+    static_file_path = os.path.join("static", "js", "api.js")
+    with open(static_file_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    content = content.replace(_PLACEHOLDER_API_TOKEN, os.environ["API_TOKEN"])
+    return Response(content=content, media_type="application/javascript", headers={"Cache-Control": "no-store"})
+
 
 # Mount the rest of the static folder for any assets/css/js if you add them later
 app.mount("/static", StaticFiles(directory="static"), name="static")

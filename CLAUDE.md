@@ -223,7 +223,12 @@ See `.env.example` for the full list. Notable ones:
   `DIGEST_EMAIL_TO`.
 - **Vault** — `VAULT_PATH` (defaults to `./data/vault`).
 - **`API_TOKEN`** — gates `/voice` and mutating `/debug/*`/`/settings` routes. **`/text` has
-  no auth at all** — known gap, see below.
+  no auth at all** — known gap, see below. The dashboard needs this same value client-side;
+  rather than hardcoding it into the checked-in `static/js/api.js` (which would put a real
+  secret in git), `main.py`'s `api_js()` route is registered ahead of the `/static` mount
+  and serves that one file with `_PLACEHOLDER_API_TOKEN` substituted for the real
+  `os.environ["API_TOKEN"]` at request time, `Cache-Control: no-store`. The file on disk
+  keeps the placeholder.
 - **`LEARNING_MODE_DEFAULT`** — startup default for `agent/settings.py`'s `learning_mode`;
   live-changeable via `/settings`.
 - **`default_location`, `timezone`, `digest_time`, `bedtime`,
@@ -246,8 +251,7 @@ See `.env.example` for the full list. Notable ones:
 - `routes/synth.py` raises at import time if Piper model files are missing, taking down the
   whole app since it's imported at module load (mitigated operationally by
   `setup_check.sh`, not fixed in code).
-- `/text` has no authentication; the dashboard's `AUTH_TOKEN` in `static/js/api.js` is a
-  hardcoded placeholder that needs manually swapping before deployment.
+- `/text` has no authentication.
 - Threads (and keyword addressability) are swept nightly regardless of origin — dashboard
   conversations have the same one-day lifespan as voice-command keywords. Deliberate
   ("threads are threads"), not an oversight.
