@@ -16,8 +16,13 @@ def get_todays_events() -> str:
 
     start, end = get_todays_datetime()
     print(f"Retrieving events from {start} to {end}")
-    
-    return get_events_in_range(start, end)
+
+    response = get_events_in_range(start, end)
+
+    if response.get("success"):
+        return json.dumps(response.get("events"))
+    else:
+        return f"Failed to retrieve today's events. {response.get('error') or response.get('message') or 'Unknown error'}"
 
 @tool
 def get_calendar_event(uid: str) -> str:
