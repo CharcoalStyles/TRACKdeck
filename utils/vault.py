@@ -202,14 +202,42 @@ def write_note_atomic(path: Path, content: str) -> None:
     os.replace(tmp_path, path)
 
 
+def _claim_path(path: Path) -> bool:
+    """Atomically claims a filename via exclusive create, returning False if
+    it already existed. Used instead of an exists()-then-write check, which
+    has a TOCTOU gap two concurrent writers can both pass."""
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        return False
+    os.close(fd)
+    return True
+
+
 def unique_note_path(title: str) -> Path:
-    """Pick a non-colliding filename in the vault root for a new note."""
+    """Pick a non-colliding filename in the vault root for a new note.
+
+    The candidate is claimed with an exclusive create (not just an
+    existence check) so a concurrent writer computing the same slug —
+    another save_note call, or the Inbox watcher — can't race past a
+    stale check and overwrite this note once real content is written.
+    The caller's subsequent write_note_atomic replaces this empty
+    placeholder with the actual content.
+    """
+    root = vault_root()
+    root.mkdir(parents=True, exist_ok=True)
     slug = slugify(title)
-    candidate = vault_root() / f"{slug}.md"
-    if not candidate.exists():
+
+    candidate = root / f"{slug}.md"
+    if _claim_path(candidate):
         return candidate
-    suffix = generate_id()
-    return vault_root() / f"{slug}-{suffix}.md"
+
+    for _ in range(5):
+        candidate = root / f"{slug}-{generate_id()}.md"
+        if _claim_path(candidate):
+            return candidate
+
+    raise RuntimeError(f"Could not claim a unique note path for title: {title!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -298,7 +326,12 @@ def _section_span(body: str, heading: str) -> tuple[int, int] | None:
     not including the heading line itself. None if the heading isn't
     present in the body.
     """
-    pattern = re.compile(rf"(?m)^##[ \t]+{re.escape(heading.strip())}[ \t]*$")
+    # Case-insensitive: the model may ask for "preferences" when the note has
+    # "## Preferences" — without this, that mismatch creates a second,
+    # differently-cased heading instead of matching the existing section, and
+    # since matching only ever finds the first occurrence, the original
+    # becomes permanently unreachable through these tools.
+    pattern = re.compile(rf"(?im)^##[ \t]+{re.escape(heading.strip())}[ \t]*$")
     match = pattern.search(body)
     if not match:
         return None

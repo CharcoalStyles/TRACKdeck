@@ -62,17 +62,35 @@ def match_keyword_prefix(text: str, active_keywords) -> tuple[str | None, str]:
 
     If nothing matches with real confidence, returns (None, text)
     unchanged — callers should fall back to normal thread resolution.
+
+    If the keyword matches but nothing follows it (e.g. an accidental
+    double button-press with no real request), the second element is ""
+    rather than falling back to the raw keyword phrase — callers should
+    treat an empty remainder as a no-op reconnect, not a real message.
     """
     words = text.strip().split()
     if len(words) < 2:
         return None, text
 
-    candidate = " ".join(words[:2]).strip(".,!?").lower()
+    candidate_words = [w.strip(".,!?").lower() for w in words[:2]]
 
     best_keyword = None
     best_ratio = 0.0
     for keyword in active_keywords:
-        ratio = SequenceMatcher(None, candidate, keyword.lower()).ratio()
+        # Keywords are drawn from ordinary English words (colors, minerals,
+        # animals), so an unrelated sentence opener can share enough
+        # characters with one to clear the threshold on the phrase as a
+        # whole (e.g. "silver spoon" vs "Silver Swan" scores 0.78 as a
+        # joined string). Requiring BOTH words to individually be a close
+        # match — not just the concatenated phrase — rejects that case
+        # while still tolerating a genuine Whisper mis-transcription of
+        # either word.
+        keyword_words = keyword.lower().split()[:2]
+        word_ratios = [
+            SequenceMatcher(None, cw, kw).ratio()
+            for cw, kw in zip(candidate_words, keyword_words)
+        ]
+        ratio = min(word_ratios)
         if ratio > best_ratio:
             best_ratio = ratio
             best_keyword = keyword
@@ -80,6 +98,6 @@ def match_keyword_prefix(text: str, active_keywords) -> tuple[str | None, str]:
     if best_keyword is not None and best_ratio >= MATCH_THRESHOLD:
         remaining = " ".join(words[2:]).strip()
         remaining = remaining.lstrip(",").strip()
-        return best_keyword, (remaining or text)
+        return best_keyword, remaining
 
     return None, text

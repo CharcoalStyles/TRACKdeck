@@ -33,6 +33,7 @@ every time, so there's nothing to remember and nothing to get wrong.
 """
 from __future__ import annotations
 
+import asyncio
 from typing import Literal, Optional
 
 from langchain_core.tools import tool
@@ -43,6 +44,13 @@ from utils import vault
 
 
 def make_note_tools(memory: MemoryStore):
+    # About Me is a single fixed-path note (utils.vault.get_or_create_about_me),
+    # and LangGraph's ToolNode can run multiple tool calls from one LLM turn
+    # concurrently. Both remember_about_me and get_or_create_linked_note do a
+    # read-modify-write on it; without this lock, two concurrent calls can
+    # interleave — reading before either writes — and clobber each other's
+    # changes, or both decide a linked-note topic is new and create duplicates.
+    _about_me_lock = asyncio.Lock()
 
     @tool
     async def save_note(title: str, content: str, tags: Optional[list[str]] = None) -> str:
@@ -185,14 +193,15 @@ def make_note_tools(memory: MemoryStore):
                 something supersedes an old value, not for adding new facts,
                 and never on a section holding multiple distinct entries.
         """
-        note = vault.get_or_create_about_me()
-        if mode == "replace":
-            note.body = vault.replace_section(note.body, section, content)
-        else:
-            note.body = vault.append_to_section(note.body, section, content)
-        note.updated = vault.now_iso()
-        vault.write_note_atomic(note.path, vault.serialize_note(note))
-        await index_note_file(memory, note.path)
+        async with _about_me_lock:
+            note = vault.get_or_create_about_me()
+            if mode == "replace":
+                note.body = vault.replace_section(note.body, section, content)
+            else:
+                note.body = vault.append_to_section(note.body, section, content)
+            note.updated = vault.now_iso()
+            vault.write_note_atomic(note.path, vault.serialize_note(note))
+            await index_note_file(memory, note.path)
         return f"Recorded under '{section}' in About Me."
 
     @tool
@@ -224,35 +233,36 @@ def make_note_tools(memory: MemoryStore):
             category: Which About Me section this gets indexed under (e.g.
                 "People", "Career", "Health").
         """
-        about_me = vault.get_or_create_about_me()
-        existing_id = vault.find_linked_note_id(about_me.linked_notes, topic)
-        if existing_id is not None:
-            return (
-                f"'{topic}' already has a note (id: {existing_id}). "
-                f"Use read_note/append_to_note/update_note_section with this id — "
-                f"do not create a new note for this topic."
+        async with _about_me_lock:
+            about_me = vault.get_or_create_about_me()
+            existing_id = vault.find_linked_note_id(about_me.linked_notes, topic)
+            if existing_id is not None:
+                return (
+                    f"'{topic}' already has a note (id: {existing_id}). "
+                    f"Use read_note/append_to_note/update_note_section with this id — "
+                    f"do not create a new note for this topic."
+                )
+
+            now = vault.now_iso()
+            note = vault.Note(
+                id=vault.generate_id(),
+                title=topic,
+                created=now,
+                updated=now,
+                tags=[category.lower()],
+                source="agent",
+                body="",
             )
+            path = vault.unique_note_path(topic)
+            note.path = path
+            vault.write_note_atomic(path, vault.serialize_note(note))
+            await index_note_file(memory, path)
 
-        now = vault.now_iso()
-        note = vault.Note(
-            id=vault.generate_id(),
-            title=topic,
-            created=now,
-            updated=now,
-            tags=[category.lower()],
-            source="agent",
-            body="",
-        )
-        path = vault.unique_note_path(topic)
-        note.path = path
-        vault.write_note_atomic(path, vault.serialize_note(note))
-        await index_note_file(memory, path)
-
-        about_me.linked_notes[topic] = note.id
-        about_me.body = vault.append_to_section(about_me.body, category, f"- [[{topic}]]")
-        about_me.updated = now
-        vault.write_note_atomic(about_me.path, vault.serialize_note(about_me))
-        await index_note_file(memory, about_me.path)
+            about_me.linked_notes[topic] = note.id
+            about_me.body = vault.append_to_section(about_me.body, category, f"- [[{topic}]]")
+            about_me.updated = now
+            vault.write_note_atomic(about_me.path, vault.serialize_note(about_me))
+            await index_note_file(memory, about_me.path)
 
         return (
             f"Created a new note for '{topic}' (id: {note.id}), linked from About Me's "

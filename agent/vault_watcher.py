@@ -92,6 +92,15 @@ def _generate_inbox_frontmatter(content: str) -> dict:
     }
 
 
+# Startup reconcile_vault() and the live watch_vault() run as independent
+# concurrent tasks (see main.py's lifespan) and can both observe the same
+# freshly-dropped Inbox file. This in-process claim set makes the
+# check-and-claim atomic (no await between membership check and insert, so
+# nothing can interleave under asyncio's cooperative scheduling) so only one
+# of them actually processes a given file.
+_processing_inbox_files: set[Path] = set()
+
+
 async def process_inbox_file(memory: MemoryStore, path: Path) -> None:
     """
     Turn a raw file in Inbox/ into a proper managed note at the vault
@@ -99,6 +108,11 @@ async def process_inbox_file(memory: MemoryStore, path: Path) -> None:
     reported via Gotify rather than raised — this runs unattended, with
     no one watching an HTTP response.
     """
+    key = path.resolve()
+    if key in _processing_inbox_files:
+        return  # already being handled by a concurrent call (reconcile vs watcher)
+    _processing_inbox_files.add(key)
+
     try:
         if not path.exists():
             return  # already handled, or removed before we got to it
@@ -146,6 +160,8 @@ async def process_inbox_file(memory: MemoryStore, path: Path) -> None:
     except Exception as e:
         print(f"⚠️ Failed to process inbox file {path}: {e}")
         await asyncio.to_thread(notify_error, f"Inbox processing failed for {path.name}", e)
+    finally:
+        _processing_inbox_files.discard(key)
 
 
 # ---------------------------------------------------------------------------

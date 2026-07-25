@@ -5,6 +5,7 @@ Builds and returns the compiled LangGraph agent.
 LLM connection is configured via environment variables.
 """
 
+import asyncio
 import os
 
 from langchain_core.messages import SystemMessage
@@ -180,14 +181,17 @@ def build_graph(checkpointer, memory: MemoryStore):
     tools = get_tools(memory)
     llm_with_tools = llm.bind_tools(tools)
 
-    def call_llm(state: MessagesState, config: RunnableConfig):
+    async def call_llm(state: MessagesState, config: RunnableConfig):
         last_user_msg = next(
             (m.content for m in reversed(state["messages"])
              if hasattr(m, "type") and m.type == "human"),
             ""
         )
 
-        recalled = memory.search_conversations(last_user_msg, n_results=3)
+        # MemoryStore/Chroma has no async client, so this still blocks — but
+        # to_thread keeps it off the event loop instead of freezing every
+        # other concurrent request for the duration of the search.
+        recalled = await asyncio.to_thread(memory.search_conversations, last_user_msg, n_results=3)
         memory_block = ""
         if recalled:
             memory_block = "\n\nRELEVANT PAST CONTEXT:\n" + "\n---\n".join(recalled)
@@ -204,7 +208,7 @@ def build_graph(checkpointer, memory: MemoryStore):
             addendum += LEARNING_ADDENDUM
 
         system = SystemMessage(content=SYSTEM_PROMPT + addendum + memory_block)
-        response = llm_with_tools.invoke([system] + state["messages"])
+        response = await llm_with_tools.ainvoke([system] + state["messages"])
         return {"messages": [response]}
 
     tool_node = ToolNode(tools)

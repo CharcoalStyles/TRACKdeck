@@ -32,7 +32,7 @@ from fastapi import HTTPException
 from agent.keywords import generate_keyword, match_keyword_prefix
 from agent.memory import MemoryStore
 
-from utils.notify import send_gotify
+from utils.notify import send_gotify, notify_error
 
 # A new default thread starts if more than this many seconds pass with
 # no request and no keyword-addressed continuation.
@@ -64,6 +64,21 @@ def get_thread_lock(thread_id: str) -> asyncio.Lock:
     if thread_id not in _thread_locks:
         _thread_locks[thread_id] = asyncio.Lock()
     return _thread_locks[thread_id]
+
+
+def prune_thread_locks() -> int:
+    """Drop lock entries that aren't currently held. thread_ids are unique
+    per session and never reused, so once a thread is gone (swept nightly,
+    per jobs/digest.py) its lock entry is pure garbage — this dict is
+    otherwise never cleaned up and grows for the life of the process.
+    Skips anything currently locked so an in-flight turn can't have its
+    lock object pulled out from under it (a new get_thread_lock call for
+    the same thread_id would hand out a second Lock that no longer
+    mutually excludes the first)."""
+    stale = [tid for tid, lock in _thread_locks.items() if not lock.locked()]
+    for tid in stale:
+        del _thread_locks[tid]
+    return len(stale)
 
 
 def _start_new_thread(now: float) -> ThreadInfo:
@@ -205,6 +220,19 @@ async def run_agent(
     else:
         thread_id, keyword, cleaned_text = resolve_thread(text)
 
+    if not cleaned_text.strip():
+        # A keyword-only utterance (e.g. an accidental double button-press)
+        # — nothing was actually said beyond the callsign. resolve_thread
+        # has already done the reconnect (last_activity, default thread).
+        # Treat this as a no-op: skip the LLM call, the memory embed, and
+        # the Gotify push, none of which should fire for a turn that
+        # carried no real content.
+        return AgentResult(
+            reply=f'Reconnected to "{keyword}".' if keyword else "Ready.",
+            thread_id=thread_id,
+            keyword=keyword,
+        )
+
     config = {"configurable": {"thread_id": thread_id, "one_shot": one_shot, "mode": mode}}
 
     async with get_thread_lock(thread_id):
@@ -233,7 +261,17 @@ async def run_agent(
     # heads-up) — see the notes on Gotify priority tiers. Errors from
     # utils.notify.notify_error stay at priority 8, which is the tier
     # meant to interrupt you.
-    send_gotify(label, summary, priority=3)
-    app_state.memory.save_conversation_summary(summary, thread_id=thread_id)
+    await asyncio.to_thread(send_gotify, label, summary, priority=3)
+
+    # The reply is already final at this point — a failure here (embeddings
+    # backend down, Chroma write error) shouldn't turn a successful turn
+    # into an unhandled 500 on /text, or a false "voice pipeline failed"
+    # alert from /voice's catch-all. Isolate it, but still surface it since
+    # a silent failure here means future recall silently degrades.
+    try:
+        app_state.memory.save_conversation_summary(summary, thread_id=thread_id)
+    except Exception as e:
+        print(f"⚠️ Failed to save conversation summary for thread {thread_id}: {e}")
+        notify_error("Conversation memory save failed (reply was still delivered)", e)
 
     return AgentResult(reply=reply, thread_id=thread_id, keyword=keyword)
