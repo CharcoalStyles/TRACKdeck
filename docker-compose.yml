@@ -31,8 +31,15 @@ services:
       # The notes vault — shared with the syncthing service below so both
       # containers see the same files. Must match VAULT_PATH in .env.
       - ./data/vault:/app/vault
+      # Raw voice recordings (see voice.py's UPLOAD_DIR) — without this
+      # they vanish on every container recreation. jobs/digest.py's nightly
+      # sweep prunes anything older than 24h, so this shouldn't grow large.
+      - ./received_notes:/app/received_notes
     env_file:
-      # Docker will read your .env file automatically — same vars, no duplication
+      # Loads .env.docker specifically — NOT .env. These are separate files
+      # that must be kept in sync by hand (e.g. VAULT_PATH legitimately
+      # differs between local dev and this container). Updating a secret in
+      # .env alone does not affect what this container runs with.
       - .env.docker
     restart: unless-stopped
     depends_on:

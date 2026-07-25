@@ -14,11 +14,12 @@ WORKDIR /app
 # and skip it on rebuilds when only app code has changed
 COPY pyproject.toml uv.lock ./
 
-# Install dependencies into the system Python (no venv needed in Docker)
 # --frozen ensures the lockfile is respected exactly
 # --no-dev skips any dev dependencies if you add them later
 RUN uv sync --frozen --no-dev
 
+# .dockerignore excludes .venv (among other things) so this doesn't
+# overwrite the venv uv sync just built for the container's platform.
 COPY . .
 
 # Run uvicorn via uv so it uses the project's installed packages

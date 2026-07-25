@@ -1,0 +1,35 @@
+# .dockerignore
+#
+# Without this, `COPY . .` in the dockerfile pulls in secrets, personal
+# data, and the host's own virtualenv. Two concrete failure modes this
+# prevents:
+#   1. Baking .env/.env.docker, memory.db, chroma_db/, and received_notes/
+#      into the image itself — anyone who gets the built image gets the
+#      real API_TOKEN/SMTP/Nextcloud/Gotify secrets plus the owner's
+#      actual conversation history and voice recordings.
+#   2. `COPY . .` runs *after* `uv sync` already built the correct venv
+#      for the container's platform — copying the host's own .venv on
+#      top of it can silently replace native-extension packages
+#      (chromadb, faster-whisper, piper-tts) with host-arch binaries.
+#
+# Keep this in sync with .gitignore's custom rules at the bottom — same
+# reasoning applies to what shouldn't leave the host either way.
+
+.git/
+.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+.env
+.env.docker
+
+data/
+memory.db
+memory.db-shm
+memory.db-wal
+chroma_db/
+received_notes/
+
+.vscode/
+.claude/
