@@ -57,6 +57,13 @@ FRONTMATTER_DELIM = "---"
 ABOUT_ME_FILENAME = "about-me.md"
 ABOUT_ME_TITLE = "About Me"
 
+# Daily digest notes use a deterministic, date-keyed filename (like About
+# Me's fixed path) rather than unique_note_path's slug-collision handling
+# — re-running the digest for a day that already has one (manual testing
+# via POST /debug/digest, a retry) should update that day's note in place,
+# not create a second one.
+DAILY_NOTE_TAG = "daily-digest"
+
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -270,6 +277,12 @@ def find_note_by_id(note_id: str) -> Path | None:
 
 def about_me_path() -> Path:
     return vault_root() / ABOUT_ME_FILENAME
+
+
+def daily_note_path(date_str: str) -> Path:
+    """Deterministic path for a given day's digest note. `date_str` is
+    "YYYY-MM-DD" in the user's configured timezone (see jobs/digest.py)."""
+    return vault_root() / f"daily-{date_str}.md"
 
 
 def find_linked_note_id(linked_notes: dict, topic: str) -> str | None:

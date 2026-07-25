@@ -27,6 +27,8 @@ from langchain_openai import ChatOpenAI
 from agent.memory import MemoryStore
 from agent.runtime import app_state, prune_thread_locks
 from agent.settings import settings
+from agent.vault_watcher import index_note_file
+from utils import vault
 from utils.mailer import send_email
 from utils.notify import notify_error
 from voice import UPLOAD_DIR
@@ -75,6 +77,30 @@ def _write_recap(entries: list[str]) -> str:
     return response.content
 
 
+def _write_recap_to_vault(recap: str, now_local: datetime) -> vault.Note:
+    """Write today's recap into the vault as a dated note, alongside the
+    email rather than instead of it. Deterministic path (see
+    vault.daily_note_path) — re-running the digest for a day that already
+    has a note updates it in place rather than creating a duplicate."""
+    date_str = now_local.strftime("%Y-%m-%d")
+    path = vault.daily_note_path(date_str)
+    existing = vault.parse_note(path)
+    now = vault.now_iso()
+
+    note = vault.Note(
+        id=existing.id if existing else vault.generate_id(),
+        title=f"Daily Digest — {now_local.strftime('%A, %d %B %Y')}",
+        created=existing.created if existing else now,
+        updated=now,
+        tags=[vault.DAILY_NOTE_TAG],
+        source="agent",
+        body=recap.strip() + "\n",
+        path=path,
+    )
+    vault.write_note_atomic(path, vault.serialize_note(note))
+    return note
+
+
 def _prune_received_notes() -> int:
     """Blocking filesystem sweep — run via asyncio.to_thread. Raw voice
     recordings are only ever useful briefly (debugging a misheard command);
@@ -95,47 +121,63 @@ def _prune_received_notes() -> int:
 
 
 async def send_daily_digest(memory: MemoryStore) -> None:
-    """Build today's recap and email it, then sweep the thread/keyword
-    registry. Called by the scheduler in main.py.
+    """Build today's recap, email it and write it into the vault, then
+    sweep the thread/keyword registry. Called by the scheduler in main.py.
 
-    The sweep always runs, even if the recap/email step fails (transient
-    SMTP or LLM error) — keyword-addressed threads are a same-day concept
-    independent of whether the day actually got recapped, and silently
-    keeping yesterday's keywords alive would be a worse failure mode than
-    losing one day's email.
+    The email and vault write are independent once the recap text exists —
+    one failing (transient SMTP error, a vault write error) shouldn't cost
+    you the other. The sweep always runs regardless of either succeeding —
+    keyword-addressed threads are a same-day concept independent of
+    whether the day actually got recapped, and silently keeping
+    yesterday's keywords alive would be a worse failure mode than losing
+    one day's digest.
     """
     try:
         start_ts, end_ts = _todays_utc_bounds()
         entries = memory.get_conversations_between(start_ts, end_ts)
-
         recap = await asyncio.to_thread(_write_recap, entries)
-
-        today_str = datetime.now(settings.zoneinfo()).strftime("%A, %d %B %Y")
-        subject = f"Daily recap — {today_str}"
-
-        await asyncio.to_thread(send_email, subject, recap)
-        logger.info("Daily digest sent for %s (%d logged entries).", today_str, len(entries))
     except Exception as e:
-        logger.error("Daily digest failed: %s", e)
-        notify_error("Daily digest failed to send", e)
-    finally:
-        # Keyword-addressed threads are a same-day concept — free them all
-        # up now that the day's over. The underlying LangGraph checkpoint
-        # history isn't touched, just the keyword mapping that makes a
-        # thread reachable by name.
-        freed = len(app_state.threads)
-        app_state.threads.clear()
-        app_state.keywords.clear()
-        app_state.default_thread_id = None
-        pruned = prune_thread_locks()
-        logger.info(
-            "Cleared %d addressable thread keyword(s) for the new day (%d stale lock(s) pruned).",
-            freed, pruned,
-        )
+        logger.error("Daily digest failed to generate: %s", e)
+        notify_error("Daily digest failed to generate", e)
+        recap = None
+
+    if recap is not None:
+        now_local = datetime.now(settings.zoneinfo())
+        today_str = now_local.strftime("%A, %d %B %Y")
 
         try:
-            notes_pruned = await asyncio.to_thread(_prune_received_notes)
-            logger.info("Pruned %d received voice recording(s) older than a day.", notes_pruned)
+            await asyncio.to_thread(send_email, f"Daily recap — {today_str}", recap)
+            logger.info("Daily digest emailed for %s (%d logged entries).", today_str, len(entries))
         except Exception as e:
-            logger.error("Failed to prune received_notes: %s", e)
-            notify_error("Received-notes cleanup failed", e)
+            logger.error("Daily digest email failed: %s", e)
+            notify_error("Daily digest email failed", e)
+
+        try:
+            note = await asyncio.to_thread(_write_recap_to_vault, recap, now_local)
+            await index_note_file(memory, note.path)
+            logger.info("Daily digest written to vault note %s.", note.path.name)
+        except Exception as e:
+            logger.error("Daily digest vault write failed: %s", e)
+            notify_error("Daily digest vault write failed", e)
+
+    # Keyword-addressed threads are a same-day concept — free them all up
+    # now that the day's over, regardless of whether the recap/email/vault
+    # write above succeeded. The underlying LangGraph checkpoint history
+    # isn't touched, just the keyword mapping that makes a thread
+    # reachable by name.
+    freed = len(app_state.threads)
+    app_state.threads.clear()
+    app_state.keywords.clear()
+    app_state.default_thread_id = None
+    pruned = prune_thread_locks()
+    logger.info(
+        "Cleared %d addressable thread keyword(s) for the new day (%d stale lock(s) pruned).",
+        freed, pruned,
+    )
+
+    try:
+        notes_pruned = await asyncio.to_thread(_prune_received_notes)
+        logger.info("Pruned %d received voice recording(s) older than a day.", notes_pruned)
+    except Exception as e:
+        logger.error("Failed to prune received_notes: %s", e)
+        notify_error("Received-notes cleanup failed", e)
