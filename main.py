@@ -164,7 +164,10 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @app.post("/text", response_model=AssistantResponse)
-async def handle_text(request: TextRequest):
+async def handle_text(request: TextRequest, auth: Annotated[str | None, Header()] = None):
+    if auth != os.environ["API_TOKEN"]:
+        raise HTTPException(status_code=401, detail="Unauthorized request source")
+
     result = await run_agent(
         request.text,
         thread_id=request.thread_id,

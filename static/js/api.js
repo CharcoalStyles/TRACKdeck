@@ -13,7 +13,7 @@ export const AUTH_TOKEN = 'YOUR_SUPER_SECRET_SECURE_TOKEN';
 export async function sendText(text, { threadId = null, oneShot = false, mode = null } = {}) {
   const response = await fetch('/text', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'auth': AUTH_TOKEN },
     body: JSON.stringify({
       text,
       thread_id: threadId,
