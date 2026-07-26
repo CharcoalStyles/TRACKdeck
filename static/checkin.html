@@ -90,8 +90,36 @@
       doneMessage.style.display = 'block';
     }
 
+    const STATUS_MESSAGES = {
+      answered: "You've already replied to this check-in.",
+      skipped: 'You already skipped this check-in.',
+      expired: 'This check-in has expired.',
+    };
+
+    async function alreadyResolved() {
+      try {
+        const response = await fetch(`/checkin/${encodeURIComponent(checkinId)}/status`);
+        if (response.status === 404) {
+          finish('This check-in link is no longer valid.');
+          return true;
+        }
+        if (!response.ok) return false; // can't tell — fall through and let the form's own submit checks catch it
+        const data = await response.json();
+        if (!data.awaiting_response) {
+          finish(STATUS_MESSAGES[data.status] || 'This check-in is no longer awaiting a reply.');
+          return true;
+        }
+        return false;
+      } catch (err) {
+        console.error('Status check failed:', err);
+        return false;
+      }
+    }
+
     if (!checkinId) {
       finish('No check-in id in the link — nothing to reply to.');
+    } else if (await alreadyResolved()) {
+      // finish() already called inside alreadyResolved()
     } else {
       sendBtn.addEventListener('click', async () => {
         const text = replyInput.value.trim();

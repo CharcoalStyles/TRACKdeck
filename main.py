@@ -615,6 +615,24 @@ async def skip_checkin(
     return await _skip_checkin(checkin_id)
 
 
+@app.get("/checkin/{checkin_id}/status")
+async def checkin_status(checkin_id: str):
+    """
+    Lets static/checkin.html check on load whether this check-in is still
+    awaiting a response, so a refreshed or reopened magic link shows the
+    resolved state instead of re-rendering the reply form — same trust
+    model as skip_checkin_public/reply_checkin below (gated only by
+    possessing the id).
+    """
+    checkin = await asyncio.to_thread(checkins_store.get_checkin, checkin_id)
+    if checkin is None:
+        raise HTTPException(status_code=404, detail="Unknown check-in")
+    return {
+        "status": checkin["status"],
+        "awaiting_response": checkin["status"] == "pending" and checkin["fired_at"] is not None,
+    }
+
+
 @app.post("/checkin/{checkin_id}/skip")
 async def skip_checkin_public(checkin_id: str):
     """
