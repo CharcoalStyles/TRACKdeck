@@ -11,6 +11,11 @@ Pulls today's conversation summaries out of long-term memory (the
 `conversations` Chroma collection, already populated by
 agent.runtime.run_agent on every successful turn) and asks the LLM to
 write a short recap, rather than emailing the raw log.
+
+Today's answered mental-health check-ins (jobs/checkin.py) are pulled out
+separately via checkins_store.list_answered_between and their replies
+looked up by thread, so gratitude/mood/wins reflections get their own
+prompt section instead of blending anonymously into the general log.
 """
 from __future__ import annotations
 
@@ -28,7 +33,7 @@ from agent.memory import MemoryStore
 from agent.runtime import app_state, prune_thread_locks
 from agent.settings import settings
 from agent.vault_watcher import index_note_file
-from utils import vault
+from utils import checkins_store, vault
 from utils.mailer import send_email
 from utils.notify import notify_error
 from voice import UPLOAD_DIR
@@ -49,6 +54,12 @@ surface any trends or themes that are surfacing over the past few days and weeks
 
 Today's logged activity:
 {entries}
+
+Today's check-in reflections (short gratitude/mood/wins prompts answered over the course \
+of the day, if any): if there are entries below, weave any real mood/gratitude pattern \
+they show into the recap warmly — don't just list them back. If it says none were \
+answered, don't mention check-ins at all.
+{reflections}
 """
 
 
@@ -64,7 +75,7 @@ def _todays_utc_bounds(now_local: datetime | None = None) -> tuple[int, int]:
     return start_utc, end_utc
 
 
-def _write_recap(entries: list[str]) -> str:
+def _write_recap(entries: list[str], reflections: list[str]) -> str:
     """Blocking LLM call — run via asyncio.to_thread from async code."""
     llm = ChatOpenAI(
         base_url=os.environ["LM_STUDIO_URL"],
@@ -73,8 +84,30 @@ def _write_recap(entries: list[str]) -> str:
         temperature=0.7,
     )
     joined = "\n---\n".join(entries) if entries else "(nothing logged today)"
-    response = llm.invoke(DIGEST_PROMPT.format(entries=joined))
+    joined_reflections = "\n---\n".join(reflections) if reflections else "(none answered today)"
+    response = llm.invoke(DIGEST_PROMPT.format(entries=joined, reflections=joined_reflections))
     return response.content
+
+
+def _todays_checkin_reflections(memory: MemoryStore, start_ts: int, end_ts: int) -> tuple[list[str], set[str]]:
+    """Today's answered check-ins (jobs/checkin.py), formatted as
+    prompt/reply pairs, plus the set of their thread_ids so the caller can
+    keep them out of the generic conversation log. A reply's summary lives
+    in Chroma under the check-in's own dedicated thread, not in
+    checkins.db itself, so this looks it up via
+    MemoryStore.get_conversation_by_thread."""
+    answered = checkins_store.list_answered_between(start_ts, end_ts)
+    reflections = []
+    thread_ids = set()
+    for checkin in answered:
+        thread_id = checkin["thread_id"]
+        if not thread_id:
+            continue
+        thread_ids.add(thread_id)
+        reply = memory.get_conversation_by_thread(thread_id)
+        if reply:
+            reflections.append(f'Prompt ({checkin["category"]}): "{checkin["prompt_text"]}"\nReply: {reply}')
+    return reflections, thread_ids
 
 
 def _write_recap_to_vault(recap: str, now_local: datetime) -> vault.Note:
@@ -134,8 +167,11 @@ async def send_daily_digest(memory: MemoryStore) -> None:
     """
     try:
         start_ts, end_ts = _todays_utc_bounds()
-        entries = memory.get_conversations_between(start_ts, end_ts)
-        recap = await asyncio.to_thread(_write_recap, entries)
+        reflections, checkin_thread_ids = await asyncio.to_thread(
+            _todays_checkin_reflections, memory, start_ts, end_ts
+        )
+        entries = memory.get_conversations_between(start_ts, end_ts, exclude_thread_ids=checkin_thread_ids)
+        recap = await asyncio.to_thread(_write_recap, entries, reflections)
     except Exception as e:
         logger.error("Daily digest failed to generate: %s", e)
         notify_error("Daily digest failed to generate", e)

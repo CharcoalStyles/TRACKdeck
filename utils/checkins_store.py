@@ -125,6 +125,20 @@ def list_next_24h(now_epoch: int) -> list[dict]:
         return [dict(row) for row in rows]
 
 
+def list_answered_between(start_ts: int, end_ts: int) -> list[dict]:
+    """Answered check-ins resolved within [start_ts, end_ts] (UTC epoch
+    seconds, inclusive), oldest first. Used by jobs/digest.py to surface
+    today's gratitude/mood/wins reflections as their own section instead of
+    letting them blend anonymously into the generic conversation log."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM checkins WHERE status = 'answered' "
+            "AND resolved_at BETWEEN ? AND ? ORDER BY resolved_at ASC",
+            (start_ts, end_ts),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
 def get_most_recent_fired() -> Optional[dict]:
     with _connect() as conn:
         row = conn.execute(

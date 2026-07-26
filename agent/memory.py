@@ -98,12 +98,20 @@ class MemoryStore:
         )
         return results["documents"][0] if results["documents"] else []
 
-    def get_conversations_between(self, start_ts: int, end_ts: int) -> list[str]:
+    def get_conversations_between(
+        self, start_ts: int, end_ts: int, exclude_thread_ids: set[str] | None = None
+    ) -> list[str]:
         """
         Return raw conversation summaries recorded within [start_ts, end_ts]
         (UTC epoch seconds, inclusive), oldest first. Used by the daily
         digest job — a direct metadata-filtered fetch, not a similarity
         search.
+
+        exclude_thread_ids lets a caller pull certain threads out of the
+        generic log — the digest uses this to keep mental-health check-in
+        replies (jobs/checkin.py) out of the freeform "today's activity"
+        block since it surfaces those separately via
+        get_conversation_by_thread.
         """
         if self.conversations.count() == 0:
             return []
@@ -117,8 +125,25 @@ class MemoryStore:
             },
         )
         pairs = list(zip(results.get("documents", []), results.get("metadatas", [])))
+        if exclude_thread_ids:
+            pairs = [p for p in pairs if p[1].get("thread_id") not in exclude_thread_ids]
         pairs.sort(key=lambda p: p[1].get("timestamp", 0))
         return [doc for doc, _ in pairs]
+
+    def get_conversation_by_thread(self, thread_id: str) -> Optional[str]:
+        """Most recent conversation summary for one specific thread. Used
+        by the daily digest to pull a check-in's reply out by its own
+        dedicated thread (jobs/checkin.py mints one per check-in) rather
+        than through the day-window fetch above."""
+        if self.conversations.count() == 0:
+            return None
+
+        results = self.conversations.get(where={"thread_id": thread_id})
+        pairs = list(zip(results.get("documents", []), results.get("metadatas", [])))
+        if not pairs:
+            return None
+        pairs.sort(key=lambda p: p[1].get("timestamp", 0))
+        return pairs[-1][0]
 
     # ------------------------------------------------------------------
     # Notes
