@@ -2,11 +2,13 @@
   "permissions": {
     "deny": [
       "Read(./.env)",
-      "Read(./.env.*)",
+      "Read(./.env.docker)",
       "Read(**/*.key)",
       "Read(**/*.pem)"
     ],
     "allow": [
+      "Read(./.env.example)",
+      "Edit(./.env.example)",
       "Write(./.env.example)"
     ]
   }
