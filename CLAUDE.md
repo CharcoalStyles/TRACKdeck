@@ -175,6 +175,16 @@ Learning mode and the two active modes are mutually exclusive per turn.
   modules (`static/js/api.js`, `static/js/chat.js`). Deliberate choice over a React/Vue app
   given the added complexity for a single-user tool. `chat.js`'s `ChatWidget` is the shared
   send/receive/loading/error logic plus `setThread()`.
+- **Device sync** — `POST /device/sync` (`jobs/device_sync.py`'s `build_sync_payload`) is
+  what the ESP32-S3 calls on every deep-sleep wake, on a flat interval
+  (`settings.device_poll_interval_seconds`, dashboard-editable). Returns a full 24h
+  snapshot (checkins, reminders, a raw calendar agenda, weather, a POSIX TZ string via
+  `utils/datetime.py`'s `posix_tz_string` for DST-correct local time in firmware) — the
+  device is a preview/display layer only, Gotify/APScheduler remain the actual delivery
+  mechanism regardless of whether it's online. Optional telemetry in the request body
+  (`battery_mv`, `wake_reason`, etc.) is recorded into `utils/device_state.py`'s single-row
+  store and visible on the dashboard's Testing page alongside a raw payload preview
+  (`GET /debug/device-sync`, `GET /debug/device-state`).
 
 ## Project structure
 

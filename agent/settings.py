@@ -39,6 +39,13 @@ def is_valid_sync_interval_minutes(value: int) -> bool:
     return 1 <= value <= 1440
 
 
+def is_valid_poll_interval_seconds(value: int) -> bool:
+    # Sanity bounds, not hard technical limits: below 30s would hammer
+    # the device's wifi radio (and battery) for no benefit; above a day
+    # defeats the point of "poll for what's coming up."
+    return 30 <= value <= 86400
+
+
 class Settings:
     # When on, the agent proactively notices and records durable facts
     # about you into a canonical "About Me" note as they come up in
@@ -83,6 +90,13 @@ class Settings:
     # as digest_time/bedtime. No env var, same reasoning as
     # default_location above.
     wake_time: str = "07:00"
+
+    # Seconds between the ESP32-S3's deep-sleep wake cycles (see
+    # main.py's POST /device/sync, jobs/device_sync.py) — returned in
+    # every sync payload so the polling cadence can be retuned from the
+    # dashboard without reflashing firmware. No env var, same reasoning
+    # as default_location above.
+    device_poll_interval_seconds: int = 300
 
     def zoneinfo(self) -> ZoneInfo:
         return ZoneInfo(self.timezone)

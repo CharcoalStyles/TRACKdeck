@@ -79,10 +79,26 @@
       <div class="field-row"><button type="button" id="reminderBtn" class="primary-btn">Create test reminder (fires in 10s)</button></div>
       <div class="save-status" id="reminderStatus"></div>
     </div>
+
+    <div class="card">
+      <h2>Device Status</h2>
+      <p class="description">Last telemetry the ESP32-S3 reported on its most recent sync — for watching the beta device without needing to check logs.</p>
+      <div class="field-row"><button type="button" id="deviceStatusBtn" class="secondary-btn">Refresh</button></div>
+      <div id="deviceStatusFields" class="description" style="white-space: pre-line;">Loading…</div>
+      <div class="save-status" id="deviceStatusStatus"></div>
+    </div>
+
+    <div class="card">
+      <h2>Preview Sync Payload</h2>
+      <p class="description">Shows the exact JSON POST /device/sync would return right now — useful for checking the payload shape while writing firmware, without needing real hardware.</p>
+      <div class="field-row"><button type="button" id="previewSyncBtn" class="primary-btn">Fetch payload</button></div>
+      <pre id="previewSyncOutput" style="display:none; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow-y: auto; background: #171717; border: 1px solid #2a2a2a; border-radius: 8px; padding: 0.75rem; font-size: 0.85rem;"></pre>
+      <div class="save-status" id="previewSyncStatus"></div>
+    </div>
   </main>
 
   <script type="module">
-    import { triggerDebug } from '/static/js/api.js';
+    import { triggerDebug, fetchDebug } from '/static/js/api.js';
     import { requireSession, logout } from '/static/js/auth.js';
 
     document.getElementById('logoutBtn').addEventListener('click', async (e) => {
@@ -122,6 +138,53 @@
       wireButton('notifyBtn', 'notifyStatus', '/debug/notify', 'Sending...', 'Sent.');
       wireButton('emailBtn', 'emailStatus', '/debug/email', 'Sending...', 'Sent.');
       wireButton('reminderBtn', 'reminderStatus', '/debug/reminder', 'Scheduling...', 'Scheduled — check Gotify in ~10 seconds.');
+
+      const deviceStatusBtn = document.getElementById('deviceStatusBtn');
+      const deviceStatusFields = document.getElementById('deviceStatusFields');
+      const deviceStatusStatus = document.getElementById('deviceStatusStatus');
+
+      async function loadDeviceStatus() {
+        showStatus(deviceStatusStatus, 'Loading...', true);
+        try {
+          const state = await fetchDebug('/debug/device-state');
+          if (!state.last_synced_at) {
+            deviceStatusFields.textContent = 'No sync recorded yet.';
+          } else {
+            const syncedAgoSec = Math.max(0, Math.round(Date.now() / 1000 - state.last_synced_at));
+            const battery = state.battery_mv != null ? `${(state.battery_mv / 1000).toFixed(2)}V` : '—';
+            deviceStatusFields.textContent = [
+              `Last synced: ${syncedAgoSec}s ago`,
+              `Battery: ${battery}`,
+              `Wake reason: ${state.wake_reason ?? '—'}`,
+              `Firmware: ${state.firmware_version ?? '—'}`,
+              `RSSI: ${state.rssi_dbm != null ? state.rssi_dbm + ' dBm' : '—'}`,
+            ].join('\n');
+          }
+          showStatus(deviceStatusStatus, '', true);
+        } catch (error) {
+          console.error('Failed to load device state:', error);
+          showStatus(deviceStatusStatus, 'Failed to load.', false);
+        }
+      }
+
+      deviceStatusBtn.addEventListener('click', loadDeviceStatus);
+      loadDeviceStatus();
+
+      const previewSyncOutput = document.getElementById('previewSyncOutput');
+      const previewSyncStatus = document.getElementById('previewSyncStatus');
+
+      document.getElementById('previewSyncBtn').addEventListener('click', async () => {
+        showStatus(previewSyncStatus, 'Fetching...', true);
+        try {
+          const payload = await fetchDebug('/debug/device-sync');
+          previewSyncOutput.textContent = JSON.stringify(payload, null, 2);
+          previewSyncOutput.style.display = 'block';
+          showStatus(previewSyncStatus, 'Fetched.', true);
+        } catch (error) {
+          console.error('Failed to fetch device sync preview:', error);
+          showStatus(previewSyncStatus, 'Failed — check server logs.', false);
+        }
+      });
     }
   </script>
 </body>

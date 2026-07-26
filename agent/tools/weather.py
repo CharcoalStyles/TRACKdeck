@@ -28,6 +28,42 @@ def call_open_meteo_forecast(latitude: float, longitude: float, params: dict) ->
     response.raise_for_status()
     return response.json()
 
+def fetch_current_conditions(location: str) -> Optional[dict]:
+    """Shared by get_current_weather (LLM tool, formats to a string) and
+    jobs/device_sync.py's build_sync_payload (needs structured fields).
+    Returns None if the location can't be resolved or Open-Meteo fails —
+    callers must handle that gracefully rather than treating it as fatal."""
+    try:
+        location_data = call_open_meteo_search(location)
+        if len(location_data["results"]) == 0:
+            return None
+
+        latitude = location_data["results"][0]['latitude']
+        longitude = location_data["results"][0]['longitude']
+
+        params = {
+            'latitude': latitude,
+            'longitude': longitude,
+            'current': 'temperature_2m,cloudcover,precipitation',
+            'format': 'json',
+        }
+
+        data = call_open_meteo_forecast(latitude, longitude, params)
+
+        if "error" in data:
+            return None
+
+        return {
+            "temperature_c": data["current"]["temperature_2m"],
+            "cloud_cover_pct": data["current"]["cloudcover"],
+            "precipitation_mm": data["current"]["precipitation"],
+        }
+
+    except requests.exceptions.RequestException as e:
+        logger.error("Error connecting to Open-Meteo: %s", e)
+        return None
+
+
 @tool
 def get_current_weather(location: Optional[str] = None) -> str:
     """Get the current weather.
@@ -41,37 +77,15 @@ def get_current_weather(location: Optional[str] = None) -> str:
     loc = location or settings.default_location
     logger.info("Fetching weather for: %s", loc)
 
-    try:
-        location_data = call_open_meteo_search(loc)
-        if len(location_data["results"]) == 0:
-            return f"Weather for {loc}: No results found."
-
-        latitude = location_data["results"][0]['latitude']
-        longitude = location_data["results"][0]['longitude']
-
-        # Open-Meteo: free, no API key needed
-        # Define API parameters
-        params = {
-            'latitude': latitude,
-            'longitude': longitude,
-            'current': 'temperature_2m,cloudcover,precipitation',
-            'format': 'json',  # Requests JSON response format
-        }
-
-        data = call_open_meteo_forecast(latitude, longitude, params)
-
-        if "error" in data:
-            return f"Weather for {loc}: {data['error']}"
-
-        temperature = data["current"]["temperature_2m"]
-        cloud_cover = data["current"]["cloudcover"]
-        precipitation = data["current"]["precipitation"]
-
-        return f"Weather for {loc}: {temperature}°C, {cloud_cover}% cloud cover, {precipitation}mm precipitation."
-
-    except requests.exceptions.RequestException as e:
-        logger.error("Error connecting to Open-Meteo: %s", e)
+    conditions = fetch_current_conditions(loc)
+    if conditions is None:
         return f"Weather for {loc}: No results found."
+
+    return (
+        f"Weather for {loc}: {conditions['temperature_c']}°C, "
+        f"{conditions['cloud_cover_pct']}% cloud cover, "
+        f"{conditions['precipitation_mm']}mm precipitation."
+    )
 
 @tool
 def get_weather_forecast(location: Optional[str] = None) -> str:

@@ -62,18 +62,25 @@ from agent.scheduler import (
     scheduler,
     wake_trigger,
 )
-from agent.settings import is_valid_digest_time, is_valid_sync_interval_minutes, is_valid_timezone, settings
+from agent.settings import (
+    is_valid_digest_time,
+    is_valid_poll_interval_seconds,
+    is_valid_sync_interval_minutes,
+    is_valid_timezone,
+    settings,
+)
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from jobs import checkin as checkin_jobs
 from jobs.bedtime import send_bedtime_reminder
 from jobs.calendar_sync import sync_calendar_reminders
 from jobs.day_start import start_of_day_setup
+from jobs.device_sync import build_sync_payload
 from jobs.digest import send_daily_digest
 from jobs.reminders import create_test_reminder, fire_reminder
 
 from agent.vault_watcher import reconcile_vault, watch_vault
-from utils import checkins_store, reminders_store, vault
+from utils import checkins_store, device_state, reminders_store, vault
 from utils.mailer import send_email
 from utils.notify import send_gotify
 
@@ -126,6 +133,7 @@ async def lifespan(app: FastAPI):
         # app was down past its fire time) fires now rather than being
         # silently dropped.
         await asyncio.to_thread(reminders_store.init_db)
+        await asyncio.to_thread(device_state.init_db)
         for reminder in await asyncio.to_thread(reminders_store.list_pending):
             due_local = datetime.fromtimestamp(reminder["due_at"], tz=timezone.utc)
             if due_local <= datetime.now(timezone.utc):
@@ -373,6 +381,11 @@ class SettingsUpdate(BaseModel):
     # jobs/checkin.py, jobs/day_start.py). Same rescheduling behavior as
     # digest_time/bedtime, separate job.
     wake_time: str | None = None
+    # Seconds between the ESP32-S3's deep-sleep wake/poll cycles (see
+    # main.py's POST /device/sync). No APScheduler job to reschedule —
+    # the device reads this on its next sync and self-schedules its own
+    # sleep duration.
+    device_poll_interval_seconds: int | None = None
 
     @model_validator(mode="after")
     def _check_values(self):
@@ -388,6 +401,10 @@ class SettingsUpdate(BaseModel):
             raise ValueError("calendar_sync_interval_minutes must be between 1 and 1440")
         if self.wake_time is not None and not is_valid_digest_time(self.wake_time):
             raise ValueError(f"'{self.wake_time}' is not a valid HH:MM 24-hour time")
+        if self.device_poll_interval_seconds is not None and not is_valid_poll_interval_seconds(
+            self.device_poll_interval_seconds
+        ):
+            raise ValueError("device_poll_interval_seconds must be between 30 and 86400")
         if self.default_location is not None and not self.default_location.strip():
             raise ValueError("default_location cannot be blank")
         return self
@@ -402,6 +419,7 @@ def _current_settings() -> dict:
         "bedtime": settings.bedtime,
         "calendar_sync_interval_minutes": settings.calendar_sync_interval_minutes,
         "wake_time": settings.wake_time,
+        "device_poll_interval_seconds": settings.device_poll_interval_seconds,
     }
 
 
@@ -443,6 +461,8 @@ async def update_settings(
         settings.calendar_sync_interval_minutes = update.calendar_sync_interval_minutes
     if update.wake_time is not None:
         settings.wake_time = update.wake_time
+    if update.device_poll_interval_seconds is not None:
+        settings.device_poll_interval_seconds = update.device_poll_interval_seconds
     if reschedule_digest:
         scheduler.reschedule_job("daily_digest", trigger=digest_trigger())
     if reschedule_bedtime:
@@ -560,32 +580,61 @@ async def trigger_test_reminder(_: Annotated[None, Depends(auth.require_session_
     return {"status": "scheduled", "reminder_id": reminder_id}
 
 
-@app.get("/device/sync")
-async def device_sync(_: Annotated[None, Depends(auth.require_device_token)]):
+@app.get("/debug/device-sync")
+async def preview_device_sync(_: Annotated[None, Depends(auth.require_session_or_token)]):
     """
-    Polled by the (not-yet-built) ESP32-S3 check-in device on every wake —
-    scheduled RTC wake alarm or an incidental wake for a normal voice
-    command. The device is deep-sleep the rest of the time, so this is its
-    only chance to learn what's pending and when to wake next; the server
-    stays authoritative on scheduling (jobs/checkin.py), the device just
-    executes. Check-in-only for now — see jobs/checkin.py's module
-    docstring for the state machine behind this list.
+    Returns the exact payload POST /device/sync would send the ESP32-S3,
+    without recording any telemetry — lets the payload shape be checked
+    against firmware expectations without needing real hardware.
     """
-    now = int(time.time())
-    upcoming = await asyncio.to_thread(checkins_store.list_next_24h, now)
-    return {
-        "checkins": [
-            {
-                "id": c["id"],
-                "category": c["category"],
-                "prompt_text": c["prompt_text"],
-                "scheduled_at": c["scheduled_at"],
-                "fired_at": c["fired_at"],
-            }
-            for c in upcoming
-        ],
-        "next_wake_at": await checkin_jobs.next_wake_at(),
-    }
+    return await build_sync_payload()
+
+
+@app.get("/debug/device-state")
+async def get_device_state(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """
+    Last telemetry the ESP32-S3 reported on its most recent POST
+    /device/sync call — last sync time, battery, wake reason, firmware
+    version. Empty dict if the device hasn't synced yet.
+    """
+    state = await asyncio.to_thread(device_state.get_state)
+    return state or {}
+
+
+class DeviceTelemetry(BaseModel):
+    battery_mv: int | None = None
+    wake_reason: str | None = None
+    firmware_version: str | None = None
+    rssi_dbm: int | None = None
+
+
+@app.post("/device/sync")
+async def device_sync(
+    telemetry: DeviceTelemetry, _: Annotated[None, Depends(auth.require_device_token)]
+):
+    """
+    Polled by the ESP32-S3 on every wake — scheduled deep-sleep interval
+    (settings.device_poll_interval_seconds, returned below) or an
+    incidental wake for a normal voice command. The server stays
+    authoritative on scheduling (jobs/checkin.py, APScheduler); the
+    device is a preview/display layer, not the delivery mechanism —
+    Gotify pushes still fire regardless of whether this endpoint is ever
+    called. Body is optional telemetry (all fields nullable, since early
+    firmware may not send everything yet); response is a full 24h
+    snapshot (see jobs/device_sync.py's build_sync_payload) covering
+    check-ins, reminders, calendar events, weather, and enough
+    timezone/scheduling context to keep the device's own clock and
+    polling loop correct.
+    """
+    await asyncio.to_thread(
+        device_state.record_sync,
+        telemetry.battery_mv,
+        telemetry.wake_reason,
+        telemetry.firmware_version,
+        telemetry.rssi_dbm,
+        int(time.time()),
+    )
+    return await build_sync_payload()
 
 
 async def _skip_checkin(checkin_id: str) -> dict:

@@ -98,6 +98,22 @@
 
       <div class="save-status" id="wakeTimeStatus"></div>
     </div>
+
+    <div class="card">
+      <h2>Device Sync</h2>
+      <p class="description">How often (seconds) the ESP32-S3 wakes from deep sleep to poll for what's coming up (see the Testing page's Device Status/Preview Sync Payload cards). Retunable here without reflashing firmware — the device reads this value on its next sync.</p>
+
+      <div class="field-row">
+        <label for="pollIntervalInput">Poll interval (seconds)</label>
+        <input type="number" id="pollIntervalInput" min="30" max="86400" step="1">
+      </div>
+
+      <div class="field-row">
+        <button type="button" id="savePollIntervalBtn" class="primary-btn">Save</button>
+      </div>
+
+      <div class="save-status" id="pollIntervalStatus"></div>
+    </div>
   </main>
 
   <script type="module">
@@ -128,6 +144,10 @@
       const saveWakeTimeBtn = document.getElementById('saveWakeTimeBtn');
       const wakeTimeStatus = document.getElementById('wakeTimeStatus');
 
+      const pollIntervalInput = document.getElementById('pollIntervalInput');
+      const savePollIntervalBtn = document.getElementById('savePollIntervalBtn');
+      const pollIntervalStatus = document.getElementById('pollIntervalStatus');
+
       // Common IANA zones as datalist suggestions — the input still accepts
       // any valid IANA name, this just helps autocomplete.
       if (typeof Intl.supportedValuesOf === 'function') {
@@ -152,6 +172,7 @@
           timezoneInput.value = data.timezone || '';
           digestTimeInput.value = data.digest_time || '';
           wakeTimeInput.value = data.wake_time || '';
+          pollIntervalInput.value = data.device_poll_interval_seconds ?? '';
         } catch (error) {
           console.error('Failed to load settings:', error);
           settingsStatus.textContent = 'Could not load current settings.';
@@ -218,6 +239,18 @@
         } catch (error) {
           console.error('Failed to save wake time:', error);
           showStatus(wakeTimeStatus, 'Failed to save.', false);
+        }
+      });
+
+      savePollIntervalBtn.addEventListener('click', async () => {
+        showStatus(pollIntervalStatus, 'Saving...', true);
+        pollIntervalStatus.style.color = '#888';
+        try {
+          await updateSettings({ device_poll_interval_seconds: parseInt(pollIntervalInput.value, 10) });
+          showStatus(pollIntervalStatus, 'Saved.');
+        } catch (error) {
+          console.error('Failed to save poll interval:', error);
+          showStatus(pollIntervalStatus, 'Failed to save — must be between 30 and 86400.', false);
         }
       });
 

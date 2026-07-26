@@ -24,6 +24,7 @@ light, and don't make the model do more reasoning than it needs to for a given s
   - [Reminders](#reminders)
   - [Calendar reminder sync](#calendar-reminder-sync)
   - [Bedtime reminder](#bedtime-reminder)
+  - [Device sync](#device-sync)
   - [Notifications](#notifications)
   - [Daily digest](#daily-digest)
   - [Dashboard](#dashboard)
@@ -269,6 +270,51 @@ that would be scope beyond what was asked for. Deliberately a separate mechanism
 the digest and ad-hoc reminders: same delivery channel, different trigger, different
 purpose (the digest recaps the day; this just says it's time to wind down).
 
+### Device sync
+
+`POST /device/sync` (`auth.py`'s `require_device_token`) is what the ESP32-S3 calls on
+every deep-sleep wake — a flat polling interval (`settings.device_poll_interval_seconds`,
+default 300s, dashboard-editable so the cadence can be retuned without reflashing firmware)
+rather than the earlier variable-RTC-wake design, since a battery budget built around a
+fixed cadence is simpler to reason about and test. The device is a **preview/display
+layer, not the delivery mechanism** — Gotify pushes and the APScheduler jobs elsewhere in
+this codebase are what actually fire reminders/check-ins/bedtime regardless of whether the
+device is online; this endpoint only decides what to *show* on its eink display.
+
+The device may POST optional telemetry in the request body (`battery_mv`, `wake_reason`,
+`firmware_version`, `rssi_dbm` — all nullable, since early firmware may not send everything
+yet), recorded into `device_state.db` (`utils/device_state.py`, a single-row store — one
+physical device, no fleet concept) and visible on the dashboard's Testing page.
+
+The response (`jobs/device_sync.py`'s `build_sync_payload`) is a full 24-hour snapshot,
+rebuilt from scratch on every call (no delta/cursor tracking, same stateless pattern
+`checkins_store.list_next_24h` already used):
+- `now`, `next_wake_at` — epoch seconds, so the device can correct its own RTC drift each
+  sync and knows when the next check-in is expected.
+- `timezone.iana`/`timezone.posix` — the POSIX TZ string (e.g.
+  `AEST-10AEDT,M10.1.0,M4.1.0/3`) is extracted straight from the compiled zoneinfo (TZif)
+  file's own v2+ footer (`utils/datetime.py`'s `posix_tz_string`) rather than hand-maintained,
+  so firmware (`setenv("TZ", ...)`) renders correct local time across DST changes instead of
+  a hardcoded offset that goes stale twice a year.
+- `poll_interval_seconds`, `bedtime` — current settings, for the device's own loop/display.
+- `checkins`, `reminders` — everything pending and due within 24h, reusing
+  `checkins_store.list_next_24h` and the new `reminders_store.list_pending_due_within_24h`.
+- `calendar_events` — a raw agenda (even events without their own alarm), via
+  `utils/next_cloud_calendar.py`'s `get_events_in_range`.
+- `weather` — current conditions (`agent/tools/weather.py`'s `fetch_current_conditions`,
+  factored out of the `get_current_weather` tool so both share one Open-Meteo call).
+
+Calendar and weather are both external services that can be briefly unreachable; either
+failing degrades to `[]`/`null` rather than failing the whole sync (which would also cost
+the far more important check-in/reminder data) — logged, not pushed through
+`notify_error`, since this runs as often as every few minutes and alerting on every
+transient outage would be pure noise.
+
+`GET /debug/device-sync` returns the same payload without recording telemetry, and
+`GET /debug/device-state` returns the last-reported telemetry — both on the dashboard's
+Testing page, for checking the payload shape and watching the beta device without needing
+real hardware or SSH access to the logs.
+
 ### Notifications
 
 `utils/notify.py` (Gotify) + `utils/mailer.py` (SMTP), both deliberately simple —
@@ -387,6 +433,9 @@ See `.env.example` for the full list. Grouped by what needs external setup:
 | `/debug/reminders/fire/{id}` | POST | session-or-token | Fire a specific pending reminder on demand |
 | `/debug/calendar-sync` | POST | session-or-token | Run a calendar reminder sync pass on demand |
 | `/debug/reconcile-vault` | POST | session-or-token | Force a full vault/index reconciliation |
+| `/device/sync` | POST | `API_TOKEN` | ESP32-S3 wake/poll — optional telemetry body, returns the 24h snapshot |
+| `/debug/device-sync` | GET | session-or-token | Preview the exact `/device/sync` payload, no telemetry recorded |
+| `/debug/device-state` | GET | session-or-token | Last telemetry the device reported |
 | `/synthesize` | POST | `API_TOKEN` | Piper TTS — built, unused in the production voice flow |
 
 "session-or-token" (`auth.py`'s `require_session_or_token`) accepts either a valid dashboard

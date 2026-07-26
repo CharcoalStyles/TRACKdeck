@@ -224,5 +224,8 @@ reminders.db-wal
 checkins.db
 checkins.db-shm
 checkins.db-wal
+device_state.db
+device_state.db-shm
+device_state.db-wal
 .models/
 data/

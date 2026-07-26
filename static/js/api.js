@@ -77,3 +77,14 @@ export async function triggerDebug(path) {
   if (!response.ok) throw new Error(`Server returned ${response.status}`);
   return response.json();
 }
+
+/**
+ * Fetch JSON from a read-only /debug/* endpoint — shared by the Testing
+ * page's Device Status and Preview Sync Payload cards.
+ * @returns {Promise<object>}
+ */
+export async function fetchDebug(path) {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`Server returned ${response.status}`);
+  return response.json();
+}

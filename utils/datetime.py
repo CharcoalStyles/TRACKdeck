@@ -1,5 +1,7 @@
 import re
+import zoneinfo as _zoneinfo_module
 from datetime import datetime, time, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from agent.settings import settings
@@ -69,3 +71,39 @@ def add_time_to_UTC_text(utc: str, timedelta: timedelta) -> str:
     utc_dt = datetime.fromisoformat(utc)
     utc_dt = utc_dt + timedelta
     return utc_dt.strftime("%Y%m%dT%H%M%SZ")
+
+
+def _read_tzif_bytes(iana_name: str) -> bytes | None:
+    for base in _zoneinfo_module.TZPATH:
+        candidate = Path(base) / iana_name
+        if candidate.is_file():
+            return candidate.read_bytes()
+    try:
+        from importlib.resources import files
+
+        resource = files("tzdata.zoneinfo").joinpath(*iana_name.split("/"))
+        if resource.is_file():
+            return resource.read_bytes()
+    except (ImportError, ModuleNotFoundError, FileNotFoundError):
+        pass
+    return None
+
+
+def posix_tz_string(iana_name: str) -> str | None:
+    """Extracts the POSIX TZ string embedded in the compiled zoneinfo
+    (TZif) file for `iana_name`. Every TZif v2+ file ends with a
+    '\\n<POSIX TZ string>\\n' footer used for extrapolating transitions
+    beyond the explicit table — exactly the DST-aware string firmware
+    needs (e.g. ESP-IDF/lwip's setenv("TZ", ...)) to render correct local
+    time without hardcoding a fixed UTC offset that goes stale twice a
+    year. Returns None if the zone can't be located or lacks a v2+
+    footer — callers must handle that gracefully (device sync payload's
+    timezone.posix is nullable)."""
+    data = _read_tzif_bytes(iana_name)
+    if data is None or not data.startswith(b"TZif") or data[4:5] not in (b"2", b"3"):
+        return None
+    footer = data.rstrip(b"\n").rsplit(b"\n", 1)[-1]
+    try:
+        return footer.decode("ascii")
+    except UnicodeDecodeError:
+        return None

@@ -120,6 +120,19 @@ def list_pending() -> list[dict]:
         return [dict(row) for row in rows]
 
 
+def list_pending_due_within_24h(now_epoch: int) -> list[dict]:
+    """Mirrors checkins_store.list_next_24h's shape — everything pending
+    and due within the next 24h from now_epoch, including anything
+    already overdue (still pending). Used by jobs/device_sync.py."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM reminders WHERE status = 'pending' AND due_at <= ? "
+            "ORDER BY due_at ASC",
+            (now_epoch + 86400,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
 def list_pending_calendar_linked() -> list[dict]:
     """Pending reminders derived from a calendar event's own alarm — used
     by jobs/calendar_sync.py to notice an event was deleted or had its
