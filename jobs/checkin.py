@@ -174,6 +174,18 @@ async def _create_and_schedule(
         )
 
 
+async def trigger_test_checkin() -> None:
+    """Debug-only on-demand check-in (see main.py's POST /debug/checkin).
+    Reuses _create_and_schedule exactly as a real check-in would — real
+    DB row, real minted thread, real Gotify push — but deliberately
+    bypasses the day's 3-5 target and waking-hours checks that
+    schedule_first_of_day/_schedule_next enforce for real prompts, since
+    this is an explicit manual test. scheduled_at_local is 'now', so
+    _create_and_schedule's own `<= now` check fires it immediately."""
+    now_local = datetime.now(settings.zoneinfo())
+    await _create_and_schedule(now_local, _pick_category(None, False), None)
+
+
 async def schedule_first_of_day(
     now_local: datetime, day_start_utc: int, day_end_utc: int, target: int
 ) -> None:

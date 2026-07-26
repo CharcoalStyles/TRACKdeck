@@ -70,10 +70,12 @@ from jobs.bedtime import send_bedtime_reminder
 from jobs.calendar_sync import sync_calendar_reminders
 from jobs.day_start import start_of_day_setup
 from jobs.digest import send_daily_digest
-from jobs.reminders import fire_reminder
+from jobs.reminders import create_test_reminder, fire_reminder
 
 from agent.vault_watcher import reconcile_vault, watch_vault
 from utils import checkins_store, reminders_store, vault
+from utils.mailer import send_email
+from utils.notify import send_gotify
 
 from voice import router as voice_router
 from routes.synth import router as synth_router
@@ -498,6 +500,64 @@ async def trigger_reconcile_now(_: Annotated[None, Depends(auth.require_session_
     """
     await reconcile_vault(app_state.memory)
     return {"status": "reconciled"}
+
+
+@app.post("/debug/bedtime")
+async def trigger_bedtime_reminder_now(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """
+    Manually fires the bedtime reminder immediately, without waiting for
+    its scheduled time — sends a real Gotify push on every call.
+    """
+    await send_bedtime_reminder()
+    return {"status": "sent"}
+
+
+@app.post("/debug/checkin")
+async def trigger_checkin_now(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """
+    Manually creates and immediately fires a test mental-health check-in,
+    bypassing the day's 3-5 target and waking-hours window — runs the
+    exact same create/schedule/fire path a real check-in takes (real DB
+    row, real thread, real Gotify push).
+    """
+    await checkin_jobs.trigger_test_checkin()
+    return {"status": "sent"}
+
+
+@app.post("/debug/notify")
+async def trigger_test_notification(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """
+    Sends a one-off test Gotify push — useful for confirming
+    GOTIFY_URL/GOTIFY_TOKEN are configured correctly without triggering
+    a real job.
+    """
+    await asyncio.to_thread(
+        send_gotify, "Test Notification", "This is a test notification from the dashboard.", 5
+    )
+    return {"status": "sent"}
+
+
+@app.post("/debug/email")
+async def trigger_test_email(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """
+    Sends a one-off test email — useful for confirming the SMTP_* env
+    vars are configured correctly without waiting for the daily digest.
+    """
+    await asyncio.to_thread(send_email, "Test email", "This is a test email from the dashboard.")
+    return {"status": "sent"}
+
+
+@app.post("/debug/reminder")
+async def trigger_test_reminder(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """
+    Creates a real pending reminder due ~10 seconds from now and
+    schedules it on the shared scheduler — exercises the full ad-hoc
+    reminder pipeline (store -> scheduler -> fire_reminder -> Gotify)
+    end to end, unlike /debug/reminders/fire/{id} which needs an
+    existing reminder id.
+    """
+    reminder_id = await create_test_reminder()
+    return {"status": "scheduled", "reminder_id": reminder_id}
 
 
 @app.get("/device/sync")

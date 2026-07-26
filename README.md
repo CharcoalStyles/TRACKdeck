@@ -415,6 +415,15 @@ Full stack:
 docker compose up --build
 ```
 
+Bound to all interfaces, so other devices on the LAN (phone, laptop, the ESP32) can reach
+the dashboard/API — the plain `--reload` command above binds to `127.0.0.1` only:
+```bash
+uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+Then hit `http://<mac-mini-lan-ip>:8000` from another device. Keep `SESSION_COOKIE_SECURE`
+unset/`false` in `.env` for this — a `Secure` session cookie is never sent over plain HTTP,
+so login silently breaks if it's `true` and you're not behind an HTTPS-terminating proxy.
+
 See the Obsidian/Syncthing setup notes (discussed separately) for first-time vault pairing
 across devices — that part isn't fully automatable via `docker-compose.yml` alone, since
 device IDs are generated per-instance.

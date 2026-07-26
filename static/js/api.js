@@ -66,3 +66,14 @@ export async function getThreadMessages(threadId) {
   const data = await response.json();
   return data.messages;
 }
+
+/**
+ * Fire a /debug/* test endpoint (no request body) — shared by every
+ * button on the Testing page. See main.py's POST /debug/* routes.
+ * @returns {Promise<object>} the endpoint's small status JSON
+ */
+export async function triggerDebug(path) {
+  const response = await fetch(path, { method: 'POST' });
+  if (!response.ok) throw new Error(`Server returned ${response.status}`);
+  return response.json();
+}
