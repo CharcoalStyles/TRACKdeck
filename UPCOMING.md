@@ -4,14 +4,12 @@ Ideas and follow-ups that came up during other work, not yet scheduled.
 
 ## Discussed, intentionally not built yet
 
-- **Gratitude/mood/wins prompting as part of the digest.** Explicitly deferred — "get the
-  basics out of the way first" — but was the original motivation for wanting a daily
-  digest at all.
-- **Extending linked-note splitting beyond People** — Career/Health/Routine/Interests/etc.
-  becoming their own linked notes the same way, once About Me's sections have enough
-  content to justify it. The mechanism (`get_or_create_linked_note`) is already general
-  enough to do this; it just hasn't been specifically prompted for or exercised beyond
-  People yet.
+- **Extending linked-note splitting to accumulate real content beyond People** —
+  `agent/graph.py`'s addendums now already tell the model to use
+  `get_or_create_linked_note` for a specific ongoing project or health matter, not just
+  people, so the prompting side is done. What's still open is whether those categories
+  have actually accumulated enough content in practice to be worth their own notes, versus
+  still living in About Me's shared sections.
 - **A real login/auth system.** Found while wiring up the check-in Gotify link: every
   static page's script tag hits `GET /static/js/api.js`, which serves the real
   `API_TOKEN` with no auth check of its own, and the whole `/static` mount has no auth
@@ -41,8 +39,14 @@ Ideas and follow-ups that came up during other work, not yet scheduled.
 - **A read-only "browse the vault" dashboard page.** Chat/Voice/Onboarding/Profile/Settings
   cover creating and updating; there's no page for just looking through what's accumulated
   without opening Obsidian.
-- **Rate limiting on the unauthenticated GET routes** (`/`, `GET /settings`, `/threads`,
-  `/threads/{id}/messages`, `/health`), if this is ever reachable outside your home
-  network. All mutating/agent-facing routes (`/text`, `/voice`, `/synthesize`,
-  `POST /settings`, `/threads/new`, the mutating `/debug/*` routes) are now gated by
-  `API_TOKEN`.
+- **Rate limiting.** Splits into two cases:
+  - The unauthenticated GET routes (`/`, `GET /settings`, `/threads`,
+    `/threads/{id}/messages`, `/health`) — moot once the login/auth item above lands,
+    since they'd presumably sit behind it like everything else.
+  - `POST /checkin/{id}/skip` and `POST /checkin/{id}/reply` (added for the magic-link
+    check-in feature) — these are *deliberately* scoped by UUID possession rather than
+    `API_TOKEN`, by design, so the login/auth fix won't cover them. Rate limiting here
+    stands on its own, against UUID brute-forcing/abuse, independent of that fix.
+
+  All mutating/agent-facing routes (`/text`, `/voice`, `/synthesize`, `POST /settings`,
+  `/threads/new`, the mutating `/debug/*` routes) are now gated by `API_TOKEN`.
