@@ -34,16 +34,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import random
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.triggers.date import DateTrigger
 
 from agent.checkin_prompts import FALLBACK_CATEGORY, PROMPTS
-from agent.runtime import create_background_thread
+from agent.runtime import AgentResult, create_background_thread, run_agent
 from agent.scheduler import scheduler
 from agent.settings import settings
 from utils import checkins_store
@@ -108,6 +110,42 @@ async def get_or_create_day_target(day_start_utc: int) -> int:
 def _mint_thread() -> tuple[str, str]:
     info = create_background_thread()
     return info.thread_id, info.keyword
+
+
+def _checkin_click_url(checkin: dict) -> str | None:
+    """Deep-link into static/checkin.html for Gotify's tap-to-open extras.
+    None (no click action, plain notification still fires) if
+    PUBLIC_BASE_URL isn't set — additive, not required, so a missing var
+    degrades gracefully instead of turning every firing into a reported
+    error."""
+    base = os.environ.get("PUBLIC_BASE_URL")
+    if not base:
+        return None
+    params = urlencode({
+        "id": checkin["id"],
+        "category": checkin["category"],
+        "prompt_text": checkin["prompt_text"],
+    })
+    return f"{base.rstrip('/')}/static/checkin.html?{params}"
+
+
+async def answer_checkin(checkin_id: str, text: str) -> AgentResult | None:
+    """Resolve a check-in by treating `text` (typed or transcribed) as the
+    reply. Shared by every reply path (device voice, magic-link voice,
+    magic-link text). Returns None if checkin_id is stale/unresolvable
+    (unknown, already resolved, or never fired) so an *authenticated*
+    caller can fall back to normal thread resolution — the magic-link
+    routes in main.py/voice.py must NOT do that fallback themselves: an
+    anonymous visitor with a stale id must get a hard error, never a
+    live, unscoped conversation thread."""
+    checkin = await asyncio.to_thread(checkins_store.get_checkin, checkin_id)
+    if checkin is None or checkin["status"] != "pending" or checkin["thread_id"] is None:
+        logger.warning("checkin_id %s not resolvable — falling back to normal resolution", checkin_id)
+        return None
+    text_for_agent = f'(Replying to check-in prompt: "{checkin["prompt_text"]}") {text}'
+    result = await run_agent(text_for_agent, thread_id=checkin["thread_id"], one_shot=True)
+    await resolve_checkin(checkin_id, outcome="answered")
+    return result
 
 
 async def _create_and_schedule(
@@ -178,7 +216,11 @@ async def fire_checkin(checkin_id: str) -> None:
         fired_at = int(time.time())
         await asyncio.to_thread(checkins_store.mark_fired, checkin_id, thread_id, keyword, fired_at)
         await asyncio.to_thread(
-            send_gotify, f"Check-in ({checkin['category']})", checkin["prompt_text"], CHECKIN_PRIORITY
+            send_gotify,
+            f"Check-in ({checkin['category']})",
+            checkin["prompt_text"],
+            CHECKIN_PRIORITY,
+            _checkin_click_url(checkin),
         )
         scheduler.add_job(
             expire_checkin,

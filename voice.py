@@ -69,7 +69,6 @@ from faster_whisper import WhisperModel
 
 from jobs import checkin as checkin_jobs
 from agent.runtime import run_agent
-from utils import checkins_store
 from utils.notify import notify_error
 
 logger = logging.getLogger(__name__)
@@ -109,18 +108,12 @@ async def _transcribe_and_run(
     logger.info("Transcribed '%s': %s", audio_path, transcription)
 
     if checkin_id is not None:
-        checkin = await asyncio.to_thread(checkins_store.get_checkin, checkin_id)
-        if checkin is None or checkin["status"] != "pending" or checkin["thread_id"] is None:
-            # Stale/expired checkin_id (e.g. it expired server-side while
-            # the device was recording) — don't drop the user's spoken
-            # reply, just fall through to normal resolution.
-            logger.warning("checkin_id %s not resolvable — falling back to normal resolution", checkin_id)
-        else:
-            text_for_agent = f'(Replying to check-in prompt: "{checkin["prompt_text"]}") {transcription}'
-            # Forced one_shot regardless of the form field — an eink-display
-            # check-in reply has no multi-turn UI on the device side.
-            result = await run_agent(text_for_agent, thread_id=checkin["thread_id"], one_shot=True)
-            await checkin_jobs.resolve_checkin(checkin_id, outcome="answered")
+        # Stale/unresolvable checkin_id (e.g. it expired server-side while
+        # the device was recording) doesn't drop the user's spoken reply —
+        # answer_checkin already logs and returns None, so we just fall
+        # through to normal resolution below.
+        result = await checkin_jobs.answer_checkin(checkin_id, transcription)
+        if result is not None:
             return transcription, result.reply, result.keyword
 
     result = await run_agent(transcription, one_shot=one_shot)
@@ -183,3 +176,32 @@ async def receive_note(
     #     agent, or anything else.
     background_tasks.add_task(_process_voice_note, audio_path, one_shot, checkin_id)
     return Response(status_code=202)
+
+
+@router.post("/checkin/{checkin_id}/voice")
+async def receive_checkin_voice(checkin_id: str, file: UploadFile = File(...)):
+    """
+    Magic-link voice reply for static/checkin.html — gated only by
+    possessing this check-in's own id, not API_TOKEN (see
+    jobs/checkin.py's answer_checkin docstring for the trust model).
+    Unlike /voice, a stale/unresolvable id is a hard 409, never a fallback
+    to a live conversation thread — there is no authenticated caller to
+    trust here.
+    """
+    timestamp = int(time.time())
+    audio_path = os.path.join(UPLOAD_DIR, f"checkin_{timestamp}.wav")
+    try:
+        with open(audio_path, "wb") as f:
+            f.write(await file.read())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed writing audio: {str(e)}")
+
+    segments, _ = whisper_model.transcribe(audio_path, beam_size=5)
+    transcription = " ".join(segment.text for segment in segments).strip()
+    if not transcription:
+        return {"transcription": "", "reply": ""}
+
+    result = await checkin_jobs.answer_checkin(checkin_id, transcription)
+    if result is None:
+        raise HTTPException(status_code=409, detail="Check-in is no longer awaiting a reply")
+    return {"transcription": transcription, "reply": result.reply}

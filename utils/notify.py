@@ -16,7 +16,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
-def send_gotify(title: str, message: str, priority: int = 5) -> None:
+def send_gotify(title: str, message: str, priority: int = 5, click_url: str | None = None) -> None:
     """
     Fire a push notification via Gotify. This is a blocking call (httpx
     sync client) — call it from async code via `asyncio.to_thread`.
@@ -25,10 +25,16 @@ def send_gotify(title: str, message: str, priority: int = 5) -> None:
     unreachable, there's no further fallback channel configured, so we
     just log it rather than raising and losing the original error context
     the caller was trying to report.
+
+    click_url, when set, adds Gotify's tap-to-open extras so the
+    notification opens that URL when tapped — used by jobs/checkin.py's
+    fire_checkin to link straight to static/checkin.html.
     """
     url = f"{os.environ['GOTIFY_URL'].rstrip('/')}/message"
     params = {"token": os.environ["GOTIFY_TOKEN"]}
     payload = {"title": title, "message": message, "priority": priority}
+    if click_url:
+        payload["extras"] = {"client::notification": {"click": {"url": click_url}}}
 
     try:
         response = httpx.post(url, params=params, json=payload, timeout=10.0)

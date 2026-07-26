@@ -505,17 +505,7 @@ async def device_sync(auth: Annotated[str | None, Header()] = None):
     }
 
 
-@app.post("/device/checkin/{checkin_id}/skip")
-async def skip_checkin(checkin_id: str, auth: Annotated[str | None, Header()] = None):
-    """
-    Called by the check-in device before going back to sleep, in lieu of
-    answering — deep sleep means the server can't infer "no reply" from
-    silence, so this is an explicit signal. Triggers jobs/checkin.py's
-    fallback-retry/cooldown rescheduling.
-    """
-    if auth != os.environ["API_TOKEN"]:
-        raise HTTPException(status_code=401, detail="Unauthorized request source")
-
+async def _skip_checkin(checkin_id: str) -> dict:
     checkin = await asyncio.to_thread(checkins_store.get_checkin, checkin_id)
     if checkin is None:
         raise HTTPException(status_code=404, detail="Unknown check-in")
@@ -527,6 +517,49 @@ async def skip_checkin(checkin_id: str, auth: Annotated[str | None, Header()] = 
 
     await checkin_jobs.resolve_checkin(checkin_id, outcome="skipped")
     return {"status": "skipped"}
+
+
+@app.post("/device/checkin/{checkin_id}/skip")
+async def skip_checkin(checkin_id: str, auth: Annotated[str | None, Header()] = None):
+    """
+    Called by the check-in device before going back to sleep, in lieu of
+    answering — deep sleep means the server can't infer "no reply" from
+    silence, so this is an explicit signal. Triggers jobs/checkin.py's
+    fallback-retry/cooldown rescheduling.
+    """
+    if auth != os.environ["API_TOKEN"]:
+        raise HTTPException(status_code=401, detail="Unauthorized request source")
+    return await _skip_checkin(checkin_id)
+
+
+@app.post("/checkin/{checkin_id}/skip")
+async def skip_checkin_public(checkin_id: str):
+    """
+    Magic-link counterpart to skip_checkin above, for static/checkin.html
+    — gated only by possessing this check-in's own id, not API_TOKEN. See
+    jobs/checkin.py's answer_checkin docstring for why that's an
+    acceptable trust model for this feature: the id is 122 bits of
+    randomness, unguessable, and the window it's valid for is naturally
+    short (a check-in resolves or expires within CHECKIN_EXPIRY of
+    firing).
+    """
+    return await _skip_checkin(checkin_id)
+
+
+class CheckinReplyRequest(BaseModel):
+    text: str
+
+
+@app.post("/checkin/{checkin_id}/reply")
+async def reply_checkin(checkin_id: str, request: CheckinReplyRequest):
+    """
+    Magic-link text reply for static/checkin.html — same trust model as
+    skip_checkin_public above.
+    """
+    result = await checkin_jobs.answer_checkin(checkin_id, request.text)
+    if result is None:
+        raise HTTPException(status_code=409, detail="Check-in is no longer awaiting a reply")
+    return {"reply": result.reply}
 
 
 # ---------------------------------------------------------------------------

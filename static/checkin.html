@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Check-in — Assistant Dashboard</title>
+  <link rel="stylesheet" href="/static/css/theme.css">
+  <style>
+    /* Deliberately not importing api.js or chat.js on this page — it's
+       opened by an anonymous link tap (see jobs/checkin.py's
+       answer_checkin docstring for the magic-link trust model), so it
+       must never have access to the global AUTH_TOKEN. */
+    #replyInput {
+      width: 100%;
+      min-height: 5rem;
+      background: #252525;
+      border: 1px solid #333;
+      color: #e0e0e0;
+      padding: 0.6rem 0.7rem;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+
+    .checkin-actions {
+      display: flex;
+      gap: 0.6rem;
+      align-items: center;
+      margin-top: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    #voiceStatus {
+      font-size: 0.85rem;
+      color: #aaa;
+      margin-top: 0.5rem;
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <h1>Assistant Dashboard</h1>
+  </header>
+
+  <main>
+    <div class="card">
+      <h2>Check-in <span id="categoryBadge"></span></h2>
+      <p class="description" id="promptText">Loading…</p>
+
+      <div id="replyArea">
+        <textarea id="replyInput" placeholder="Type your reply..."></textarea>
+        <div class="checkin-actions">
+          <button type="button" id="sendBtn" class="primary-btn">Send</button>
+          <button type="button" id="recordBtn" class="record-btn">Or record a voice reply</button>
+          <button type="button" id="skipBtn" class="secondary-btn">Skip this one</button>
+        </div>
+        <div id="voiceStatus"></div>
+      </div>
+
+      <div id="doneMessage" class="description" style="display:none;"></div>
+    </div>
+  </main>
+
+  <script type="module">
+    const params = new URLSearchParams(location.search);
+    const checkinId = params.get('id');
+    const category = params.get('category') || '';
+    const promptText = params.get('prompt_text') || '(no prompt text provided)';
+
+    document.getElementById('categoryBadge').textContent = category ? `(${category})` : '';
+    document.getElementById('promptText').textContent = promptText;
+
+    const replyArea = document.getElementById('replyArea');
+    const doneMessage = document.getElementById('doneMessage');
+    const replyInput = document.getElementById('replyInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const skipBtn = document.getElementById('skipBtn');
+    const recordBtn = document.getElementById('recordBtn');
+    const voiceStatus = document.getElementById('voiceStatus');
+
+    function finish(message) {
+      replyArea.style.display = 'none';
+      doneMessage.textContent = message;
+      doneMessage.style.display = 'block';
+    }
+
+    if (!checkinId) {
+      finish('No check-in id in the link — nothing to reply to.');
+    } else {
+      sendBtn.addEventListener('click', async () => {
+        const text = replyInput.value.trim();
+        if (!text) return;
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Sending…';
+        try {
+          const response = await fetch(`/checkin/${encodeURIComponent(checkinId)}/reply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text }),
+          });
+          if (!response.ok) throw new Error(`Server returned ${response.status}`);
+          finish('Thanks — reply sent.');
+        } catch (err) {
+          console.error('Reply failed:', err);
+          sendBtn.disabled = false;
+          sendBtn.textContent = 'Send';
+          voiceStatus.textContent = 'Could not send — this check-in may have expired.';
+        }
+      });
+
+      skipBtn.addEventListener('click', async () => {
+        skipBtn.disabled = true;
+        skipBtn.textContent = 'Skipping…';
+        try {
+          const response = await fetch(`/checkin/${encodeURIComponent(checkinId)}/skip`, { method: 'POST' });
+          if (!response.ok) throw new Error(`Server returned ${response.status}`);
+          finish('Skipped.');
+        } catch (err) {
+          console.error('Skip failed:', err);
+          skipBtn.disabled = false;
+          skipBtn.textContent = 'Skip this one';
+          voiceStatus.textContent = 'Could not skip — this check-in may have expired.';
+        }
+      });
+
+      // Voice reply, adapted from static/voice.html's recording widget —
+      // posts to the magic-link endpoint below, no auth header.
+      let mediaRecorder;
+      let audioChunks = [];
+      let isRecording = false;
+
+      recordBtn.addEventListener('click', async () => {
+        if (!isRecording) {
+          audioChunks = [];
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+            mediaRecorder.ondataavailable = (event) => {
+              if (event.data.size > 0) audioChunks.push(event.data);
+            };
+            mediaRecorder.onstop = async () => {
+              const blob = new Blob(audioChunks, { type: 'audio/webm' });
+              await sendVoiceReply(blob);
+              stream.getTracks().forEach(track => track.stop());
+            };
+            mediaRecorder.start();
+            isRecording = true;
+            recordBtn.textContent = 'Stop recording';
+            recordBtn.classList.add('recording');
+            voiceStatus.textContent = 'Listening...';
+          } catch (err) {
+            console.error('Microphone access denied or unsupported:', err);
+            voiceStatus.textContent = 'Error: Mic access denied.';
+          }
+        } else {
+          mediaRecorder.stop();
+          isRecording = false;
+          recordBtn.textContent = 'Or record a voice reply';
+          recordBtn.classList.remove('recording');
+          voiceStatus.textContent = 'Processing...';
+        }
+      });
+
+      async function sendVoiceReply(blob) {
+        const formData = new FormData();
+        formData.append('file', blob, 'checkin-reply.webm');
+
+        try {
+          const response = await fetch(`/checkin/${encodeURIComponent(checkinId)}/voice`, {
+            method: 'POST',
+            body: formData,
+          });
+          if (!response.ok) throw new Error(`Server returned ${response.status}`);
+          const data = await response.json();
+          if (!data.transcription) {
+            voiceStatus.textContent = 'No speech detected — try again.';
+            return;
+          }
+          finish(`Thanks — heard: "${data.transcription}"`);
+        } catch (err) {
+          console.error('Voice reply failed:', err);
+          voiceStatus.textContent = 'Error sending voice reply.';
+        }
+      }
+    }
+  </script>
+</body>
+
+</html>

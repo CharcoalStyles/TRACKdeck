@@ -12,6 +12,15 @@ Ideas and follow-ups that came up during other work, not yet scheduled.
   content to justify it. The mechanism (`get_or_create_linked_note`) is already general
   enough to do this; it just hasn't been specifically prompted for or exercised beyond
   People yet.
+- **A real login/auth system.** Found while wiring up the check-in Gotify link: every
+  static page's script tag hits `GET /static/js/api.js`, which serves the real
+  `API_TOKEN` with no auth check of its own, and the whole `/static` mount has no auth
+  dependency either — so once a public domain (e.g. `adhi.xyz`) is actually pointed at
+  this app, anyone who reaches it can fetch the master token and get full read/write
+  access to everything (notes, calendar, settings, all of it). The check-in link feature
+  itself was scoped around this (a magic-link design, authorized only by each check-in's
+  own UUID, never the global token), but the underlying exposure is app-wide and predates
+  that feature. Don't point a public domain at this app until this is addressed.
 
 ## Additional suggestions (Claude's own ideas, not discussed)
 
