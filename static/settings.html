@@ -18,6 +18,7 @@
       <a href="/static/onboarding.html">Onboarding</a>
       <a href="/static/profile.html">Profile</a>
       <a href="/static/settings.html" class="active">Settings</a>
+      <a href="#" id="logoutBtn">Log out</a>
     </nav>
   </header>
 
@@ -100,119 +101,127 @@
 
   <script type="module">
     import { getSettings, updateSettings } from '/static/js/api.js';
+    import { requireSession, logout } from '/static/js/auth.js';
 
-    const learningModeToggle = document.getElementById('learningModeToggle');
-    const settingsStatus = document.getElementById('settingsStatus');
+    document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+      e.preventDefault();
+      await logout();
+    });
 
-    const defaultLocationInput = document.getElementById('defaultLocationInput');
-    const timezoneInput = document.getElementById('timezoneInput');
-    const timezoneOptions = document.getElementById('timezoneOptions');
-    const detectTimezoneBtn = document.getElementById('detectTimezoneBtn');
-    const saveLocationTimeBtn = document.getElementById('saveLocationTimeBtn');
-    const locationStatus = document.getElementById('locationStatus');
+    if (await requireSession()) {
+      const learningModeToggle = document.getElementById('learningModeToggle');
+      const settingsStatus = document.getElementById('settingsStatus');
 
-    const digestTimeInput = document.getElementById('digestTimeInput');
-    const saveDigestTimeBtn = document.getElementById('saveDigestTimeBtn');
-    const digestStatus = document.getElementById('digestStatus');
+      const defaultLocationInput = document.getElementById('defaultLocationInput');
+      const timezoneInput = document.getElementById('timezoneInput');
+      const timezoneOptions = document.getElementById('timezoneOptions');
+      const detectTimezoneBtn = document.getElementById('detectTimezoneBtn');
+      const saveLocationTimeBtn = document.getElementById('saveLocationTimeBtn');
+      const locationStatus = document.getElementById('locationStatus');
 
-    const wakeTimeInput = document.getElementById('wakeTimeInput');
-    const saveWakeTimeBtn = document.getElementById('saveWakeTimeBtn');
-    const wakeTimeStatus = document.getElementById('wakeTimeStatus');
+      const digestTimeInput = document.getElementById('digestTimeInput');
+      const saveDigestTimeBtn = document.getElementById('saveDigestTimeBtn');
+      const digestStatus = document.getElementById('digestStatus');
 
-    // Common IANA zones as datalist suggestions — the input still accepts
-    // any valid IANA name, this just helps autocomplete.
-    if (typeof Intl.supportedValuesOf === 'function') {
-      for (const tz of Intl.supportedValuesOf('timeZone')) {
-        const opt = document.createElement('option');
-        opt.value = tz;
-        timezoneOptions.appendChild(opt);
+      const wakeTimeInput = document.getElementById('wakeTimeInput');
+      const saveWakeTimeBtn = document.getElementById('saveWakeTimeBtn');
+      const wakeTimeStatus = document.getElementById('wakeTimeStatus');
+
+      // Common IANA zones as datalist suggestions — the input still accepts
+      // any valid IANA name, this just helps autocomplete.
+      if (typeof Intl.supportedValuesOf === 'function') {
+        for (const tz of Intl.supportedValuesOf('timeZone')) {
+          const opt = document.createElement('option');
+          opt.value = tz;
+          timezoneOptions.appendChild(opt);
+        }
       }
+
+      function showStatus(el, text, ok = true) {
+        el.textContent = text;
+        el.style.color = ok ? '#00adb5' : '#ff6b6b';
+      }
+
+      async function loadSettings() {
+        settingsStatus.textContent = '';
+        try {
+          const data = await getSettings();
+          learningModeToggle.checked = !!data.learning_mode;
+          defaultLocationInput.value = data.default_location || '';
+          timezoneInput.value = data.timezone || '';
+          digestTimeInput.value = data.digest_time || '';
+          wakeTimeInput.value = data.wake_time || '';
+        } catch (error) {
+          console.error('Failed to load settings:', error);
+          settingsStatus.textContent = 'Could not load current settings.';
+          settingsStatus.style.color = '#ff6b6b';
+        }
+      }
+
+      async function saveSetting(key, value) {
+        settingsStatus.textContent = 'Saving...';
+        settingsStatus.style.color = '#888';
+        try {
+          await updateSettings({ [key]: value });
+          settingsStatus.textContent = 'Saved.';
+          settingsStatus.style.color = '#00adb5';
+        } catch (error) {
+          console.error('Failed to save setting:', error);
+          settingsStatus.textContent = 'Failed to save — reverted.';
+          settingsStatus.style.color = '#ff6b6b';
+          loadSettings();
+        }
+      }
+
+      learningModeToggle.addEventListener('change', () => {
+        saveSetting('learning_mode', learningModeToggle.checked);
+      });
+
+      detectTimezoneBtn.addEventListener('click', () => {
+        timezoneInput.value = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      });
+
+      saveLocationTimeBtn.addEventListener('click', async () => {
+        showStatus(locationStatus, 'Saving...', true);
+        locationStatus.style.color = '#888';
+        try {
+          await updateSettings({
+            default_location: defaultLocationInput.value,
+            timezone: timezoneInput.value,
+          });
+          showStatus(locationStatus, 'Saved.');
+        } catch (error) {
+          console.error('Failed to save location/timezone:', error);
+          showStatus(locationStatus, 'Failed to save — check the timezone name is a valid IANA zone.', false);
+        }
+      });
+
+      saveDigestTimeBtn.addEventListener('click', async () => {
+        showStatus(digestStatus, 'Saving...', true);
+        digestStatus.style.color = '#888';
+        try {
+          await updateSettings({ digest_time: digestTimeInput.value });
+          showStatus(digestStatus, 'Saved.');
+        } catch (error) {
+          console.error('Failed to save digest time:', error);
+          showStatus(digestStatus, 'Failed to save.', false);
+        }
+      });
+
+      saveWakeTimeBtn.addEventListener('click', async () => {
+        showStatus(wakeTimeStatus, 'Saving...', true);
+        wakeTimeStatus.style.color = '#888';
+        try {
+          await updateSettings({ wake_time: wakeTimeInput.value });
+          showStatus(wakeTimeStatus, 'Saved.');
+        } catch (error) {
+          console.error('Failed to save wake time:', error);
+          showStatus(wakeTimeStatus, 'Failed to save.', false);
+        }
+      });
+
+      loadSettings();
     }
-
-    function showStatus(el, text, ok = true) {
-      el.textContent = text;
-      el.style.color = ok ? '#00adb5' : '#ff6b6b';
-    }
-
-    async function loadSettings() {
-      settingsStatus.textContent = '';
-      try {
-        const data = await getSettings();
-        learningModeToggle.checked = !!data.learning_mode;
-        defaultLocationInput.value = data.default_location || '';
-        timezoneInput.value = data.timezone || '';
-        digestTimeInput.value = data.digest_time || '';
-        wakeTimeInput.value = data.wake_time || '';
-      } catch (error) {
-        console.error('Failed to load settings:', error);
-        settingsStatus.textContent = 'Could not load current settings.';
-        settingsStatus.style.color = '#ff6b6b';
-      }
-    }
-
-    async function saveSetting(key, value) {
-      settingsStatus.textContent = 'Saving...';
-      settingsStatus.style.color = '#888';
-      try {
-        await updateSettings({ [key]: value });
-        settingsStatus.textContent = 'Saved.';
-        settingsStatus.style.color = '#00adb5';
-      } catch (error) {
-        console.error('Failed to save setting:', error);
-        settingsStatus.textContent = 'Failed to save — reverted.';
-        settingsStatus.style.color = '#ff6b6b';
-        loadSettings();
-      }
-    }
-
-    learningModeToggle.addEventListener('change', () => {
-      saveSetting('learning_mode', learningModeToggle.checked);
-    });
-
-    detectTimezoneBtn.addEventListener('click', () => {
-      timezoneInput.value = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    });
-
-    saveLocationTimeBtn.addEventListener('click', async () => {
-      showStatus(locationStatus, 'Saving...', true);
-      locationStatus.style.color = '#888';
-      try {
-        await updateSettings({
-          default_location: defaultLocationInput.value,
-          timezone: timezoneInput.value,
-        });
-        showStatus(locationStatus, 'Saved.');
-      } catch (error) {
-        console.error('Failed to save location/timezone:', error);
-        showStatus(locationStatus, 'Failed to save — check the timezone name is a valid IANA zone.', false);
-      }
-    });
-
-    saveDigestTimeBtn.addEventListener('click', async () => {
-      showStatus(digestStatus, 'Saving...', true);
-      digestStatus.style.color = '#888';
-      try {
-        await updateSettings({ digest_time: digestTimeInput.value });
-        showStatus(digestStatus, 'Saved.');
-      } catch (error) {
-        console.error('Failed to save digest time:', error);
-        showStatus(digestStatus, 'Failed to save.', false);
-      }
-    });
-
-    saveWakeTimeBtn.addEventListener('click', async () => {
-      showStatus(wakeTimeStatus, 'Saving...', true);
-      wakeTimeStatus.style.color = '#888';
-      try {
-        await updateSettings({ wake_time: wakeTimeInput.value });
-        showStatus(wakeTimeStatus, 'Saved.');
-      } catch (error) {
-        console.error('Failed to save wake time:', error);
-        showStatus(wakeTimeStatus, 'Failed to save.', false);
-      }
-    });
-
-    loadSettings();
   </script>
 </body>
 

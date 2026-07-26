@@ -9,8 +9,9 @@
   <style>
     /* Deliberately not importing api.js or chat.js on this page — it's
        opened by an anonymous link tap (see jobs/checkin.py's
-       answer_checkin docstring for the magic-link trust model), so it
-       must never have access to the global AUTH_TOKEN. */
+       answer_checkin docstring for the magic-link trust model), and
+       those modules' fetches require a logged-in session (see
+       static/js/auth.js), which this page must never assume or need. */
     #replyInput {
       width: 100%;
       min-height: 5rem;

@@ -12,10 +12,11 @@ from typing import Annotated
 import uvicorn
 from apscheduler.triggers.date import DateTrigger
 from dotenv import load_dotenv
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, model_validator
+from starlette.middleware.sessions import SessionMiddleware
 
 # Load .env before anything that reads os.environ (i.e. before agent imports)
 load_dotenv()
@@ -27,18 +28,30 @@ from utils.logging import configure_logging
 # calls) already has the right level/handler via the root logger.
 configure_logging()
 
-# The dashboard's static/js/api.js ships this same string as its default
-# AUTH_TOKEN, and .env.example documents it as the sample value — so an
-# unedited API_TOKEN isn't just "unset", it's a real, publicly-known
-# credential for every API_TOKEN-gated route. Refuse to start rather than
-# silently running with it.
+# .env.example documents these same strings as the sample values — so an
+# unedited value isn't just "unset", it's a real, publicly-known
+# credential/key. Refuse to start rather than silently running with any
+# of them.
 _PLACEHOLDER_API_TOKEN = "YOUR_SUPER_SECRET_SECURE_TOKEN"
+_PLACEHOLDER_DASHBOARD_PASSWORD = "CHANGE_ME_DASHBOARD_PASSWORD"
+_PLACEHOLDER_SESSION_SECRET_KEY = "CHANGE_ME_SESSION_SECRET_KEY"
 if os.environ.get("API_TOKEN") == _PLACEHOLDER_API_TOKEN:
     raise RuntimeError(
         "API_TOKEN is still set to the placeholder value from .env.example. "
         "Set it to a real, private secret before starting the app."
     )
+if os.environ.get("DASHBOARD_PASSWORD") == _PLACEHOLDER_DASHBOARD_PASSWORD:
+    raise RuntimeError(
+        "DASHBOARD_PASSWORD is still set to the placeholder value from .env.example. "
+        "Set it to a real, private password before starting the app."
+    )
+if os.environ.get("SESSION_SECRET_KEY") in (None, _PLACEHOLDER_SESSION_SECRET_KEY):
+    raise RuntimeError(
+        "SESSION_SECRET_KEY is unset or still the placeholder value from .env.example. "
+        "Set it to a real, private random string before starting the app."
+    )
 
+import auth
 from agent.graph import build_graph
 from agent.memory import MemoryStore, make_chroma_client, make_embedding_function
 from agent.runtime import app_state, create_new_thread, get_thread_messages, list_threads, run_agent
@@ -189,6 +202,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.environ["SESSION_SECRET_KEY"],
+    session_cookie="adhi_session",
+    max_age=int(os.environ.get("SESSION_MAX_AGE_DAYS", "30")) * 24 * 60 * 60,
+    same_site="lax",
+    https_only=os.environ.get("SESSION_COOKIE_SECURE", "false").strip().lower() in ("1", "true", "yes", "on"),
+)
 app.include_router(voice_router)  # /voice
 app.include_router(synth_router)  # /synthesize
 
@@ -234,7 +255,9 @@ class AssistantResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 @app.get("/", response_class=HTMLResponse)
-async def serve_frontend():
+async def serve_frontend(request: Request):
+    if not request.session.get("authenticated"):
+        return RedirectResponse(url="/static/login.html", status_code=302)
     static_file_path = os.path.join("static", "index.html")
     if os.path.exists(static_file_path):
         with open(static_file_path, "r", encoding="utf-8") as f:
@@ -242,31 +265,48 @@ async def serve_frontend():
     return HTMLResponse(content="<h1>static/index.html not found</h1>", status_code=404)
 
 
-@app.get("/static/js/api.js")
-async def api_js():
-    """
-    Registered ahead of the StaticFiles mount below so it wins for this
-    exact path. api.js on disk keeps _PLACEHOLDER_API_TOKEN (safe to
-    commit) — the real API_TOKEN is substituted in per-request from the
-    environment, so it's never written to disk. no-store since the
-    response is credential-bearing and must not be cached by the browser.
-    """
-    static_file_path = os.path.join("static", "js", "api.js")
-    with open(static_file_path, "r", encoding="utf-8") as f:
-        content = f.read()
-    content = content.replace(_PLACEHOLDER_API_TOKEN, os.environ["API_TOKEN"])
-    return Response(content=content, media_type="application/javascript", headers={"Cache-Control": "no-store"})
-
-
 # Mount the rest of the static folder for any assets/css/js if you add them later
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
-@app.post("/text", response_model=AssistantResponse)
-async def handle_text(request: TextRequest, auth: Annotated[str | None, Header()] = None):
-    if auth != os.environ["API_TOKEN"]:
-        raise HTTPException(status_code=401, detail="Unauthorized request source")
+class LoginRequest(BaseModel):
+    password: str
 
+
+@app.post("/login")
+async def login(body: LoginRequest, request: Request):
+    client_ip = request.client.host if request.client else "unknown"
+    auth.check_login_rate_limit(client_ip)
+    if not auth.verify_password(body.password):
+        auth.record_failed_login(client_ip)
+        raise HTTPException(status_code=401, detail="Incorrect password")
+    request.session["authenticated"] = True
+    return {"status": "ok"}
+
+
+@app.post("/logout")
+async def logout(request: Request):
+    request.session.clear()
+    return {"status": "ok"}
+
+
+@app.get("/device/token")
+async def get_device_token(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """
+    Lets an already-session-authenticated dashboard obtain the raw
+    API_TOKEN, so static/voice.html's browser mic test (which calls the
+    device-token-only POST /voice directly, see auth.py) still has a
+    credential to attach. Only reachable to a caller who already cleared
+    the session-or-token gate — not to any anonymous visitor, unlike the
+    old always-on api.js token-injection this replaces.
+    """
+    return {"token": os.environ["API_TOKEN"]}
+
+
+@app.post("/text", response_model=AssistantResponse)
+async def handle_text(
+    request: TextRequest, _: Annotated[None, Depends(auth.require_session_or_token)]
+):
     result = await run_agent(
         request.text,
         thread_id=request.thread_id,
@@ -277,7 +317,7 @@ async def handle_text(request: TextRequest, auth: Annotated[str | None, Header()
 
 
 @app.get("/threads")
-async def get_threads():
+async def get_threads(_: Annotated[None, Depends(auth.require_session_or_token)]):
     """Sidebar thread list, most recently active first. Threads are
     threads regardless of whether they started from a voice command or
     typed here — same keyword addressing, same nightly sweep."""
@@ -288,18 +328,17 @@ async def get_threads():
 
 
 @app.post("/threads/new")
-async def new_thread(auth: Annotated[str | None, Header()] = None):
+async def new_thread(_: Annotated[None, Depends(auth.require_session_or_token)]):
     """Explicitly mint a new thread before any message is sent, so a
     fresh 'New Chat' shows up in the sidebar immediately."""
-    if auth != os.environ["API_TOKEN"]:
-        raise HTTPException(status_code=401, detail="Unauthorized request source")
-
     info = create_new_thread()
     return {"thread_id": info.thread_id, "keyword": info.keyword}
 
 
 @app.get("/threads/{thread_id}/messages")
-async def thread_messages(thread_id: str):
+async def thread_messages(
+    thread_id: str, _: Annotated[None, Depends(auth.require_session_or_token)]
+):
     return {"messages": await get_thread_messages(thread_id)}
 
 
@@ -365,15 +404,16 @@ def _current_settings() -> dict:
 
 
 @app.get("/settings")
-async def get_settings():
+async def get_settings(_: Annotated[None, Depends(auth.require_session_or_token)]):
     """Current standing app-level toggles (as opposed to per-request
-    options like one_shot). Read-only, no auth needed — nothing sensitive
-    here, just current state for the dashboard to render."""
+    options like one_shot)."""
     return _current_settings()
 
 
 @app.post("/settings")
-async def update_settings(update: SettingsUpdate, auth: Annotated[str | None, Header()] = None):
+async def update_settings(
+    update: SettingsUpdate, _: Annotated[None, Depends(auth.require_session_or_token)]
+):
     """Update standing app-level toggles. Only fields present in the
     request body are changed. Takes effect immediately — settings are
     read fresh on every agent turn, no restart needed.
@@ -382,9 +422,6 @@ async def update_settings(update: SettingsUpdate, auth: Annotated[str | None, He
     also live-reschedule their APScheduler jobs, since they're registered
     as fixed triggers rather than being read fresh like the other settings.
     """
-    if auth != os.environ["API_TOKEN"]:
-        raise HTTPException(status_code=401, detail="Unauthorized request source")
-
     if update.learning_mode is not None:
         settings.learning_mode = update.learning_mode
     if update.default_location is not None:
@@ -417,65 +454,54 @@ async def update_settings(update: SettingsUpdate, auth: Annotated[str | None, He
 
 
 @app.post("/debug/digest")
-async def trigger_digest_now(auth: Annotated[str | None, Header()] = None):
+async def trigger_digest_now(_: Annotated[None, Depends(auth.require_session_or_token)]):
     """
     Manually fires today's digest immediately, without waiting for the
-    20:45 schedule. Gated behind the same token as /voice since it sends
-    a real email on every call — remove or comment this out once you're
-    done testing the pipeline end to end.
+    20:45 schedule. Sends a real email on every call — remove or comment
+    this out once you're done testing the pipeline end to end.
     """
-    if auth != os.environ["API_TOKEN"]:
-        raise HTTPException(status_code=401, detail="Unauthorized request source")
-
     await send_daily_digest(app_state.memory)
     return {"status": "sent"}
 
 
 @app.post("/debug/reminders/fire/{reminder_id}")
-async def trigger_reminder_now(reminder_id: str, auth: Annotated[str | None, Header()] = None):
+async def trigger_reminder_now(
+    reminder_id: str, _: Annotated[None, Depends(auth.require_session_or_token)]
+):
     """
     Manually fires a specific pending reminder immediately, without waiting
     for its scheduled time — useful for testing delivery without sitting
     around for the real due time.
     """
-    if auth != os.environ["API_TOKEN"]:
-        raise HTTPException(status_code=401, detail="Unauthorized request source")
-
     await fire_reminder(reminder_id)
     return {"status": "fired"}
 
 
 @app.post("/debug/calendar-sync")
-async def trigger_calendar_sync_now(auth: Annotated[str | None, Header()] = None):
+async def trigger_calendar_sync_now(_: Annotated[None, Depends(auth.require_session_or_token)]):
     """
     Manually runs a calendar reminder sync pass immediately, without
     waiting for the CALENDAR_SYNC_INTERVAL_MINUTES schedule — useful for
     testing that a manually added/changed/removed calendar event (with a
     native alarm set) picks up correctly.
     """
-    if auth != os.environ["API_TOKEN"]:
-        raise HTTPException(status_code=401, detail="Unauthorized request source")
-
     await sync_calendar_reminders()
     return {"status": "synced"}
 
 
 @app.post("/debug/reconcile-vault")
-async def trigger_reconcile_now(auth: Annotated[str | None, Header()] = None):
+async def trigger_reconcile_now(_: Annotated[None, Depends(auth.require_session_or_token)]):
     """
     Manually forces a full vault reconciliation sweep — useful for
     confirming the notes index actually matches the vault on disk without
     waiting for the live watcher or an app restart.
     """
-    if auth != os.environ["API_TOKEN"]:
-        raise HTTPException(status_code=401, detail="Unauthorized request source")
-
     await reconcile_vault(app_state.memory)
     return {"status": "reconciled"}
 
 
 @app.get("/device/sync")
-async def device_sync(auth: Annotated[str | None, Header()] = None):
+async def device_sync(_: Annotated[None, Depends(auth.require_device_token)]):
     """
     Polled by the (not-yet-built) ESP32-S3 check-in device on every wake —
     scheduled RTC wake alarm or an incidental wake for a normal voice
@@ -485,9 +511,6 @@ async def device_sync(auth: Annotated[str | None, Header()] = None):
     executes. Check-in-only for now — see jobs/checkin.py's module
     docstring for the state machine behind this list.
     """
-    if auth != os.environ["API_TOKEN"]:
-        raise HTTPException(status_code=401, detail="Unauthorized request source")
-
     now = int(time.time())
     upcoming = await asyncio.to_thread(checkins_store.list_next_24h, now)
     return {
@@ -520,15 +543,15 @@ async def _skip_checkin(checkin_id: str) -> dict:
 
 
 @app.post("/device/checkin/{checkin_id}/skip")
-async def skip_checkin(checkin_id: str, auth: Annotated[str | None, Header()] = None):
+async def skip_checkin(
+    checkin_id: str, _: Annotated[None, Depends(auth.require_device_token)]
+):
     """
     Called by the check-in device before going back to sleep, in lieu of
     answering — deep sleep means the server can't infer "no reply" from
     silence, so this is an explicit signal. Triggers jobs/checkin.py's
     fallback-retry/cooldown rescheduling.
     """
-    if auth != os.environ["API_TOKEN"]:
-        raise HTTPException(status_code=401, detail="Unauthorized request source")
     return await _skip_checkin(checkin_id)
 
 

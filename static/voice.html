@@ -18,6 +18,7 @@
       <a href="/static/onboarding.html">Onboarding</a>
       <a href="/static/profile.html">Profile</a>
       <a href="/static/settings.html">Settings</a>
+      <a href="#" id="logoutBtn">Log out</a>
     </nav>
   </header>
 
@@ -50,103 +51,116 @@
   </main>
 
   <script type="module">
-    import { AUTH_TOKEN } from '/static/js/api.js';
+    import { requireSession, getDeviceToken, logout } from '/static/js/auth.js';
 
-    const recordBtn = document.getElementById('recordBtn');
-    const statusText = document.getElementById('status');
-    const responseBox = document.getElementById('response-box');
-    const transcriptionText = document.getElementById('transcriptionText');
-    const replyText = document.getElementById('replyText');
-    const keywordSection = document.getElementById('keywordSection');
-    const keywordText = document.getElementById('keywordText');
-    const keywordSayText = document.getElementById('keywordSayText');
-    const oneShotToggle = document.getElementById('oneShotToggle');
-
-    let mediaRecorder;
-    let audioChunks = [];
-    let isRecording = false;
-
-    recordBtn.addEventListener('click', async () => {
-      if (!isRecording) {
-        startRecording();
-      } else {
-        stopRecording();
-      }
+    document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+      e.preventDefault();
+      await logout();
     });
 
-    async function startRecording() {
-      audioChunks = [];
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    if (await requireSession()) {
+      // POST /voice is device-token-only (no session fallback — see
+      // auth.py), so this browser test page needs the raw token even
+      // though it's otherwise session-authenticated. Fetched once here,
+      // only reachable because requireSession() above already passed.
+      const deviceToken = await getDeviceToken();
 
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            audioChunks.push(event.data);
-          }
-        };
+      const recordBtn = document.getElementById('recordBtn');
+      const statusText = document.getElementById('status');
+      const responseBox = document.getElementById('response-box');
+      const transcriptionText = document.getElementById('transcriptionText');
+      const replyText = document.getElementById('replyText');
+      const keywordSection = document.getElementById('keywordSection');
+      const keywordText = document.getElementById('keywordText');
+      const keywordSayText = document.getElementById('keywordSayText');
+      const oneShotToggle = document.getElementById('oneShotToggle');
 
-        mediaRecorder.onstop = async () => {
-          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-          await sendAudioToBackend(audioBlob);
-          stream.getTracks().forEach(track => track.stop());
-        };
+      let mediaRecorder;
+      let audioChunks = [];
+      let isRecording = false;
 
-        mediaRecorder.start();
-        isRecording = true;
-        recordBtn.textContent = 'Stop Recording';
-        recordBtn.classList.add('recording');
-        statusText.textContent = 'Listening...';
-        responseBox.style.display = 'none';
-      } catch (err) {
-        console.error('Microphone access denied or unsupported:', err);
-        statusText.textContent = 'Error: Mic access denied.';
-      }
-    }
-
-    function stopRecording() {
-      if (mediaRecorder && isRecording) {
-        mediaRecorder.stop();
-        isRecording = false;
-        recordBtn.textContent = 'Record';
-        recordBtn.classList.remove('recording');
-        statusText.textContent = 'Processing audio...';
-      }
-    }
-
-    async function sendAudioToBackend(blob) {
-      const formData = new FormData();
-      formData.append('file', blob, 'command.webm');
-      formData.append('sync', 'true');
-      formData.append('one_shot', oneShotToggle.checked ? 'true' : 'false');
-
-      try {
-        const response = await fetch('/voice', {
-          method: 'POST',
-          headers: { 'auth': AUTH_TOKEN },
-          body: formData
-        });
-
-        if (!response.ok) throw new Error(`Server returned ${response.status}`);
-
-        const data = await response.json();
-        statusText.textContent = 'Done!';
-        responseBox.style.display = 'block';
-        transcriptionText.textContent = data.transcription || '(none)';
-        replyText.textContent = data.reply;
-        if (data.keyword) {
-          keywordSection.style.display = '';
-          keywordText.textContent = data.keyword;
-          keywordSayText.textContent = data.keyword;
+      recordBtn.addEventListener('click', async () => {
+        if (!isRecording) {
+          startRecording();
         } else {
-          keywordSection.style.display = 'none';
+          stopRecording();
         }
+      });
 
-        console.log(data);
+      async function startRecording() {
+        audioChunks = [];
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
 
-      } catch (error) {
-        console.error('Transmission failed:', error);
-        statusText.textContent = 'Error sending audio to backend.';
+          mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              audioChunks.push(event.data);
+            }
+          };
+
+          mediaRecorder.onstop = async () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            await sendAudioToBackend(audioBlob);
+            stream.getTracks().forEach(track => track.stop());
+          };
+
+          mediaRecorder.start();
+          isRecording = true;
+          recordBtn.textContent = 'Stop Recording';
+          recordBtn.classList.add('recording');
+          statusText.textContent = 'Listening...';
+          responseBox.style.display = 'none';
+        } catch (err) {
+          console.error('Microphone access denied or unsupported:', err);
+          statusText.textContent = 'Error: Mic access denied.';
+        }
+      }
+
+      function stopRecording() {
+        if (mediaRecorder && isRecording) {
+          mediaRecorder.stop();
+          isRecording = false;
+          recordBtn.textContent = 'Record';
+          recordBtn.classList.remove('recording');
+          statusText.textContent = 'Processing audio...';
+        }
+      }
+
+      async function sendAudioToBackend(blob) {
+        const formData = new FormData();
+        formData.append('file', blob, 'command.webm');
+        formData.append('sync', 'true');
+        formData.append('one_shot', oneShotToggle.checked ? 'true' : 'false');
+
+        try {
+          const response = await fetch('/voice', {
+            method: 'POST',
+            headers: { 'auth': deviceToken },
+            body: formData
+          });
+
+          if (!response.ok) throw new Error(`Server returned ${response.status}`);
+
+          const data = await response.json();
+          statusText.textContent = 'Done!';
+          responseBox.style.display = 'block';
+          transcriptionText.textContent = data.transcription || '(none)';
+          replyText.textContent = data.reply;
+          if (data.keyword) {
+            keywordSection.style.display = '';
+            keywordText.textContent = data.keyword;
+            keywordSayText.textContent = data.keyword;
+          } else {
+            keywordSection.style.display = 'none';
+          }
+
+          console.log(data);
+
+        } catch (error) {
+          console.error('Transmission failed:', error);
+          statusText.textContent = 'Error sending audio to backend.';
+        }
       }
     }
   </script>

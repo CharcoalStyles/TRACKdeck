@@ -18,6 +18,7 @@
       <a href="/static/onboarding.html" class="active">Onboarding</a>
       <a href="/static/profile.html">Profile</a>
       <a href="/static/settings.html">Settings</a>
+      <a href="#" id="logoutBtn">Log out</a>
     </nav>
   </header>
 
@@ -66,62 +67,70 @@
   <script type="module">
     import { ChatWidget } from '/static/js/chat.js';
     import { getSettings, updateSettings } from '/static/js/api.js';
+    import { requireSession, logout } from '/static/js/auth.js';
 
-    new ChatWidget(document.getElementById('chat-root'), {
-      threadId: 'onboarding',
-      mode: 'onboarding',
-      greeting: "Hey — let's get to know you a bit. Nothing here is required, and you can stop whenever you like. To start, what do you do for work, or spend most of your time on?",
+    document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+      e.preventDefault();
+      await logout();
     });
 
-    const onboardLocationInput = document.getElementById('onboardLocationInput');
-    const onboardTimezoneInput = document.getElementById('onboardTimezoneInput');
-    const onboardTimezoneOptions = document.getElementById('onboardTimezoneOptions');
-    const onboardDetectTimezoneBtn = document.getElementById('onboardDetectTimezoneBtn');
-    const onboardSaveBasicsBtn = document.getElementById('onboardSaveBasicsBtn');
-    const onboardBasicsStatus = document.getElementById('onboardBasicsStatus');
+    if (await requireSession()) {
+      new ChatWidget(document.getElementById('chat-root'), {
+        threadId: 'onboarding',
+        mode: 'onboarding',
+        greeting: "Hey — let's get to know you a bit. Nothing here is required, and you can stop whenever you like. To start, what do you do for work, or spend most of your time on?",
+      });
 
-    if (typeof Intl.supportedValuesOf === 'function') {
-      for (const tz of Intl.supportedValuesOf('timeZone')) {
-        const opt = document.createElement('option');
-        opt.value = tz;
-        onboardTimezoneOptions.appendChild(opt);
+      const onboardLocationInput = document.getElementById('onboardLocationInput');
+      const onboardTimezoneInput = document.getElementById('onboardTimezoneInput');
+      const onboardTimezoneOptions = document.getElementById('onboardTimezoneOptions');
+      const onboardDetectTimezoneBtn = document.getElementById('onboardDetectTimezoneBtn');
+      const onboardSaveBasicsBtn = document.getElementById('onboardSaveBasicsBtn');
+      const onboardBasicsStatus = document.getElementById('onboardBasicsStatus');
+
+      if (typeof Intl.supportedValuesOf === 'function') {
+        for (const tz of Intl.supportedValuesOf('timeZone')) {
+          const opt = document.createElement('option');
+          opt.value = tz;
+          onboardTimezoneOptions.appendChild(opt);
+        }
       }
+
+      async function loadBasics() {
+        try {
+          const data = await getSettings();
+          onboardLocationInput.value = data.default_location || '';
+          // Prefill with the browser's detected zone only if nothing's been
+          // set yet, so a first-time visit starts with a sensible guess.
+          onboardTimezoneInput.value = data.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+        } catch (error) {
+          console.error('Failed to load settings:', error);
+        }
+      }
+
+      onboardDetectTimezoneBtn.addEventListener('click', () => {
+        onboardTimezoneInput.value = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      });
+
+      onboardSaveBasicsBtn.addEventListener('click', async () => {
+        onboardBasicsStatus.textContent = 'Saving...';
+        onboardBasicsStatus.style.color = '#888';
+        try {
+          await updateSettings({
+            default_location: onboardLocationInput.value,
+            timezone: onboardTimezoneInput.value,
+          });
+          onboardBasicsStatus.textContent = 'Saved.';
+          onboardBasicsStatus.style.color = '#00adb5';
+        } catch (error) {
+          console.error('Failed to save basics:', error);
+          onboardBasicsStatus.textContent = 'Failed to save — check the timezone name is a valid IANA zone.';
+          onboardBasicsStatus.style.color = '#ff6b6b';
+        }
+      });
+
+      loadBasics();
     }
-
-    async function loadBasics() {
-      try {
-        const data = await getSettings();
-        onboardLocationInput.value = data.default_location || '';
-        // Prefill with the browser's detected zone only if nothing's been
-        // set yet, so a first-time visit starts with a sensible guess.
-        onboardTimezoneInput.value = data.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-      } catch (error) {
-        console.error('Failed to load settings:', error);
-      }
-    }
-
-    onboardDetectTimezoneBtn.addEventListener('click', () => {
-      onboardTimezoneInput.value = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    });
-
-    onboardSaveBasicsBtn.addEventListener('click', async () => {
-      onboardBasicsStatus.textContent = 'Saving...';
-      onboardBasicsStatus.style.color = '#888';
-      try {
-        await updateSettings({
-          default_location: onboardLocationInput.value,
-          timezone: onboardTimezoneInput.value,
-        });
-        onboardBasicsStatus.textContent = 'Saved.';
-        onboardBasicsStatus.style.color = '#00adb5';
-      } catch (error) {
-        console.error('Failed to save basics:', error);
-        onboardBasicsStatus.textContent = 'Failed to save — check the timezone name is a valid IANA zone.';
-        onboardBasicsStatus.style.color = '#ff6b6b';
-      }
-    });
-
-    loadBasics();
   </script>
 </body>
 

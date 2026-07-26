@@ -22,6 +22,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "python-multipart>=0.0.32",
     "uvicorn>=0.49.0",
+    "itsdangerous>=2.2.0",
 ]
 
 [dependency-groups]

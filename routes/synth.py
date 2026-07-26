@@ -4,10 +4,12 @@ import time
 import wave
 import base64
 from typing import Annotated
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from piper import PiperVoice
+
+import auth
 
 # You can add global prefixes or tags here
 router = APIRouter()
@@ -38,10 +40,9 @@ class TTSResponse(BaseModel):
     generation_time: float
 
 @router.post("/synthesize", response_model=TTSResponse)
-async def synthesize_text_json(request: TTSRequest, auth: Annotated[str | None, Header()] = None):
-    if auth != os.environ["API_TOKEN"]:
-        raise HTTPException(status_code=401, detail="Unauthorized request source")
-
+async def synthesize_text_json(
+    request: TTSRequest, _: Annotated[None, Depends(auth.require_device_token)]
+):
     if not request.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
 

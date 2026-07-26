@@ -58,8 +58,8 @@ from typing import Annotated
 from fastapi import (
     APIRouter,
     BackgroundTasks,
+    Depends,
     Form,
-    Header,
     HTTPException,
     Response,
     UploadFile,
@@ -67,13 +67,13 @@ from fastapi import (
 )
 from faster_whisper import WhisperModel
 
+import auth
 from jobs import checkin as checkin_jobs
 from agent.runtime import run_agent
 from utils.notify import notify_error
 
 logger = logging.getLogger(__name__)
 
-API_TOKEN = os.environ["API_TOKEN"]
 UPLOAD_DIR = "./received_notes"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -140,17 +140,13 @@ async def _process_voice_note(audio_path: str, one_shot: bool, checkin_id: str |
 @router.post("/voice")
 async def receive_note(
     background_tasks: BackgroundTasks,
+    _: Annotated[None, Depends(auth.require_device_token)] = None,
     file: UploadFile = File(...),
     one_shot: Annotated[bool, Form()] = False,
     sync: Annotated[bool, Form()] = False,
     checkin_id: Annotated[str | None, Form()] = None,
-    auth: Annotated[str | None, Header()] = None,
 ):
-    # 1. Enforce token security
-    if auth != API_TOKEN:
-        raise HTTPException(status_code=401, detail="Unauthorized request source")
-
-    # 2. Stream and write the raw audio chunk data from the ESP32
+    # 1. Stream and write the raw audio chunk data from the ESP32
     timestamp = int(time.time())
     audio_path = os.path.join(UPLOAD_DIR, f"note_{timestamp}.wav")
 
@@ -160,7 +156,7 @@ async def receive_note(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed writing audio: {str(e)}")
 
-    # 3a. Testing path — wait for the full pipeline, return the result.
+    # 2a. Testing path — wait for the full pipeline, return the result.
     if sync:
         try:
             transcription, reply, keyword = await _transcribe_and_run(audio_path, one_shot, checkin_id)
@@ -171,7 +167,7 @@ async def receive_note(
             return {"transcription": "", "reply": "(no speech detected)", "keyword": ""}
         return {"transcription": transcription, "reply": reply, "keyword": keyword}
 
-    # 3b. Production path — hand off to the background task and respond
+    # 2b. Production path — hand off to the background task and respond
     #     immediately. The device doesn't wait for transcription, the
     #     agent, or anything else.
     background_tasks.add_task(_process_voice_note, audio_path, one_shot, checkin_id)

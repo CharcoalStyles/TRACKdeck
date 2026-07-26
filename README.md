@@ -354,27 +354,46 @@ See `.env.example` for the full list. Grouped by what needs external setup:
 - **SMTP** — `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`,
   `DIGEST_EMAIL_TO`.
 - **Vault** — `VAULT_PATH` (defaults to `./data/vault`, matching the Docker layout).
-- **`API_TOKEN`** — gates `/voice` and the mutating `/debug/*`/`/settings` routes.
-  **`/text` currently has no auth at all** — see [Known limitations](#known-limitations).
+- **`API_TOKEN`** — bearer-token credential for hardware/unattended callers that can't do
+  cookies: `/voice`, `/device/sync`, `/device/checkin/{id}/skip`, `/synthesize` (see
+  `auth.py`'s `require_device_token`). Also still accepted as a fallback on every
+  dashboard-facing route below, so `curl -H "auth: $API_TOKEN"` scripting keeps working.
+- **`DASHBOARD_PASSWORD`, `SESSION_SECRET_KEY`, `SESSION_COOKIE_SECURE`,
+  `SESSION_MAX_AGE_DAYS`** — the browser dashboard's real login/session system
+  (`auth.py`'s `require_session_or_token`, `POST /login`/`POST /logout`, Starlette's
+  `SessionMiddleware`). Kept as a separate secret from `API_TOKEN` on purpose — rotating
+  the ESP32's device token shouldn't force a dashboard relogin, and vice versa.
+  `SESSION_COOKIE_SECURE` should only flip to `true` once this app sits behind an
+  HTTPS-terminating reverse proxy/tunnel; see `.env.example`'s comment for why doing it
+  earlier silently breaks login.
 - **`LEARNING_MODE_DEFAULT`** — startup default; live-changeable after that via `/settings`.
 
 ## API reference
 
 | Route | Method | Auth | Purpose |
 |---|---|---|---|
-| `/text` | POST | none | Talk to the agent as text. `thread_id`, `one_shot`, `mode` optional |
+| `/login` | POST | none | Password → session cookie for the dashboard |
+| `/logout` | POST | none | Clears the session cookie |
+| `/device/token` | GET | session-or-token | Lets an already-logged-in dashboard fetch `API_TOKEN` (only used by the Voice Test page, to call the device-token-only `/voice`) |
+| `/text` | POST | session-or-token | Talk to the agent as text. `thread_id`, `one_shot`, `mode` optional |
 | `/voice` | POST | `API_TOKEN` | Audio upload. `sync`, `one_shot` form fields for testing |
-| `/threads` | GET | none | Sidebar thread list |
-| `/threads/new` | POST | none | Mint a new thread before any message |
-| `/threads/{id}/messages` | GET | none | Thread history for the sidebar |
-| `/settings` | GET | none | Current standing toggles |
-| `/settings` | POST | `API_TOKEN` | Update standing toggles |
+| `/threads` | GET | session-or-token | Sidebar thread list |
+| `/threads/new` | POST | session-or-token | Mint a new thread before any message |
+| `/threads/{id}/messages` | GET | session-or-token | Thread history for the sidebar |
+| `/settings` | GET | session-or-token | Current standing toggles |
+| `/settings` | POST | session-or-token | Update standing toggles |
 | `/health` | GET | none | Liveness/readiness check |
-| `/debug/digest` | POST | `API_TOKEN` | Fire the daily digest on demand |
-| `/debug/reminders/fire/{id}` | POST | `API_TOKEN` | Fire a specific pending reminder on demand |
-| `/debug/calendar-sync` | POST | `API_TOKEN` | Run a calendar reminder sync pass on demand |
-| `/debug/reconcile-vault` | POST | `API_TOKEN` | Force a full vault/index reconciliation |
-| `/synthesize` | POST | none | Piper TTS — built, unused in the production voice flow |
+| `/debug/digest` | POST | session-or-token | Fire the daily digest on demand |
+| `/debug/reminders/fire/{id}` | POST | session-or-token | Fire a specific pending reminder on demand |
+| `/debug/calendar-sync` | POST | session-or-token | Run a calendar reminder sync pass on demand |
+| `/debug/reconcile-vault` | POST | session-or-token | Force a full vault/index reconciliation |
+| `/synthesize` | POST | `API_TOKEN` | Piper TTS — built, unused in the production voice flow |
+
+"session-or-token" (`auth.py`'s `require_session_or_token`) accepts either a valid dashboard
+session cookie or the `API_TOKEN` header. `/checkin/{id}/skip`, `/checkin/{id}/reply`, and
+`/checkin/{id}/voice` are deliberately excluded from both this table's auth tiers — they're
+gated only by possessing that check-in's own UUID, a magic-link trust model unrelated to
+login (see `jobs/checkin.py`'s `answer_checkin` docstring).
 
 ## Running it
 

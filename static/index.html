@@ -18,6 +18,7 @@
       <a href="/static/onboarding.html">Onboarding</a>
       <a href="/static/profile.html">Profile</a>
       <a href="/static/settings.html">Settings</a>
+      <a href="#" id="logoutBtn">Log out</a>
     </nav>
   </header>
 
@@ -36,70 +37,80 @@
   <script type="module">
     import { ChatWidget } from '/static/js/chat.js';
     import { listThreads, createNewThread, getThreadMessages } from '/static/js/api.js';
+    import { requireSession, logout } from '/static/js/auth.js';
 
-    const threadListEl = document.getElementById('threadList');
-    let activeThreadId = null;
-
-    const chat = new ChatWidget(document.getElementById('chat-root'), {
-      greeting: "Pick a conversation on the left, or start a new one — this talks to the same agent as everything else, no fixed mode.",
-      onReply: (data) => {
-        // A message sent with no thread selected mints a new one on the
-        // backend — make sure the sidebar picks it up and highlights it.
-        activeThreadId = data.thread_id;
-        refreshThreadList();
-      },
+    document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+      e.preventDefault();
+      await logout();
     });
 
-    function renderThreadList(threads) {
-      threadListEl.innerHTML = '';
-      if (threads.length === 0) {
-        threadListEl.innerHTML = '<div class="thread-empty">No conversations yet today — start one below.</div>';
-        return;
+    // requireSession() already redirects to /static/login.html on 401 —
+    // the rest of this page's logic only runs for an authenticated session.
+    if (await requireSession()) {
+      const threadListEl = document.getElementById('threadList');
+      let activeThreadId = null;
+
+      const chat = new ChatWidget(document.getElementById('chat-root'), {
+        greeting: "Pick a conversation on the left, or start a new one — this talks to the same agent as everything else, no fixed mode.",
+        onReply: (data) => {
+          // A message sent with no thread selected mints a new one on the
+          // backend — make sure the sidebar picks it up and highlights it.
+          activeThreadId = data.thread_id;
+          refreshThreadList();
+        },
+      });
+
+      function renderThreadList(threads) {
+        threadListEl.innerHTML = '';
+        if (threads.length === 0) {
+          threadListEl.innerHTML = '<div class="thread-empty">No conversations yet today — start one below.</div>';
+          return;
+        }
+        for (const t of threads) {
+          const item = document.createElement('button');
+          item.className = 'thread-item' + (t.thread_id === activeThreadId ? ' active' : '');
+          item.textContent = t.keyword;
+          item.title = t.keyword;
+          item.addEventListener('click', () => selectThread(t.thread_id));
+          threadListEl.appendChild(item);
+        }
       }
-      for (const t of threads) {
-        const item = document.createElement('button');
-        item.className = 'thread-item' + (t.thread_id === activeThreadId ? ' active' : '');
-        item.textContent = t.keyword;
-        item.title = t.keyword;
-        item.addEventListener('click', () => selectThread(t.thread_id));
-        threadListEl.appendChild(item);
+
+      async function refreshThreadList() {
+        try {
+          const threads = await listThreads();
+          renderThreadList(threads);
+        } catch (err) {
+          console.error('Failed to load threads:', err);
+          threadListEl.innerHTML = '<div class="thread-empty">Could not load conversations.</div>';
+        }
       }
+
+      async function selectThread(threadId) {
+        if (threadId === activeThreadId) return;
+        activeThreadId = threadId;
+        renderThreadList(await listThreads()); // reflect the new active state immediately
+        try {
+          const messages = await getThreadMessages(threadId);
+          chat.setThread(threadId, messages);
+        } catch (err) {
+          console.error('Failed to load conversation:', err);
+        }
+      }
+
+      document.getElementById('newChatBtn').addEventListener('click', async () => {
+        try {
+          const { thread_id } = await createNewThread();
+          activeThreadId = thread_id;
+          chat.setThread(thread_id, []);
+          await refreshThreadList();
+        } catch (err) {
+          console.error('Failed to start new chat:', err);
+        }
+      });
+
+      refreshThreadList();
     }
-
-    async function refreshThreadList() {
-      try {
-        const threads = await listThreads();
-        renderThreadList(threads);
-      } catch (err) {
-        console.error('Failed to load threads:', err);
-        threadListEl.innerHTML = '<div class="thread-empty">Could not load conversations.</div>';
-      }
-    }
-
-    async function selectThread(threadId) {
-      if (threadId === activeThreadId) return;
-      activeThreadId = threadId;
-      renderThreadList(await listThreads()); // reflect the new active state immediately
-      try {
-        const messages = await getThreadMessages(threadId);
-        chat.setThread(threadId, messages);
-      } catch (err) {
-        console.error('Failed to load conversation:', err);
-      }
-    }
-
-    document.getElementById('newChatBtn').addEventListener('click', async () => {
-      try {
-        const { thread_id } = await createNewThread();
-        activeThreadId = thread_id;
-        chat.setThread(thread_id, []);
-        await refreshThreadList();
-      } catch (err) {
-        console.error('Failed to start new chat:', err);
-      }
-    });
-
-    refreshThreadList();
   </script>
 </body>
 

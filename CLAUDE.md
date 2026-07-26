@@ -180,6 +180,7 @@ Learning mode and the two active modes are mutually exclusive per turn.
 
 ```
 main.py                    FastAPI app, routes, lifespan (scheduler, watcher, reconciliation)
+auth.py                     require_device_token/require_session_or_token, dashboard login
 voice.py                   /voice — fire-and-forget ESP32 ingestion
 agent/
   graph.py                 LangGraph build, system prompt + mode addendums
@@ -204,7 +205,8 @@ utils/
   notify.py, mailer.py        Gotify, SMTP
 routes/
   synth.py                    Piper TTS (built, not wired into the production voice flow)
-static/                       Dashboard (index/voice/onboarding/profile/settings .html)
+static/                       Dashboard (index/voice/onboarding/profile/settings .html);
+                                login.html public, js/auth.js is the client-side session gate
 docker-compose.yml            assistant + syncthing services, shared vault volume
 setup_check.sh                 Verifies/downloads Piper models, fixes the memory.db/reminders.db bind-mount gotcha
 reset_knowledge.sh              Wipes memory/index/checkpoints; vault wipe gated behind --vault
@@ -222,13 +224,24 @@ See `.env.example` for the full list. Notable ones:
 - **SMTP** — `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`,
   `DIGEST_EMAIL_TO`.
 - **Vault** — `VAULT_PATH` (defaults to `./data/vault`).
-- **`API_TOKEN`** — gates `/voice` and mutating `/debug/*`/`/settings` routes. **`/text` has
-  no auth at all** — known gap, see below. The dashboard needs this same value client-side;
-  rather than hardcoding it into the checked-in `static/js/api.js` (which would put a real
-  secret in git), `main.py`'s `api_js()` route is registered ahead of the `/static` mount
-  and serves that one file with `_PLACEHOLDER_API_TOKEN` substituted for the real
-  `os.environ["API_TOKEN"]` at request time, `Cache-Control: no-store`. The file on disk
-  keeps the placeholder.
+- **`API_TOKEN`** — bearer-token credential for hardware/unattended callers that can't do
+  cookies: `/voice`, `/device/sync`, `/device/checkin/{id}/skip`, `/synthesize`
+  (`auth.py`'s `require_device_token`). Also accepted as a fallback on every dashboard-facing
+  route, so `curl -H "auth: $API_TOKEN"` scripting keeps working alongside a logged-in
+  browser.
+- **`DASHBOARD_PASSWORD`, `SESSION_SECRET_KEY`, `SESSION_COOKIE_SECURE`,
+  `SESSION_MAX_AGE_DAYS`** — the browser dashboard's real login system. `POST /login` checks
+  `DASHBOARD_PASSWORD` and sets a signed session cookie (Starlette's `SessionMiddleware`,
+  `SESSION_SECRET_KEY`); `auth.py`'s `require_session_or_token` gates every dashboard-facing
+  route on either that cookie or `API_TOKEN`. Kept as a separate secret from `API_TOKEN` on
+  purpose — rotating the ESP32's device token shouldn't force a dashboard relogin, and vice
+  versa. `static/login.html` is the login page (same no-nav, no-`api.js`/`chat.js`-import
+  pattern as `static/checkin.html`); `static/js/auth.js`'s `requireSession()` is the
+  client-side gate the other dashboard pages use, since they're served by the plain
+  `StaticFiles` mount and can't get a server-side redirect the way `GET /` can.
+  `SESSION_COOKIE_SECURE` should only flip to `true` once this app sits behind an
+  HTTPS-terminating reverse proxy/tunnel — see `.env.example`'s comment for why doing it
+  earlier silently breaks login (a `Secure` cookie is never sent over plain HTTP).
 - **`LEARNING_MODE_DEFAULT`** — startup default for `agent/settings.py`'s `learning_mode`;
   live-changeable via `/settings`.
 - **`default_location`, `timezone`, `digest_time`, `bedtime`,
@@ -251,7 +264,6 @@ See `.env.example` for the full list. Notable ones:
 - `routes/synth.py` raises at import time if Piper model files are missing, taking down the
   whole app since it's imported at module load (mitigated operationally by
   `setup_check.sh`, not fixed in code).
-- `/text` has no authentication.
 - Threads (and keyword addressability) are swept nightly regardless of origin — dashboard
   conversations have the same one-day lifespan as voice-command keywords. Deliberate
   ("threads are threads"), not an oversight.

@@ -18,6 +18,7 @@
       <a href="/static/onboarding.html">Onboarding</a>
       <a href="/static/profile.html" class="active">Profile</a>
       <a href="/static/settings.html">Settings</a>
+      <a href="#" id="logoutBtn">Log out</a>
     </nav>
   </header>
 
@@ -34,12 +35,20 @@
 
   <script type="module">
     import { ChatWidget } from '/static/js/chat.js';
+    import { requireSession, logout } from '/static/js/auth.js';
 
-    new ChatWidget(document.getElementById('chat-root'), {
-      threadId: 'profile_chat',
-      mode: 'profile_chat',
-      greeting: "What would you like to know, or is there something to add or correct?",
+    document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+      e.preventDefault();
+      await logout();
     });
+
+    if (await requireSession()) {
+      new ChatWidget(document.getElementById('chat-root'), {
+        threadId: 'profile_chat',
+        mode: 'profile_chat',
+        greeting: "What would you like to know, or is there something to add or correct?",
+      });
+    }
   </script>
 </body>
 

@@ -3,8 +3,12 @@
 // Thin fetch wrappers shared across every dashboard page. Nothing
 // framework-specific here — just native ES module exports, imported
 // directly by browsers that support <script type="module">.
-
-export const AUTH_TOKEN = 'YOUR_SUPER_SECRET_SECURE_TOKEN';
+//
+// Auth rides along automatically: same-origin fetches send the signed
+// session cookie set by POST /login (main.py's SessionMiddleware), no
+// token needs to be attached client-side. A logged-out browser gets a
+// 401 from any of these — see static/js/auth.js's requireSession() for
+// the redirect-to-login handling.
 
 /**
  * Send one turn to the agent.
@@ -13,7 +17,7 @@ export const AUTH_TOKEN = 'YOUR_SUPER_SECRET_SECURE_TOKEN';
 export async function sendText(text, { threadId = null, oneShot = false, mode = null } = {}) {
   const response = await fetch('/text', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'auth': AUTH_TOKEN },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       text,
       thread_id: threadId,
@@ -34,10 +38,7 @@ export async function getSettings() {
 export async function updateSettings(update) {
   const response = await fetch('/settings', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'auth': AUTH_TOKEN,
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(update),
   });
   if (!response.ok) throw new Error(`Server returned ${response.status}`);
@@ -53,10 +54,7 @@ export async function listThreads() {
 
 /** @returns {Promise<{thread_id: string, keyword: string}>} */
 export async function createNewThread() {
-  const response = await fetch('/threads/new', {
-    method: 'POST',
-    headers: { 'auth': AUTH_TOKEN },
-  });
+  const response = await fetch('/threads/new', { method: 'POST' });
   if (!response.ok) throw new Error(`Server returned ${response.status}`);
   return response.json();
 }

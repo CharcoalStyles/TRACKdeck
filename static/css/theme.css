@@ -227,6 +227,10 @@
       margin-top: 0.5rem;
     }
 
+    .save-status.error {
+      color: #ff6b6b;
+    }
+
     .field-row {
       display: flex;
       flex-direction: column;
