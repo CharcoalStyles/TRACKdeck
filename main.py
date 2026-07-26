@@ -606,6 +606,15 @@ class DeviceTelemetry(BaseModel):
     wake_reason: str | None = None
     firmware_version: str | None = None
     rssi_dbm: int | None = None
+    # Milliseconds the device was awake this cycle (wifi connect ->
+    # response received) — the actual number that validates or refutes
+    # the multi-day battery estimate, rather than guessing at it.
+    time_awake_ms: int | None = None
+    # ESP-IDF's esp_reset_reason() stringified by firmware (e.g.
+    # "power_on", "deep_sleep_wake", "brownout", "watchdog", "panic") —
+    # the only visibility into a crash/brownout during the beta without
+    # a debugger attached.
+    reset_reason: str | None = None
 
 
 @app.post("/device/sync")
@@ -632,6 +641,8 @@ async def device_sync(
         telemetry.wake_reason,
         telemetry.firmware_version,
         telemetry.rssi_dbm,
+        telemetry.time_awake_ms,
+        telemetry.reset_reason,
         int(time.time()),
     )
     return await build_sync_payload()

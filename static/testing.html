@@ -156,6 +156,8 @@
               `Last synced: ${syncedAgoSec}s ago`,
               `Battery: ${battery}`,
               `Wake reason: ${state.wake_reason ?? '—'}`,
+              `Reset reason: ${state.reset_reason ?? '—'}`,
+              `Time awake this cycle: ${state.time_awake_ms != null ? state.time_awake_ms + 'ms' : '—'}`,
               `Firmware: ${state.firmware_version ?? '—'}`,
               `RSSI: ${state.rssi_dbm != null ? state.rssi_dbm + ' dBm' : '—'}`,
             ].join('\n');

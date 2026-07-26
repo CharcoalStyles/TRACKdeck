@@ -282,9 +282,14 @@ this codebase are what actually fire reminders/check-ins/bedtime regardless of w
 device is online; this endpoint only decides what to *show* on its eink display.
 
 The device may POST optional telemetry in the request body (`battery_mv`, `wake_reason`,
-`firmware_version`, `rssi_dbm` — all nullable, since early firmware may not send everything
-yet), recorded into `device_state.db` (`utils/device_state.py`, a single-row store — one
-physical device, no fleet concept) and visible on the dashboard's Testing page.
+`firmware_version`, `rssi_dbm`, `time_awake_ms`, `reset_reason` — all nullable, since early
+firmware may not send everything yet), recorded into `device_state.db`
+(`utils/device_state.py`, a single-row store — one physical device, no fleet concept) and
+visible on the dashboard's Testing page. `time_awake_ms` (wifi connect → response received)
+is what actually validates the multi-day battery estimate instead of guessing at it;
+`reset_reason` is ESP-IDF's `esp_reset_reason()` stringified by firmware (e.g. `"power_on"`,
+`"deep_sleep_wake"`, `"brownout"`, `"watchdog"`) — the only visibility into a crash during
+the beta without a debugger attached.
 
 The response (`jobs/device_sync.py`'s `build_sync_payload`) is a full 24-hour snapshot,
 rebuilt from scratch on every call (no delta/cursor tracking, same stateless pattern
@@ -301,8 +306,10 @@ rebuilt from scratch on every call (no delta/cursor tracking, same stateless pat
   `checkins_store.list_next_24h` and the new `reminders_store.list_pending_due_within_24h`.
 - `calendar_events` — a raw agenda (even events without their own alarm), via
   `utils/next_cloud_calendar.py`'s `get_events_in_range`.
-- `weather` — current conditions (`agent/tools/weather.py`'s `fetch_current_conditions`,
-  factored out of the `get_current_weather` tool so both share one Open-Meteo call).
+- `weather` — current conditions plus today's min/max temp and sunrise/sunset
+  (`agent/tools/weather.py`'s `fetch_current_conditions`, factored out of the
+  `get_current_weather` tool so both share one Open-Meteo call — the daily fields ride
+  along on the same request via Open-Meteo's `daily` param, not a second call).
 
 Calendar and weather are both external services that can be briefly unreachable; either
 failing degrades to `[]`/`null` rather than failing the whole sync (which would also cost

@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 
 from langchain_core.tools import tool
@@ -28,9 +29,23 @@ def call_open_meteo_forecast(latitude: float, longitude: float, params: dict) ->
     response.raise_for_status()
     return response.json()
 
+def _parse_open_meteo_local(value: str) -> Optional[int]:
+    """Open-Meteo returns daily sunrise/sunset as a naive local ISO
+    string (e.g. "2026-07-27T07:02") when a `timezone` param is passed —
+    naive because it's already in that zone, not UTC. Attach the app's
+    configured zone and convert to epoch seconds for consistency with
+    every other timestamp in the device sync payload."""
+    try:
+        return int(datetime.fromisoformat(value).replace(tzinfo=settings.zoneinfo()).timestamp())
+    except (ValueError, TypeError):
+        return None
+
+
 def fetch_current_conditions(location: str) -> Optional[dict]:
     """Shared by get_current_weather (LLM tool, formats to a string) and
-    jobs/device_sync.py's build_sync_payload (needs structured fields).
+    jobs/device_sync.py's build_sync_payload (needs structured fields,
+    including today's sunrise/sunset/min/max — get_current_weather's
+    string output ignores those extra keys, no behavior change there).
     Returns None if the location can't be resolved or Open-Meteo fails —
     callers must handle that gracefully rather than treating it as fatal."""
     try:
@@ -41,10 +56,16 @@ def fetch_current_conditions(location: str) -> Optional[dict]:
         latitude = location_data["results"][0]['latitude']
         longitude = location_data["results"][0]['longitude']
 
+        # `daily` piggybacks on the same request as `current` — one
+        # Open-Meteo call gets both, not two. `timezone` is required for
+        # daily's date bucketing (and sunrise/sunset) to align with the
+        # app's configured local calendar day rather than UTC.
         params = {
             'latitude': latitude,
             'longitude': longitude,
             'current': 'temperature_2m,cloudcover,precipitation',
+            'daily': 'temperature_2m_min,temperature_2m_max,sunrise,sunset',
+            'timezone': settings.timezone,
             'format': 'json',
         }
 
@@ -53,11 +74,20 @@ def fetch_current_conditions(location: str) -> Optional[dict]:
         if "error" in data:
             return None
 
-        return {
+        result = {
             "temperature_c": data["current"]["temperature_2m"],
             "cloud_cover_pct": data["current"]["cloudcover"],
             "precipitation_mm": data["current"]["precipitation"],
         }
+
+        daily = data.get("daily")
+        if daily and daily.get("time"):
+            result["temperature_min_c"] = daily["temperature_2m_min"][0]
+            result["temperature_max_c"] = daily["temperature_2m_max"][0]
+            result["sunrise"] = _parse_open_meteo_local(daily["sunrise"][0])
+            result["sunset"] = _parse_open_meteo_local(daily["sunset"][0])
+
+        return result
 
     except requests.exceptions.RequestException as e:
         logger.error("Error connecting to Open-Meteo: %s", e)

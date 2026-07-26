@@ -34,10 +34,20 @@ def init_db() -> None:
                 wake_reason TEXT,
                 firmware_version TEXT,
                 rssi_dbm INTEGER,
+                time_awake_ms INTEGER,
+                reset_reason TEXT,
                 last_synced_at INTEGER NOT NULL
             )
             """
         )
+        # Migration guard for a device_state.db created before
+        # time_awake_ms/reset_reason existed — CREATE TABLE IF NOT
+        # EXISTS above doesn't add columns to an already-existing table.
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(device_state)")}
+        if "time_awake_ms" not in columns:
+            conn.execute("ALTER TABLE device_state ADD COLUMN time_awake_ms INTEGER")
+        if "reset_reason" not in columns:
+            conn.execute("ALTER TABLE device_state ADD COLUMN reset_reason TEXT")
 
 
 def record_sync(
@@ -45,21 +55,28 @@ def record_sync(
     wake_reason: Optional[str],
     firmware_version: Optional[str],
     rssi_dbm: Optional[int],
+    time_awake_ms: Optional[int],
+    reset_reason: Optional[str],
     synced_at: int,
 ) -> None:
     with _connect() as conn:
         conn.execute(
             """
-            INSERT INTO device_state (id, battery_mv, wake_reason, firmware_version, rssi_dbm, last_synced_at)
-            VALUES (1, ?, ?, ?, ?, ?)
+            INSERT INTO device_state (
+                id, battery_mv, wake_reason, firmware_version, rssi_dbm,
+                time_awake_ms, reset_reason, last_synced_at
+            )
+            VALUES (1, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 battery_mv = excluded.battery_mv,
                 wake_reason = excluded.wake_reason,
                 firmware_version = excluded.firmware_version,
                 rssi_dbm = excluded.rssi_dbm,
+                time_awake_ms = excluded.time_awake_ms,
+                reset_reason = excluded.reset_reason,
                 last_synced_at = excluded.last_synced_at
             """,
-            (battery_mv, wake_reason, firmware_version, rssi_dbm, synced_at),
+            (battery_mv, wake_reason, firmware_version, rssi_dbm, time_awake_ms, reset_reason, synced_at),
         )
 
 
