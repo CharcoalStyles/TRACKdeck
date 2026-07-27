@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Check-Ins — Assistant Dashboard</title>
+  <link rel="stylesheet" href="/static/css/theme.css">
+</head>
+
+<body>
+
+  <header>
+    <h1>Assistant Dashboard</h1>
+    <nav>
+      <a href="/static/index.html">Chat</a>
+      <a href="/static/voice.html">Voice Test</a>
+      <a href="/static/onboarding.html">Onboarding</a>
+      <a href="/static/profile.html">Profile</a>
+      <a href="/static/settings.html">Settings</a>
+      <a href="/static/testing.html">Testing</a>
+      <a href="/static/checkins.html" class="active">Check-Ins</a>
+      <a href="#" id="logoutBtn">Log out</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="card">
+      <h2>Today's Check-Ins</h2>
+      <p class="description">Short reflective prompts sent throughout the day, and how you responded — answered, skipped, or missed.</p>
+      <div class="field-row"><button type="button" id="refreshBtn" class="secondary-btn">Refresh</button></div>
+      <div class="save-status" id="checkinsStatus"></div>
+    </div>
+
+    <div id="checkinsList"></div>
+  </main>
+
+  <script type="module">
+    import { getTodaysCheckins } from '/static/js/api.js';
+    import { requireSession, logout } from '/static/js/auth.js';
+
+    document.getElementById('logoutBtn').addEventListener('click', async (e) => {
+      e.preventDefault();
+      await logout();
+    });
+
+    if (await requireSession()) {
+      const refreshBtn = document.getElementById('refreshBtn');
+      const checkinsStatus = document.getElementById('checkinsStatus');
+      const checkinsList = document.getElementById('checkinsList');
+
+      const STATUS_LABEL = { answered: 'Answered', skipped: 'Skipped', expired: 'Missed' };
+      const STATUS_COLOR = { answered: '#00adb5', skipped: '#888', expired: '#ff6b6b' };
+
+      function showStatus(el, text, ok = true) {
+        el.textContent = text;
+        el.style.color = ok ? '#00adb5' : '#ff6b6b';
+      }
+
+      function formatTime(epochSeconds) {
+        return new Date(epochSeconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+
+      function renderCheckin(checkin) {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        const heading = document.createElement('h2');
+        const timeLabel = formatTime(checkin.resolved_at ?? checkin.fired_at ?? checkin.scheduled_at);
+        heading.textContent = `${timeLabel} — ${checkin.category}`;
+
+        const statusBadge = document.createElement('span');
+        statusBadge.textContent = ` ${STATUS_LABEL[checkin.status] ?? checkin.status}`;
+        statusBadge.style.color = STATUS_COLOR[checkin.status] ?? '#aaa';
+        statusBadge.style.fontSize = '0.8rem';
+        statusBadge.style.fontWeight = '600';
+        heading.appendChild(statusBadge);
+
+        const prompt = document.createElement('p');
+        prompt.className = 'description';
+        prompt.style.marginBottom = checkin.reply ? '0.75rem' : '0';
+        prompt.textContent = checkin.prompt_text;
+
+        card.appendChild(heading);
+        card.appendChild(prompt);
+
+        if (checkin.reply) {
+          const reply = document.createElement('p');
+          reply.style.margin = '0';
+          reply.style.color = '#e0e0e0';
+          reply.style.borderLeft = '3px solid #00adb5';
+          reply.style.paddingLeft = '0.75rem';
+          reply.textContent = checkin.reply;
+          card.appendChild(reply);
+        }
+
+        return card;
+      }
+
+      async function loadCheckins() {
+        showStatus(checkinsStatus, 'Loading...', true);
+        try {
+          const { checkins } = await getTodaysCheckins();
+          checkinsList.replaceChildren();
+          if (checkins.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'card';
+            empty.innerHTML = '<p class="description" style="margin:0;">No check-ins have resolved yet today.</p>';
+            checkinsList.appendChild(empty);
+          } else {
+            for (const checkin of checkins) {
+              checkinsList.appendChild(renderCheckin(checkin));
+            }
+          }
+          showStatus(checkinsStatus, '', true);
+        } catch (error) {
+          console.error('Failed to load today\'s check-ins:', error);
+          showStatus(checkinsStatus, 'Failed to load.', false);
+        }
+      }
+
+      refreshBtn.addEventListener('click', loadCheckins);
+      loadCheckins();
+    }
+  </script>
+</body>
+
+</html>

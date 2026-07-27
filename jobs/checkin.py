@@ -45,6 +45,7 @@ from apscheduler.jobstores.base import JobLookupError
 from apscheduler.triggers.date import DateTrigger
 
 from agent.checkin_prompts import FALLBACK_CATEGORY, PROMPTS
+from agent.memory import MemoryStore
 from agent.runtime import AgentResult, create_background_thread, run_agent
 from agent.scheduler import scheduler
 from agent.settings import settings
@@ -309,3 +310,34 @@ async def next_wake_at() -> int:
     if now_local >= wake_dt:
         wake_dt += timedelta(days=1)
     return int(wake_dt.astimezone(timezone.utc).timestamp())
+
+
+async def reflections_between(memory: MemoryStore, start_ts: int, end_ts: int) -> list[dict]:
+    """Structured record of every check-in resolved within
+    [start_ts, end_ts] (UTC epoch seconds) — answered, skipped, or
+    expired. An answered check-in's reply text is looked up by its own
+    dedicated thread from Chroma (checkins.db doesn't store the reply
+    itself — every check-in mints its own thread via _mint_thread, and
+    agent.runtime.run_agent summarizes+embeds each turn there like any
+    other conversation); skipped/expired ones have reply=None. Used by
+    main.py's GET /checkins/today for the dashboard's check-in history
+    page."""
+    resolved = await asyncio.to_thread(checkins_store.list_resolved_between, start_ts, end_ts)
+    results = []
+    for checkin in resolved:
+        reply = None
+        if checkin["status"] == "answered" and checkin["thread_id"]:
+            reply = memory.get_conversation_by_thread(checkin["thread_id"])
+        results.append(
+            {
+                "id": checkin["id"],
+                "category": checkin["category"],
+                "prompt_text": checkin["prompt_text"],
+                "status": checkin["status"],
+                "scheduled_at": checkin["scheduled_at"],
+                "fired_at": checkin["fired_at"],
+                "resolved_at": checkin["resolved_at"],
+                "reply": reply,
+            }
+        )
+    return results

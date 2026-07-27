@@ -139,6 +139,22 @@ def list_answered_between(start_ts: int, end_ts: int) -> list[dict]:
         return [dict(row) for row in rows]
 
 
+def list_resolved_between(start_ts: int, end_ts: int) -> list[dict]:
+    """Every check-in resolved within [start_ts, end_ts] (UTC epoch
+    seconds, inclusive), oldest first — answered, skipped, or expired
+    (the superset of list_answered_between). resolved_at is NULL for
+    still-pending check-ins, so the range comparison already excludes
+    them without an explicit status filter. Used by main.py's
+    GET /checkins/today for the dashboard's check-in history page."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM checkins WHERE resolved_at BETWEEN ? AND ? "
+            "ORDER BY resolved_at ASC",
+            (start_ts, end_ts),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
 def get_most_recent_fired() -> Optional[dict]:
     with _connect() as conn:
         row = conn.execute(

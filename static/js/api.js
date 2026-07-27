@@ -29,6 +29,13 @@ export async function sendText(text, { threadId = null, oneShot = false, mode = 
   return response.json();
 }
 
+/** @returns {Promise<{checkins: Array<{id: string, category: string, prompt_text: string, status: string, scheduled_at: number, fired_at: number|null, resolved_at: number, reply: string|null}>}>} */
+export async function getTodaysCheckins() {
+  const response = await fetch('/checkins/today');
+  if (!response.ok) throw new Error(`Server returned ${response.status}`);
+  return response.json();
+}
+
 export async function getSettings() {
   const response = await fetch('/settings');
   if (!response.ok) throw new Error(`Server returned ${response.status}`);

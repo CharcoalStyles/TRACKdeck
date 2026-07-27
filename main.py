@@ -6,7 +6,7 @@ import os
 import asyncio
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, time as dtime, timezone
 from typing import Annotated
 
 import uvicorn
@@ -350,6 +350,25 @@ async def thread_messages(
     thread_id: str, _: Annotated[None, Depends(auth.require_session_or_token)]
 ):
     return {"messages": await get_thread_messages(thread_id)}
+
+
+@app.get("/checkins/today")
+async def todays_checkins(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """Today's check-in activity — answered, skipped, and expired — for
+    the dashboard's Check-Ins page. 'Today' is the user's local calendar
+    day (settings.timezone), the same bounds jobs/digest.py uses for the
+    nightly recap — not the waking-hours window jobs/checkin.py itself
+    schedules within, so a check-in resolved right before midnight still
+    counts as today rather than being cut off early.
+    """
+    local_tz = settings.zoneinfo()
+    now_local = datetime.now(local_tz)
+    start_local = datetime.combine(now_local.date(), dtime.min, tzinfo=local_tz)
+    end_local = datetime.combine(now_local.date(), dtime.max, tzinfo=local_tz)
+    start_ts = int(start_local.astimezone(timezone.utc).timestamp())
+    end_ts = int(end_local.astimezone(timezone.utc).timestamp())
+    reflections = await checkin_jobs.reflections_between(app_state.memory, start_ts, end_ts)
+    return {"checkins": reflections}
 
 
 @app.get("/health")
