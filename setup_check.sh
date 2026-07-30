@@ -2,8 +2,8 @@
 # setup_check.sh
 # Verifies (and fixes) the two runtime prerequisites that don't come from
 # `uv sync`: the Piper TTS voice model, and the
-# memory.db/reminders.db/checkins.db/chroma_db paths that docker-compose
-# expects to already exist as the right file types.
+# memory.db/reminders.db/checkins.db/alert_sounds.db/chroma_db paths that
+# docker-compose expects to already exist as the right file types.
 #
 # Safe to re-run — every step is idempotent.
 
@@ -36,11 +36,13 @@ else
 fi
 
 echo
-echo "== 2. memory.db / reminders.db / checkins.db / chroma_db (docker-compose bind mounts) =="
+echo "== 2. memory.db / reminders.db / checkins.db / alert_sounds.db / chroma_db (docker-compose bind mounts) =="
 DATA_DIR="./data"
 MEMORY_DB="${DATA_DIR}/memory.db"
 REMINDERS_DB="${DATA_DIR}/reminders.db"
 CHECKINS_DB="${DATA_DIR}/checkins.db"
+ALERT_SOUNDS_DB="${DATA_DIR}/alert_sounds.db"
+ALERT_SOUNDS_DIR="${DATA_DIR}/alert_sounds"
 CHROMA_DIR="${DATA_DIR}/chroma_db"
 
 mkdir -p "$DATA_DIR"
@@ -83,6 +85,29 @@ elif [[ -f "$CHECKINS_DB" ]]; then
 else
     echo "  Creating empty $CHECKINS_DB so Docker mounts it as a file..."
     touch "$CHECKINS_DB"
+fi
+
+if [[ -d "$ALERT_SOUNDS_DB" ]]; then
+    echo "  ERROR: $ALERT_SOUNDS_DB exists but is a DIRECTORY, not a file."
+    echo "         This happens when docker compose was run before this file existed."
+    echo "         Remove it and re-run this script: rm -r '$ALERT_SOUNDS_DB'"
+    exit 1
+elif [[ -f "$ALERT_SOUNDS_DB" ]]; then
+    echo "  OK: $ALERT_SOUNDS_DB already exists as a file."
+else
+    echo "  Creating empty $ALERT_SOUNDS_DB so Docker mounts it as a file..."
+    touch "$ALERT_SOUNDS_DB"
+fi
+
+if [[ -f "$ALERT_SOUNDS_DIR" ]]; then
+    echo "  ERROR: $ALERT_SOUNDS_DIR exists but is a FILE, not a directory."
+    echo "         Remove it and re-run this script: rm '$ALERT_SOUNDS_DIR'"
+    exit 1
+elif [[ -d "$ALERT_SOUNDS_DIR" ]]; then
+    echo "  OK: $ALERT_SOUNDS_DIR already exists as a directory."
+else
+    echo "  Creating $ALERT_SOUNDS_DIR..."
+    mkdir -p "$ALERT_SOUNDS_DIR"
 fi
 
 if [[ -d "$CHROMA_DIR" ]]; then

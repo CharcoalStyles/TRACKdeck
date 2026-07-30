@@ -83,7 +83,7 @@ from jobs.digest import send_daily_digest
 from jobs.reminders import create_test_reminder, fire_reminder
 
 from agent.vault_watcher import reconcile_vault, watch_vault
-from utils import checkins_store, device_state, reminders_store, vault
+from utils import alert_sounds_store, checkins_store, device_state, reminders_store, vault
 from utils.caldav_client import ensure_collection_exists
 from utils.mailer import send_email
 from utils.notify import send_gotify
@@ -92,6 +92,7 @@ from voice import router as voice_router
 from routes.synth import router as synth_router
 from routes.transcribe import router as transcribe_router
 from routes.calendar_proxy import router as calendar_proxy_router
+from routes.alert_sounds import router as alert_sounds_router
 
 # ---------------------------------------------------------------------------
 # Lifespan
@@ -157,6 +158,7 @@ async def lifespan(app: FastAPI):
         # silently dropped.
         await asyncio.to_thread(reminders_store.init_db)
         await asyncio.to_thread(device_state.init_db)
+        await asyncio.to_thread(alert_sounds_store.init_db)
         for reminder in await asyncio.to_thread(reminders_store.list_pending):
             due_local = datetime.fromtimestamp(reminder["due_at"], tz=timezone.utc)
             if due_local <= datetime.now(timezone.utc):
@@ -247,6 +249,7 @@ app.include_router(voice_router)  # /voice
 app.include_router(synth_router)  # /synthesize
 app.include_router(transcribe_router)  # /transcribe
 app.include_router(calendar_proxy_router)  # /calendar — proxies the bundled Radicale UI
+app.include_router(alert_sounds_router)  # /alert-sounds, /device/alert-sounds/{id}
 
 
 # ---------------------------------------------------------------------------

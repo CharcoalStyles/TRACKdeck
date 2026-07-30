@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alert Sounds — Assistant Dashboard</title>
+  <link rel="stylesheet" href="/static/css/theme.css">
+</head>
+
+<body>
+
+  <header id="appHeader"></header>
+
+  <main>
+    <div class="card">
+      <h2>Upload Alert Sound</h2>
+      <p class="description">Upload an MP3 or WAV clip — it's converted to the 16kHz/16-bit mono PCM WAV the ESP32-S3 needs, then picked up automatically on the device's next sync. Clips over 30s are rejected.</p>
+      <div class="field-row">
+        <input type="file" id="fileInput" accept="audio/*">
+        <button type="button" id="uploadBtn" class="primary-btn">Upload &amp; Convert</button>
+      </div>
+      <div class="save-status" id="uploadStatus"></div>
+    </div>
+
+    <div id="soundsList"></div>
+  </main>
+
+  <script type="module">
+    import { uploadAlertSound, listAlertSounds, deleteAlertSound } from '/static/js/api.js';
+    import { requireSession } from '/static/js/auth.js';
+    import { renderNav } from '/static/js/nav.js';
+
+    renderNav('alert-sounds');
+
+    if (await requireSession()) {
+      const fileInput = document.getElementById('fileInput');
+      const uploadBtn = document.getElementById('uploadBtn');
+      const uploadStatus = document.getElementById('uploadStatus');
+      const soundsList = document.getElementById('soundsList');
+
+      function showStatus(el, text, ok = true) {
+        el.textContent = text;
+        el.style.color = ok ? '#00adb5' : '#ff6b6b';
+      }
+
+      function formatSize(bytes) {
+        return `${(bytes / 1024).toFixed(0)} KB`;
+      }
+
+      function formatDate(epochSeconds) {
+        return new Date(epochSeconds * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+      }
+
+      function renderSound(sound) {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        const heading = document.createElement('h2');
+        heading.textContent = sound.display_name;
+        card.appendChild(heading);
+
+        const meta = document.createElement('p');
+        meta.className = 'description';
+        meta.textContent = `${sound.duration_seconds.toFixed(1)}s · ${formatSize(sound.size_bytes)} · added ${formatDate(sound.created_at)}`;
+        card.appendChild(meta);
+
+        const audio = document.createElement('audio');
+        audio.controls = true;
+        audio.src = `/alert-sounds/${sound.id}/audio`;
+        audio.style.width = '100%';
+        audio.style.marginBottom = '0.75rem';
+        card.appendChild(audio);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'secondary-btn';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.style.color = '#ff6b6b';
+        deleteBtn.addEventListener('click', async () => {
+          deleteBtn.disabled = true;
+          try {
+            await deleteAlertSound(sound.id);
+            await loadSounds();
+          } catch (error) {
+            console.error('Failed to delete alert sound:', error);
+            deleteBtn.disabled = false;
+          }
+        });
+        card.appendChild(deleteBtn);
+
+        return card;
+      }
+
+      async function loadSounds() {
+        try {
+          const { alert_sounds } = await listAlertSounds();
+          soundsList.replaceChildren();
+          if (alert_sounds.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'card';
+            empty.innerHTML = '<p class="description" style="margin:0;">No alert sounds uploaded yet.</p>';
+            soundsList.appendChild(empty);
+          } else {
+            for (const sound of alert_sounds) {
+              soundsList.appendChild(renderSound(sound));
+            }
+          }
+        } catch (error) {
+          console.error('Failed to load alert sounds:', error);
+        }
+      }
+
+      uploadBtn.addEventListener('click', async () => {
+        const file = fileInput.files[0];
+        if (!file) {
+          showStatus(uploadStatus, 'Choose a file first.', false);
+          return;
+        }
+        uploadBtn.disabled = true;
+        showStatus(uploadStatus, 'Uploading and converting...', true);
+        try {
+          await uploadAlertSound(file);
+          showStatus(uploadStatus, 'Uploaded.', true);
+          fileInput.value = '';
+          await loadSounds();
+        } catch (error) {
+          console.error('Failed to upload alert sound:', error);
+          showStatus(uploadStatus, error.message || 'Upload failed.', false);
+        } finally {
+          uploadBtn.disabled = false;
+        }
+      });
+
+      loadSounds();
+    }
+  </script>
+</body>
+
+</html>

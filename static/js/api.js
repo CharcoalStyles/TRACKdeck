@@ -95,3 +95,37 @@ export async function fetchDebug(path) {
   if (!response.ok) throw new Error(`Server returned ${response.status}`);
   return response.json();
 }
+
+/**
+ * Upload an audio file to be converted into a 16kHz/16-bit mono PCM WAV
+ * alert sound. @param {File} file
+ * @returns {Promise<{id: string, display_name: string, duration_seconds: number, size_bytes: number, sha256: string, created_at: number}>}
+ */
+export async function uploadAlertSound(file) {
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+
+  const response = await fetch('/alert-sounds', {
+    method: 'POST',
+    credentials: 'same-origin',
+    body: formData,
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.detail || `Server returned ${response.status}`);
+  }
+  return response.json();
+}
+
+/** @returns {Promise<{alert_sounds: Array<{id: string, display_name: string, duration_seconds: number, size_bytes: number, sha256: string, created_at: number}>}>} */
+export async function listAlertSounds() {
+  const response = await fetch('/alert-sounds');
+  if (!response.ok) throw new Error(`Server returned ${response.status}`);
+  return response.json();
+}
+
+export async function deleteAlertSound(id) {
+  const response = await fetch(`/alert-sounds/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!response.ok) throw new Error(`Server returned ${response.status}`);
+  return response.json();
+}

@@ -31,9 +31,9 @@ from typing import Optional
 from agent.settings import settings
 from agent.tools.weather import fetch_current_conditions
 from jobs import checkin as checkin_jobs
-from utils import checkins_store, reminders_store
+from utils import alert_sounds_store, checkins_store, reminders_store
 from utils.datetime import posix_tz_string
-from utils.next_cloud_calendar import get_events_in_range
+from utils.caldav_client import get_events_in_range
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +90,7 @@ async def build_sync_payload() -> dict:
     reminders = await asyncio.to_thread(reminders_store.list_pending_due_within_24h, now_epoch)
     calendar_events = await asyncio.to_thread(_fetch_calendar_events, now_utc)
     weather = await asyncio.to_thread(fetch_current_conditions, settings.default_location)
+    alert_sounds = await asyncio.to_thread(alert_sounds_store.list_sounds)
     next_wake_at = await checkin_jobs.next_wake_at()
 
     return {
@@ -122,4 +123,22 @@ async def build_sync_payload() -> dict:
         ],
         "calendar_events": calendar_events,
         "weather": weather,
+        # Full current library, not a delta — same "rebuilt from scratch"
+        # pattern as everything else in this payload. The device is
+        # expected to diff this against what it already has on its SD
+        # card: fetch anything new/changed from `url`, delete anything
+        # local whose id no longer appears here. Keeps this payload cheap
+        # (pure metadata) on every poll and confines the actual audio
+        # transfer to GET /device/alert-sounds/{id}, only hit when a file
+        # is actually added or changed.
+        "alert_sounds": [
+            {
+                "id": s["id"],
+                "sha256": s["sha256"],
+                "size_bytes": s["size_bytes"],
+                "duration_seconds": s["duration_seconds"],
+                "url": f"/device/alert-sounds/{s['id']}",
+            }
+            for s in alert_sounds
+        ],
     }
