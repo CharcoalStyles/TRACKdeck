@@ -16,6 +16,13 @@ WORKDIR /app
 # make it survive rebuilds/recreations instead of re-downloading every time.
 ENV HF_HOME=/root/.cache/huggingface
 
+# huggingface_hub's Xet chunked-download backend (hf-xet, pulled in
+# transitively) can hang retrying forever on networks that can reach
+# huggingface.co but not Xet's separate CAS storage endpoints. Force the
+# plain HTTP resolve/download path instead, which is what setup_check.sh's
+# curl-based Piper download already relies on and is known to work here.
+ENV HF_HUB_DISABLE_XET=1
+
 # Copy dependency files first so Docker can cache the install layer
 # and skip it on rebuilds when only app code has changed
 COPY pyproject.toml uv.lock ./
