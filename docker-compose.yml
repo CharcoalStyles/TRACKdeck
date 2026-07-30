@@ -46,6 +46,75 @@ services:
     restart: unless-stopped
     depends_on:
       - syncthing
+      - caldav
+
+  # Bundled CalDAV server (Radicale) for the calendar integration
+  # (utils/caldav_client.py). Batteries-included default — point CALDAV_URL
+  # elsewhere (an existing Nextcloud/Baikal/Fastmail calendar) and skip this
+  # service entirely if you'd rather not run it.
+  #
+  # Fully self-provisioning: no manual setup step needed for a fresh clone
+  # beyond setting CALDAV_USERNAME/CALDAV_PASSWORD below (same as any other
+  # secret in .env.docker). The entrypoint override writes Radicale's config
+  # + htpasswd users file from those two vars on every startup (idempotent —
+  # harmless to rewrite each time, and never touches the actual calendar
+  # data in /data), then chains into the image's real entrypoint so its own
+  # UID/GID handling and privilege drop to the `radicale` user still happen
+  # normally. The calendar collection itself is created automatically by
+  # `assistant` at its own startup (utils/caldav_client.py's
+  # ensure_collection_exists(), via MKCALENDAR) — also no manual step.
+  caldav:
+    image: tomsquest/docker-radicale:latest  # TODO: verify/pin a specific tag before first run
+    container_name: pa-caldav
+    env_file:
+      # Same file as `assistant` — CALDAV_USERNAME/CALDAV_PASSWORD feed the
+      # entrypoint override below directly.
+      - .env.docker
+    volumes:
+      - ./data/radicale/config:/config
+      # Actual calendar storage (.ics files on disk). Unrelated to the
+      # vault/Syncthing volumes above — deliberately not shared with them.
+      - ./data/radicale/data:/data
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        mkdir -p /config /data/collections
+        printf '%s\n' \
+          '[server]' \
+          'hosts = 0.0.0.0:5232' \
+          '' \
+          '[auth]' \
+          'type = htpasswd' \
+          'htpasswd_filename = /config/users' \
+          'htpasswd_encryption = plain' \
+          '' \
+          '[storage]' \
+          'filesystem_folder = /data/collections' \
+          '' \
+          '[rights]' \
+          'type = owner_only' \
+          '' \
+          '[web]' \
+          'type = internal' \
+          > /config/config
+        printf '%s:%s\n' "$$CALDAV_USERNAME" "$$CALDAV_PASSWORD" > /config/users
+        exec /usr/local/bin/docker-entrypoint.sh /venv/bin/radicale --config /config/config
+    # Not published by default — reachable internally by `assistant` over
+    # the compose network at http://caldav:5232. The dashboard's
+    # /calendar proxy (routes/calendar_proxy.py) reaches Radicale that way
+    # too, for its collection-management UI (create/rename/delete a
+    # calendar) — Radicale has no event-viewing UI at all, so seeing/
+    # editing events needs a real CalDAV client pointed at Radicale
+    # directly, which is what this port is for. Uncomment to expose 5232
+    # and point a native calendar app (phone/DAVx5, Thunderbird, desktop
+    # calendar) at it with its own htpasswd credentials — a separate trust
+    # boundary from the dashboard's session/API_TOKEN auth, same treatment
+    # as Syncthing's GUI port below.
+    ports:
+      - "5232:5232"
+    restart: unless-stopped
 
   syncthing:
     image: syncthing/syncthing:latest

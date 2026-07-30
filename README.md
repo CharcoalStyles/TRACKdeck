@@ -32,6 +32,7 @@ light, and don't make the model do more reasoning than it needs to for a given s
 - [Configuration](#configuration)
 - [API reference](#api-reference)
 - [Running it](#running-it)
+  - [First-run calendar setup](#first-run-calendar-setup)
 - [Known limitations](#known-limitations)
 - [Things we've talked about adding](#things-weve-talked-about-adding)
 
@@ -54,9 +55,11 @@ Browser dashboard ─────────┘         │                    
 Obsidian vault (./data/vault) <──sync──> Syncthing <──sync──> your other devices
 ```
 
-Three containers in `docker-compose.yml`: the FastAPI app, Syncthing, and a shared volume
-between them for the vault. LM Studio, Gotify, and your mail provider are external services
-the app talks to over HTTP/SMTP — none of them run in this compose file.
+Three containers in `docker-compose.yml`: the FastAPI app, Syncthing (with a shared volume
+between them for the vault), and Radicale (a bundled CalDAV server for the calendar
+integration — swap it out for an external CalDAV server if you'd rather, see Configuration
+below). LM Studio, Gotify, and your mail provider are external services the app talks to
+over HTTP/SMTP — none of them run in this compose file.
 
 ## Core concepts
 
@@ -188,8 +191,10 @@ find-and-replace, so it structurally can't mangle prose it wasn't asked to touch
 
 ### Calendar, weather, web search
 
-- **Calendar** (`agent/tools/calendar.py`, `utils/next_cloud_calendar.py`) — Nextcloud
-  CalDAV. `add_calendar_event`, `get_calendar_events`, `update_calendar_event`,
+- **Calendar** (`agent/tools/calendar.py`, `utils/caldav_client.py`) — plain CalDAV,
+  protocol-generic. Bundled by default with Radicale (see "First-run calendar setup"
+  below), or point at any external CalDAV server (Nextcloud, Baikal, Fastmail, etc.).
+  `add_calendar_event`, `get_calendar_events`, `update_calendar_event`,
   `delete_calendar_event`, `get_todays_events`.
 - **Weather** (`agent/tools/weather.py`) — Open-Meteo, no API key needed.
 - **Web search** (`agent/tools/general.py`) — SearXNG, self-hosted. Falls back to a plain
@@ -237,10 +242,12 @@ run at startup via `next_run_time`. The poll interval is
 live-reschedulable via `/settings`, same pattern as `digest_time`/`bedtime`.
 
 The opt-in is the calendar's own native reminder: an event with a `VALARM` (RFC 5545 — the
-same "remind me" toggle any calendar app's event editor already exposes, Nextcloud's web UI
-included) gets a matching row in `reminders.db`, keyed by the event's UID
+same "remind me" toggle any calendar app's event editor already exposes — a native CalDAV
+client like Thunderbird or your phone's calendar app, not Radicale's own web UI, which has
+no event editor at all, see "First-run calendar setup") gets a matching row in
+`reminders.db`, keyed by the event's UID
 (`upsert_calendar_reminder`) so re-syncing the same unchanged event is a no-op rather than
-piling up duplicate reminders. `utils/next_cloud_calendar.py`'s `parse_ics` now also
+piling up duplicate reminders. `utils/caldav_client.py`'s `parse_ics` now also
 collects each `VALARM`'s `TRIGGER` value; `parse_ics_duration` turns the RFC 5545 duration
 string (e.g. `-PT30M`) into a `timedelta`, applied against the event's start time. An event
 with more than one alarm uses whichever is closest to the start time — a calendar app's
@@ -305,7 +312,7 @@ rebuilt from scratch on every call (no delta/cursor tracking, same stateless pat
 - `checkins`, `reminders` — everything pending and due within 24h, reusing
   `checkins_store.list_next_24h` and the new `reminders_store.list_pending_due_within_24h`.
 - `calendar_events` — a raw agenda (even events without their own alarm), via
-  `utils/next_cloud_calendar.py`'s `get_events_in_range`.
+  `utils/caldav_client.py`'s `get_events_in_range`.
 - `weather` — current conditions plus today's min/max temp and sunrise/sunset
   (`agent/tools/weather.py`'s `fetch_current_conditions`, factored out of the
   `get_current_weather` tool so both share one Open-Meteo call — the daily fields ride
@@ -383,15 +390,16 @@ jobs/
   calendar_sync.py             Polls for manually added/changed/removed calendar events
 utils/
   vault.py                  Frontmatter, atomic writes, section editing, About Me/linked notes
-  next_cloud_calendar.py     CalDAV client
+  caldav_client.py           CalDAV client, protocol-generic (any CalDAV server)
   datetime.py                 Calendar day-boundary helpers, parse_local_datetime
   reminders_store.py           sqlite3 CRUD for reminders.db
   notify.py, mailer.py        Gotify, SMTP
 routes/
   synth.py                    Piper TTS (built, not wired into the production voice flow)
+  calendar_proxy.py            Reverse-proxies the bundled Radicale UI at /calendar
 static/                       Dashboard (see above)
-docker-compose.yml            assistant + syncthing services, shared vault volume
-setup_check.sh                 Verifies/downloads Piper models, fixes the memory.db/reminders.db bind-mount gotcha
+docker-compose.yml            assistant + syncthing + caldav (Radicale) services, shared vault volume
+setup_check.sh                 Verifies/downloads Piper models, fixes DB bind-mount gotchas
 reset_knowledge.sh              Wipes memory/index/checkpoints; vault wipe gated behind --vault
 ```
 
@@ -400,8 +408,9 @@ reset_knowledge.sh              Wipes memory/index/checkpoints; vault wipe gated
 See `.env.example` for the full list. Grouped by what needs external setup:
 
 - **LM Studio** — `LM_STUDIO_URL`, `CHAT_MODEL`, `EMBEDDING_MODEL`. Local, on the Mac Mini.
-- **Nextcloud** — `NEXTCLOUD_URL`, `NEXTCLOUD_USERNAME`, `NEXTCLOUD_APP_PASSWORD`,
-  `NEXTCLOUD_CALENDAR_SLUG`.
+- **CalDAV** — `CALDAV_URL`, `CALDAV_USERNAME`, `CALDAV_PASSWORD`. Points at the bundled
+  Radicale service by default (see "First-run calendar setup" below), or any external
+  CalDAV server (Nextcloud, Baikal, Fastmail, etc.).
 - **SearXNG** — `SEARXNG_URL` (optional; web search degrades gracefully without it).
 - **Gotify** — `GOTIFY_URL`, `GOTIFY_TOKEN`.
 - **SMTP** — `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`,
@@ -420,6 +429,12 @@ See `.env.example` for the full list. Grouped by what needs external setup:
   HTTPS-terminating reverse proxy/tunnel; see `.env.example`'s comment for why doing it
   earlier silently breaks login.
 - **`LEARNING_MODE_DEFAULT`** — startup default; live-changeable after that via `/settings`.
+
+`API_TOKEN`, `DASHBOARD_PASSWORD`, and `SESSION_SECRET_KEY` specifically are checked at
+startup (`main.py`) — the app refuses to boot at all if any of them is still the literal
+placeholder string from `.env.example` (or, for `SESSION_SECRET_KEY`, unset). Every other
+var above is optional/feature-gated — the app starts fine without them, just with that
+integration degraded or unavailable.
 
 ## API reference
 
@@ -453,21 +468,34 @@ login (see `jobs/checkin.py`'s `answer_checkin` docstring).
 
 ## Running it
 
+**First-run setup, before any of the commands below**: copy `.env.example` to `.env`
+(local dev) and/or `.env.docker` (Docker), and fill in `API_TOKEN`, `DASHBOARD_PASSWORD`,
+and `SESSION_SECRET_KEY` with real random values — the app refuses to start at all if any
+of these three is left as its placeholder (see Configuration above). Everything else in
+that file is optional/feature-gated (fill in what you need — CalDAV, Gotify, SMTP, etc. —
+and leave the rest unset).
+
+One gotcha worth knowing up front: editing `.env.docker`'s *contents* doesn't get picked
+up by a plain `docker compose up -d` — Compose only recreates a container when it detects
+a change to the compose file itself, not to an env file's contents. After editing secrets,
+either `docker compose down` then `up` again, or `docker compose up -d --force-recreate
+<service>` for just the one that changed.
+
 Local dev, full hot-reload:
 ```bash
 uv run uvicorn main:app --reload
 ```
 
-Syncthing needs to run somewhere stable even during dev — it doesn't need to be the same
-process as the app:
+Syncthing and the bundled CalDAV server (Radicale) need to run somewhere stable even during
+dev — they don't need to be the same process as the app:
 ```bash
-docker compose up syncthing -d
-VAULT_PATH=./data/vault uv run uvicorn main:app --reload
+docker compose up syncthing caldav -d
+VAULT_PATH=./data/vault CALDAV_URL=http://localhost:5232/myuser/personal/ uv run uvicorn main:app --reload
 ```
 
 Full stack:
 ```bash
-./setup_check.sh          # once, before first run — Piper model + memory.db/chroma_db setup
+./setup_check.sh          # once, before first run — Piper model, DB bind-mount files
 docker compose up --build
 ```
 
@@ -483,6 +511,52 @@ so login silently breaks if it's `true` and you're not behind an HTTPS-terminati
 See the Obsidian/Syncthing setup notes (discussed separately) for first-time vault pairing
 across devices — that part isn't fully automatable via `docker-compose.yml` alone, since
 device IDs are generated per-instance.
+
+### First-run calendar setup
+
+No manual setup step — the bundled Radicale service is fully self-provisioning. Just fill
+in three env vars in `.env.docker` like any other secret in that file (`.env.example` has
+the full explanation):
+
+```bash
+CALDAV_URL=http://caldav:5232/myuser/personal/
+CALDAV_USERNAME=myuser
+CALDAV_PASSWORD=some-password-you-pick
+```
+
+The username must match the first path segment of the URL (Radicale scopes each user to
+their own `/<user>/...` path) — `personal` can be any collection name you like. Then:
+
+```bash
+docker compose up -d
+```
+
+That's it. Two things happen automatically on startup:
+- The `caldav` service's entrypoint writes Radicale's config and htpasswd users file from
+  `CALDAV_USERNAME`/`CALDAV_PASSWORD` every time it starts (idempotent — never touches the
+  actual calendar data, just the auth config).
+- The `assistant` service creates the calendar collection itself at startup, via a CalDAV
+  `MKCALENDAR` call (`utils/caldav_client.py`'s `ensure_collection_exists`) — best-effort and
+  non-fatal, so it also doesn't get in the way if you've pointed `CALDAV_URL` at an external
+  server that handles this differently.
+
+Browse to `http://<host>:8000/calendar/` to reach Radicale's own web UI, proxied through
+the assistant's single port — no separate Radicale login, just your existing dashboard
+session. Worth knowing up front: that UI is for managing *collections* (create/rename/
+delete a calendar, see what exists) — it doesn't render a day/week/month view of your
+events. Radicale doesn't have one built in.
+
+To actually see and edit events in a browser you'd need a separate calendar-viewing
+frontend, and the realistic options there aren't good enough to bundle by default (checked
+during development: the classic pairing, CalDAVZAP, hasn't been released since 2015; a
+newer option, Bloben, needs its own Postgres+Redis+Node stack and its original repo is
+gone). So for actually viewing/editing your calendar day-to-day, use a native CalDAV
+client instead — a phone app via DAVx5, Thunderbird, or macOS/Google Calendar's "add CalDAV
+account" — pointed at Radicale directly. By default Radicale's own port (5232) isn't
+published to the host; uncomment the `caldav` service's `ports: - "5232:5232"` line in
+`docker-compose.yml` and use `http://<host>:5232/myuser/personal/` with the same
+credentials — a separate trust boundary from the dashboard's session/API_TOKEN auth, same
+as Syncthing's GUI port note above.
 
 ## Known limitations
 

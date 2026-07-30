@@ -41,11 +41,14 @@ no pytest, no test files exist) — don't assume commands for either.
 # Local dev, full hot-reload
 uv run uvicorn main:app --reload
 
-# Syncthing needs to run somewhere stable even during dev (separate process from the app)
-docker compose up syncthing -d
-VAULT_PATH=./data/vault uv run uvicorn main:app --reload
+# Syncthing and the bundled CalDAV server (Radicale) need to run somewhere
+# stable even during dev (separate process from the app)
+docker compose up syncthing caldav -d
+VAULT_PATH=./data/vault CALDAV_URL=http://localhost:5232/myuser/personal/ uv run uvicorn main:app --reload
 
-# Full stack
+# Full stack — CALDAV_USERNAME/PASSWORD/URL need to be set in .env.docker
+# first (see .env.example), same as any other secret; the caldav service
+# is otherwise fully self-provisioning, no setup_check.sh step needed for it
 ./setup_check.sh          # once, before first run — Piper model + memory.db/reminders.db/chroma_db setup
 docker compose up --build
 
@@ -56,9 +59,11 @@ docker compose up --build
 uv add <package>
 ```
 
-`docker-compose.yml` runs three containers: the FastAPI app, Syncthing, and a shared volume
-between them for the vault. LM Studio, Gotify, and the mail provider are external services
-reached over HTTP/SMTP — none of them run in compose.
+`docker-compose.yml` runs three containers: the FastAPI app, Syncthing (with a shared
+volume between them for the vault), and Radicale (a bundled CalDAV server for the calendar
+integration — swappable for an external CalDAV server instead, see Configuration below).
+LM Studio, Gotify, and the mail provider are external services reached over HTTP/SMTP —
+none of them run in compose.
 
 ## Core concepts
 
@@ -129,9 +134,15 @@ Learning mode and the two active modes are mutually exclusive per turn.
   tracked in About Me's frontmatter `linked_notes` registry (topic → note id), because a
   section-`replace` on a collective section (e.g. "People") would wipe every entry in it,
   not just the one being corrected.
-- **Calendar/weather/search** — Calendar is Nextcloud CalDAV
-  (`agent/tools/calendar.py`, `utils/next_cloud_calendar.py`). Weather is Open-Meteo, no
-  key. Web search is SearXNG, self-hosted, degrades gracefully if `SEARXNG_URL` unset.
+- **Calendar/weather/search** — Calendar is plain CalDAV (`agent/tools/calendar.py`,
+  `utils/caldav_client.py`), protocol-generic — `docker-compose.yml` bundles Radicale as the
+  default backend, with its collection-management UI (create/rename/delete a calendar —
+  Radicale has no event-viewing UI at all) reverse-proxied through `routes/calendar_proxy.py`
+  at `/calendar`. Actually viewing/editing events needs a native CalDAV client (Thunderbird,
+  a phone app, etc.) pointed at Radicale directly — see README's "First-run calendar setup".
+  Point `CALDAV_URL` at any external CalDAV server (Nextcloud, Baikal, Fastmail, etc.)
+  instead if you'd rather. Weather is Open-Meteo, no key. Web search is SearXNG,
+  self-hosted, degrades gracefully if `SEARXNG_URL` unset.
 - **Reminders** — `agent/tools/alerts.py`'s `set_reminder`/`set_timer` are real: `when`
   arrives as an absolute local date/time (the system prompt's date/time-grounding rule
   makes the LLM resolve relative language like "in 10 minutes" before calling the tool,
@@ -151,7 +162,7 @@ Learning mode and the two active modes are mutually exclusive per turn.
   `settings.calendar_sync_interval_minutes` — default 30, live-reschedulable via
   `/settings` like `digest_time`/`bedtime` — plus once at startup). Opt-in is the event's own
   native reminder — a `VALARM` (RFC 5545, the same "remind me" toggle any calendar app's
-  editor exposes) — not a custom tag scheme; `utils/next_cloud_calendar.py`'s `parse_ics`
+  editor exposes) — not a custom tag scheme; `utils/caldav_client.py`'s `parse_ics`
   collects each `VALARM`'s `TRIGGER`, `parse_ics_duration` turns it into a `timedelta`
   applied against the event start. Keyed by event UID
   (`reminders_store.upsert_calendar_reminder`) so re-syncing an unchanged event is a no-op.
@@ -209,16 +220,17 @@ jobs/
   calendar_sync.py             Polls for manually added/changed/removed calendar events
 utils/
   vault.py                  Frontmatter, atomic writes, section editing, About Me/linked notes
-  next_cloud_calendar.py     CalDAV client
+  caldav_client.py           CalDAV client, protocol-generic (any CalDAV server)
   datetime.py                 Calendar day-boundary helpers, parse_local_datetime
   reminders_store.py           sqlite3 CRUD for reminders.db
   notify.py, mailer.py        Gotify, SMTP
 routes/
   synth.py                    Piper TTS (built, not wired into the production voice flow)
+  calendar_proxy.py            Reverse-proxies the bundled Radicale UI at /calendar
 static/                       Dashboard (index/voice/onboarding/profile/settings .html);
                                 login.html public, js/auth.js is the client-side session gate
-docker-compose.yml            assistant + syncthing services, shared vault volume
-setup_check.sh                 Verifies/downloads Piper models, fixes the memory.db/reminders.db bind-mount gotcha
+docker-compose.yml            assistant + syncthing + caldav (Radicale) services, shared vault volume
+setup_check.sh                 Verifies/downloads Piper models, fixes DB bind-mount gotchas
 reset_knowledge.sh              Wipes memory/index/checkpoints; vault wipe gated behind --vault
 ```
 
@@ -227,8 +239,9 @@ reset_knowledge.sh              Wipes memory/index/checkpoints; vault wipe gated
 See `.env.example` for the full list. Notable ones:
 
 - **LM Studio** — `LM_STUDIO_URL`, `CHAT_MODEL`, `EMBEDDING_MODEL`.
-- **Nextcloud** — `NEXTCLOUD_URL`, `NEXTCLOUD_USERNAME`, `NEXTCLOUD_APP_PASSWORD`,
-  `NEXTCLOUD_CALENDAR_SLUG`.
+- **CalDAV** — `CALDAV_URL`, `CALDAV_USERNAME`, `CALDAV_PASSWORD`. Points at the bundled
+  Radicale service (`docker-compose.yml`'s `caldav`) by default, or any external CalDAV
+  server.
 - **SearXNG** — `SEARXNG_URL` (optional).
 - **Gotify** — `GOTIFY_URL`, `GOTIFY_TOKEN`.
 - **SMTP** — `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`,

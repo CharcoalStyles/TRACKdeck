@@ -10,13 +10,16 @@ from requests.auth import HTTPBasicAuth
 # ==========================================
 # CONFIGURATION
 # ==========================================
-NEXTCLOUD_URL = os.getenv("NEXTCLOUD_URL")
-USERNAME = os.getenv("NEXTCLOUD_USERNAME")
-APP_PASSWORD = os.getenv("NEXTCLOUD_APP_PASSWORD")
-CALENDAR_SLUG = os.getenv("NEXTCLOUD_CALENDAR_SLUG")
+# CALDAV_URL is the full URL of one calendar collection, exactly as your
+# CalDAV server presents it — works with any standards-compliant CalDAV
+# server (the bundled Radicale service, Nextcloud, Baikal, Fastmail, etc.),
+# since nothing below assumes a particular server's URL path shape.
+CALDAV_URL = os.getenv("CALDAV_URL")
+USERNAME = os.getenv("CALDAV_USERNAME")
+PASSWORD = os.getenv("CALDAV_PASSWORD")
 
-BASE_URL = f"{NEXTCLOUD_URL}/remote.php/dav/calendars/{USERNAME}/{CALENDAR_SLUG}/"
-AUTH = HTTPBasicAuth(USERNAME, APP_PASSWORD)
+BASE_URL = CALDAV_URL if (CALDAV_URL or "").endswith("/") else f"{CALDAV_URL}/"
+AUTH = HTTPBasicAuth(USERNAME, PASSWORD)
 
 # ==========================================
 # HELPER UTILITIES
@@ -102,6 +105,33 @@ def parse_ics_duration(value: str) -> Optional[timedelta]:
 # CALENDAR CRUD & QUERY FUNCTIONS
 # ==========================================
 
+def ensure_collection_exists():
+    """
+    Creates the calendar collection at BASE_URL if it doesn't already exist,
+    via the CalDAV MKCALENDAR method (RFC 4791 section 5.3.1) with an empty body
+    (server defaults). Meant to be called once at app startup so a fresh
+    Radicale instance (or any other compliant CalDAV server) doesn't need a
+    separate manual "create the calendar" step — every other function here
+    only ever does PUT/GET/DELETE/REPORT against an *existing* collection.
+
+    Best-effort: 201 (created) and 409 (already exists — confirmed against
+    Radicale, whose MKCALENDAR returns 409 with a `resource-must-be-null`
+    precondition on a path that's already provisioned) both count as
+    success. Anything else — including CALDAV_URL being unset/misconfigured,
+    or the server not being reachable yet (e.g. still starting up) — is
+    reported but never raised, since a caller runs this at app startup and
+    a calendar problem shouldn't take down the whole app; the collection
+    can always be created manually as before.
+    """
+    try:
+        response = requests.request("MKCALENDAR", BASE_URL, auth=AUTH, timeout=10)
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "error": str(e)}
+    if response.status_code in (201, 409):
+        return {"success": True, "status_code": response.status_code}
+    return {"success": False, "status_code": response.status_code, "error": response.text}
+
+
 def _escape_ics_text(value):
     """Escapes a value for use in an RFC5545 TEXT property (SUMMARY/DESCRIPTION/LOCATION)."""
     return (
@@ -129,7 +159,7 @@ def create_or_update_event(uid, summary, start_iso, end_iso, description="", loc
     ics_lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
-        "PRODID:-//Nextcloud Python Agent//NONSGML v1.0//EN",
+        "PRODID:-//adhi-backend//CalDAV Client//EN",
         "BEGIN:VEVENT",
         f"UID:{uid}",
         f"DTSTART:{start_iso}",
@@ -174,8 +204,12 @@ def delete_event(uid):
     """
     url = f"{BASE_URL}{uid}.ics"
     response = requests.delete(url, auth=AUTH)
-    
-    if response.status_code == 204:  # 204 No Content means successful deletion
+
+    # 204 No Content is the plain RFC 7231 success response; 200 is what
+    # Radicale actually returns instead (a WebDAV multistatus body
+    # describing the one deleted resource) — confirmed against a live
+    # instance, both mean the delete succeeded.
+    if response.status_code in (200, 204):
         return {"success": True, "message": "Event deleted successfully."}
     elif response.status_code == 404:
         return {"success": False, "message": "Event did not exist."}

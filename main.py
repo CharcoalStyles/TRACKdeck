@@ -4,6 +4,7 @@ Personal Assistant — FastAPI + LangGraph
 """
 import os
 import asyncio
+import logging
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, time as dtime, timezone
@@ -27,6 +28,8 @@ from utils.logging import configure_logging
 # created at import time (module-level `logging.getLogger(__name__)`
 # calls) already has the right level/handler via the root logger.
 configure_logging()
+
+logger = logging.getLogger(__name__)
 
 # .env.example documents these same strings as the sample values — so an
 # unedited value isn't just "unset", it's a real, publicly-known
@@ -81,11 +84,13 @@ from jobs.reminders import create_test_reminder, fire_reminder
 
 from agent.vault_watcher import reconcile_vault, watch_vault
 from utils import checkins_store, device_state, reminders_store, vault
+from utils.caldav_client import ensure_collection_exists
 from utils.mailer import send_email
 from utils.notify import send_gotify
 
 from voice import router as voice_router
 from routes.synth import router as synth_router
+from routes.calendar_proxy import router as calendar_proxy_router
 
 # ---------------------------------------------------------------------------
 # Lifespan
@@ -98,6 +103,23 @@ async def lifespan(app: FastAPI):
     app_state.memory = MemoryStore(chroma_client, embedding_fn)
 
     vault.ensure_vault_dirs()
+
+    # Best-effort: creates the calendar collection at CALDAV_URL if it
+    # doesn't exist yet (fresh Radicale instance, or a first-run against
+    # any other compliant CalDAV server), so there's no separate manual
+    # "create the calendar" step. Never blocks startup — some servers may
+    # not support bare MKCALENDAR, in which case the collection still needs
+    # to be created manually as before, but that's opt-in on failure, not
+    # fatal.
+    caldav_setup = await asyncio.to_thread(ensure_collection_exists)
+    if not caldav_setup["success"]:
+        logger.warning(
+            "Could not auto-create the CalDAV collection at startup (status %s): %s. "
+            "If this is a fresh calendar, create it manually via your CalDAV server's "
+            "own tools before the agent's calendar tools will work.",
+            caldav_setup.get("status_code"),
+            caldav_setup.get("error"),
+        )
 
     async with AsyncSqliteSaver.from_conn_string("memory.db") as checkpointer:
         app_state.graph = build_graph(checkpointer, app_state.memory)
@@ -116,7 +138,7 @@ async def lifespan(app: FastAPI):
             replace_existing=True,
         )
         # next_run_time=now: also runs once immediately at startup, so an
-        # event added/changed/removed manually (in Nextcloud, not through
+        # event added/changed/removed manually (directly in a calendar app, not through
         # the agent) while the app was down gets picked up right away
         # rather than waiting up to settings.calendar_sync_interval_minutes.
         scheduler.add_job(
@@ -222,6 +244,7 @@ app.add_middleware(
 )
 app.include_router(voice_router)  # /voice
 app.include_router(synth_router)  # /synthesize
+app.include_router(calendar_proxy_router)  # /calendar — proxies the bundled Radicale UI
 
 
 # ---------------------------------------------------------------------------

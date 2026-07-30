@@ -77,7 +77,7 @@ class Settings:
     # digest_time. No env var, same reasoning as default_location above.
     bedtime: str = "21:20"
 
-    # How often (minutes) jobs/calendar_sync.py polls Nextcloud for
+    # How often (minutes) jobs/calendar_sync.py polls the CalDAV server for
     # manually added/changed/removed calendar events — CalDAV has no push
     # mechanism, so this is the only way it notices. Same
     # rescheduling/validation pattern as digest_time/bedtime. No env var,

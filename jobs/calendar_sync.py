@@ -1,7 +1,7 @@
 """
 jobs/calendar_sync.py
 ----------------------
-Nextcloud/CalDAV has no push mechanism this app can subscribe to, so an
+CalDAV has no push mechanism this app can subscribe to, so an
 event added, moved, or removed directly in a calendar app (outside the
 agent) is otherwise invisible to it. This job polls periodically and
 keeps a reminders.db row in sync with any event that has its own native
@@ -28,7 +28,7 @@ from apscheduler.triggers.date import DateTrigger
 from agent.scheduler import scheduler
 from jobs.reminders import fire_reminder
 from utils import reminders_store
-from utils.next_cloud_calendar import get_event, get_events_in_range, parse_ics_duration
+from utils.caldav_client import get_event, get_events_in_range, parse_ics_duration
 from utils.notify import notify_error
 
 logger = logging.getLogger(__name__)

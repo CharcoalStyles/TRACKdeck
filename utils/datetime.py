@@ -56,7 +56,7 @@ def parse_local_datetime(date_str: str, local_timezone_str: str | None = None) -
 
 def text_to_utc(date_str, local_timezone_str=None):
     """
-    Converts an agent/user friendly ISO or natural string format into Nextcloud UTC format.
+    Converts an agent/user friendly ISO or natural string format into iCalendar UTC format (RFC 5545).
     Example: '2026-07-10 15:00:00' -> '20260710T050000Z'
     """
     dt = parse_local_datetime(date_str, local_timezone_str)

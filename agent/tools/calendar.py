@@ -8,7 +8,7 @@ from datetime import timedelta
 from langchain_core.tools import tool
 
 from utils.datetime import get_todays_datetime, text_to_utc, add_time_to_UTC_text
-from utils.next_cloud_calendar import get_event, get_events_in_range, create_or_update_event, delete_event
+from utils.caldav_client import get_event, get_events_in_range, create_or_update_event, delete_event
 
 logger = logging.getLogger(__name__)
 
