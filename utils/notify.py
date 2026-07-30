@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 
 import httpx
 
@@ -50,3 +51,45 @@ def notify_error(context: str, error: Exception) -> None:
         message=f"{context}: {error}",
         priority=8,
     )
+
+
+_DEVICE_ERROR_COOLDOWN_SECONDS = 1800  # 30 min — adjustable
+
+# Process-memory only, resets on restart — same reasoning as auth.py's
+# _login_attempts tracking, not worth a DB table for this.
+_last_device_error_alert: dict[str, float] = {}
+
+
+def notify_device_error(
+    error_type: str, message: str, cooldown_seconds: int = _DEVICE_ERROR_COOLDOWN_SECONDS
+) -> bool:
+    """
+    Push a priority-8 Gotify alert for a device-reported error (main.py's
+    POST /device/error), deduped per error_type so a firmware retry loop
+    hitting the same failure every wake doesn't spam Gotify — same
+    "don't alert on every transient failure" philosophy
+    jobs/calendar_sync.py already applies to its own transient errors.
+
+    Deduping is keyed on error_type alone, not the full message, since
+    the goal is suppressing repeats of the same underlying condition even
+    if its detail text varies (e.g. a changing free-heap number). The
+    cooldown clock only advances on an actual send, not on a suppressed
+    call, so a continuous retry loop can't keep resetting it and prevent
+    ever re-alerting.
+
+    Always logs, sent or suppressed, so a stuck retry loop stays visible
+    in server logs even while Gotify itself is throttled.
+
+    Returns True if a notification was actually sent, False if
+    suppressed by the cooldown.
+    """
+    logger.warning("Device reported error [%s]: %s", error_type, message)
+
+    now = time.time()
+    last = _last_device_error_alert.get(error_type)
+    if last is not None and now - last < cooldown_seconds:
+        return False
+
+    _last_device_error_alert[error_type] = now
+    send_gotify(title=f"Device error: {error_type}", message=message, priority=8)
+    return True

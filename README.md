@@ -454,6 +454,7 @@ integration degraded or unavailable.
 | `/debug/calendar-sync` | POST | session-or-token | Run a calendar reminder sync pass on demand |
 | `/debug/reconcile-vault` | POST | session-or-token | Force a full vault/index reconciliation |
 | `/device/sync` | POST | `API_TOKEN` | ESP32-S3 wake/poll — optional telemetry body, returns the 24h snapshot |
+| `/device/error` | POST | `API_TOKEN` | Standalone device error report — Gotify alert, deduped per `error_type` |
 | `/debug/device-sync` | GET | session-or-token | Preview the exact `/device/sync` payload, no telemetry recorded |
 | `/debug/device-state` | GET | session-or-token | Last telemetry the device reported |
 | `/synthesize` | POST | `API_TOKEN` | Piper TTS — built, unused in the production voice flow |

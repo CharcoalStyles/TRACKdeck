@@ -86,7 +86,7 @@ from agent.vault_watcher import reconcile_vault, watch_vault
 from utils import alert_sounds_store, checkins_store, device_state, reminders_store, vault
 from utils.caldav_client import ensure_collection_exists
 from utils.mailer import send_email
-from utils.notify import send_gotify
+from utils.notify import notify_device_error, send_gotify
 
 from voice import router as voice_router
 from routes.synth import router as synth_router
@@ -680,6 +680,63 @@ async def device_sync(
         int(time.time()),
     )
     return await build_sync_payload()
+
+
+class DeviceErrorReport(BaseModel):
+    # Short machine-readable tag, e.g. "sync_response_too_large",
+    # "wifi_connect_failed", "sd_write_failed" — free text, no enum
+    # enforced server-side, so firmware can report any failure it wants
+    # through this one generic channel.
+    error_type: str
+    message: str | None = None
+    firmware_version: str | None = None
+    reset_reason: str | None = None
+    # timer/button/power_on, etc. — same vocabulary as DeviceTelemetry's
+    # wake_reason above, helps correlate what kind of cycle hit the error.
+    wake_reason: str | None = None
+    battery_mv: int | None = None
+    battery_pct: int | None = None
+    # Signal strength at the time of the error — correlates connectivity
+    # failures with a weak link rather than a real network/server problem.
+    rssi_dbm: int | None = None
+    # heap_caps_get_free_size(MALLOC_CAP_INTERNAL) specifically — not a
+    # combined/PSRAM figure. This device leans on PSRAM for anything
+    # multi-KB (the sync buffer, WAV chunk buffers, tone buffers)
+    # precisely because internal SRAM is scarce (3.5KB main task stack);
+    # PSRAM running low is unlikely to ever matter here, internal SRAM
+    # running low is the actual crash risk, so that's the number worth
+    # capturing.
+    free_internal_heap_bytes: int | None = None
+
+
+@app.post("/device/error")
+async def device_error(
+    report: DeviceErrorReport, _: Annotated[None, Depends(auth.require_device_token)]
+):
+    """
+    Standalone error-reporting channel for the ESP32-S3 — independent of
+    POST /device/sync so it still works when sync itself never succeeds
+    (WiFi association failure, a response too large for the device's
+    fixed buffer, an SD card write failure, etc.), unlike DeviceTelemetry
+    above which only ever rides on a successful sync call. Pushes a
+    priority-8 Gotify alert, deduped per error_type via
+    notify.notify_device_error so a stuck retry loop doesn't spam Gotify
+    every wake.
+    """
+    detail = " | ".join(filter(None, [
+        report.message,
+        f"firmware {report.firmware_version}" if report.firmware_version else None,
+        f"wake_reason={report.wake_reason}" if report.wake_reason else None,
+        f"reset_reason={report.reset_reason}" if report.reset_reason else None,
+        f"battery={report.battery_pct}%" if report.battery_pct is not None else None,
+        f"battery_mv={report.battery_mv}" if report.battery_mv is not None else None,
+        f"rssi={report.rssi_dbm}dBm" if report.rssi_dbm is not None else None,
+        f"free_internal_heap={report.free_internal_heap_bytes}B"
+        if report.free_internal_heap_bytes is not None else None,
+    ])) or "(no further detail provided)"
+
+    sent = await asyncio.to_thread(notify_device_error, report.error_type, detail)
+    return {"status": "sent" if sent else "suppressed"}
 
 
 async def _skip_checkin(checkin_id: str) -> dict:
