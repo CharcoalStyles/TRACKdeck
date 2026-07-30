@@ -110,7 +110,7 @@ setting, never baked into the conversation history):
 | Default | always | Date/time grounding, multi-part request completion, fact-verification rules |
 | `one_shot` | `one_shot=True` on `/text` or `/voice` | Never ends on a clarifying question — makes a reasonable assumption, states it, completes the task. Simulates the real ESP32 constraint (no way to hear a follow-up) for testing before the hardware exists |
 | Learning mode | `settings.learning_mode` (standing toggle) | Passive — opportunistically records durable facts about the user as they come up naturally, via `remember_about_me` |
-| `onboarding` | `mode="onboarding"`, fixed thread `"onboarding"` | Active — drives a getting-to-know-you interview using a checklist as a guide, not a script; records as it goes, not at the end |
+| `onboarding` | `mode="onboarding"`, fixed thread `"onboarding"` | Active — drives a getting-to-know-you interview using a checklist as a guide, not a script; records as it goes, not at the end; calls `mark_onboarding_complete` once the main areas feel covered, which switches `profile.html`'s merged Onboarding/Profile page to its Profile Q&A view by default |
 | `profile_chat` | `mode="profile_chat"`, fixed thread `"profile_chat"` | Scoped to answering/correcting what's in the profile |
 
 Learning mode and the two active modes are mutually exclusive per turn.
@@ -351,17 +351,27 @@ demand for testing.
 ### Dashboard
 
 `static/`, plain HTML/CSS/JS — no build step, no bundler, no framework. Shared code via
-native ES modules (`static/js/api.js`, `static/js/chat.js`) imported directly by
-`<script type="module">`. This was a deliberate choice over a React/Vue app in its own
-container: the actual problem was one HTML file getting unwieldy, not a need for component
-state management, for a tool with exactly one user.
+native ES modules (`static/js/api.js`, `static/js/chat.js`, `static/js/nav.js`) imported
+directly by `<script type="module">`. This was a deliberate choice over a React/Vue app in
+its own container: the actual problem was one HTML file getting unwieldy, not a need for
+component state management, for a tool with exactly one user.
+
+The header/nav is rendered by `nav.js`'s `renderNav(activePage)` rather than duplicated in
+each page's HTML — `Chat` and `Profile` (the agent-facing pages) sit as direct top-level
+links; `Settings`/`Testing`/`Check-Ins`/`Alert Sounds`/`Errors`/`Calendar` (config/debug
+surfaces with no LLM involvement) collapse into an `Admin` dropdown via a native
+`<details>/<summary>` element, no JS click-handling needed since every item is a full page
+navigation.
 
 | Page | Purpose |
 |---|---|
 | `index.html` | Chat — sidebar of addressable threads + main window, default mode |
-| `onboarding.html` | Guided profile interview |
-| `profile.html` | Query & update the profile conversationally |
-| `settings.html` | Standing toggles (currently: learning mode) |
+| `profile.html` | Merged guided-interview/Q&A profile page — defaults to the interview until `mark_onboarding_complete` fires, then to Q&A; a manual toggle switches either direction |
+| `settings.html` | Standing toggles — learning mode, default location/timezone, digest/bedtime/check-in times, calendar sync interval, device poll interval |
+| `testing.html` | Manually fire background jobs (digest, bedtime, check-in, calendar sync, vault reconcile, test notification/email/reminder) and preview device state/sync payload |
+| `checkins.html` | Today's mental-health check-in history — answered/skipped/missed |
+| `alert-sounds.html` | Upload/convert/manage the ESP32-S3's WAV alert-sound library |
+| `errors.html` | History of device-reported errors (`POST /device/error`), including suppressed repeats |
 
 `chat.js`'s `ChatWidget` is the one piece of real shared logic — send/receive/loading
 state/error handling, plus `setThread()` for the sidebar to switch between conversations
@@ -455,6 +465,7 @@ integration degraded or unavailable.
 | `/debug/reconcile-vault` | POST | session-or-token | Force a full vault/index reconciliation |
 | `/device/sync` | POST | `API_TOKEN` | ESP32-S3 wake/poll — optional telemetry body, returns the 24h snapshot |
 | `/device/error` | POST | `API_TOKEN` | Standalone device error report — Gotify alert, deduped per `error_type` |
+| `/device/errors` | GET | session-or-token | History of device error reports, most recent first, for `errors.html` |
 | `/debug/device-sync` | GET | session-or-token | Preview the exact `/device/sync` payload, no telemetry recorded |
 | `/debug/device-state` | GET | session-or-token | Last telemetry the device reported |
 | `/synthesize` | POST | `API_TOKEN` | Piper TTS — built, unused in the production voice flow |

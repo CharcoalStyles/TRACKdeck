@@ -10,46 +10,164 @@
 
 <body>
 
-  <header>
-    <h1>Assistant Dashboard</h1>
-    <nav>
-      <a href="/static/index.html">Chat</a>
-      <a href="/static/voice.html">Voice Test</a>
-      <a href="/static/onboarding.html">Onboarding</a>
-      <a href="/static/profile.html" class="active">Profile</a>
-      <a href="/static/settings.html">Settings</a>
-      <a href="/static/testing.html">Testing</a>
-      <a href="/static/checkins.html">Check-Ins</a>
-      <a href="#" id="logoutBtn">Log out</a>
-    </nav>
-  </header>
+  <header id="appHeader"></header>
 
   <main>
-    <div class="card">
-      <h2>Your Profile</h2>
+    <div class="card" id="basicsCard" style="display: none;">
+      <h2>The Basics</h2>
       <p class="description">
-        Ask what's currently known about you, or just tell it something to add or correct —
-        this talks directly to your About Me note, separate from the guided onboarding flow.
+        These are used directly by tools (weather, calendar, the daily digest) rather than
+        recorded as profile facts, so they're set here instead of through the conversation
+        below. Skip if you're not sure — sensible defaults are already in place.
       </p>
+
+      <div class="field-row">
+        <label for="onboardLocationInput">Default location</label>
+        <input type="text" id="onboardLocationInput" placeholder="e.g. Canberra">
+      </div>
+
+      <div class="field-row">
+        <label for="onboardTimezoneInput">Timezone</label>
+        <div class="field-with-button">
+          <input type="text" id="onboardTimezoneInput" list="onboardTimezoneOptions" placeholder="e.g. Australia/Canberra">
+          <button type="button" id="onboardDetectTimezoneBtn" class="secondary-btn">Detect</button>
+        </div>
+        <datalist id="onboardTimezoneOptions"></datalist>
+      </div>
+
+      <div class="field-row">
+        <button type="button" id="onboardSaveBasicsBtn" class="primary-btn">Save</button>
+      </div>
+
+      <div class="save-status" id="onboardBasicsStatus"></div>
+    </div>
+
+    <div class="card">
+      <h2 id="chatCardTitle">Your Profile</h2>
+      <p class="description" id="chatCardDescription"></p>
       <div class="chat-widget" id="chat-root"></div>
+      <div class="field-row">
+        <button type="button" id="modeToggleBtn" class="secondary-btn"></button>
+      </div>
     </div>
   </main>
 
   <script type="module">
     import { ChatWidget } from '/static/js/chat.js';
-    import { requireSession, logout } from '/static/js/auth.js';
+    import { getSettings, updateSettings, getThreadMessages } from '/static/js/api.js';
+    import { requireSession } from '/static/js/auth.js';
+    import { renderNav } from '/static/js/nav.js';
 
-    document.getElementById('logoutBtn').addEventListener('click', async (e) => {
-      e.preventDefault();
-      await logout();
-    });
+    renderNav('profile');
 
     if (await requireSession()) {
-      new ChatWidget(document.getElementById('chat-root'), {
-        threadId: 'profile_chat',
-        mode: 'profile_chat',
-        greeting: "What would you like to know, or is there something to add or correct?",
+      const basicsCard = document.getElementById('basicsCard');
+      const chatCardTitle = document.getElementById('chatCardTitle');
+      const chatCardDescription = document.getElementById('chatCardDescription');
+      const chatRoot = document.getElementById('chat-root');
+      const modeToggleBtn = document.getElementById('modeToggleBtn');
+
+      let currentMode = 'profile_chat';
+      let chatWidget = null;
+
+      // renderChat handles both the initial view and the manual toggle
+      // identically — restores prior thread history either way, unlike
+      // the old separate onboarding.html/profile.html pages, which
+      // always showed a static greeting on every visit.
+      async function renderChat(mode) {
+        currentMode = mode;
+        const isOnboarding = mode === 'onboarding';
+        basicsCard.style.display = isOnboarding ? '' : 'none';
+
+        if (isOnboarding) {
+          chatCardTitle.textContent = 'Get to Know You';
+          chatCardDescription.textContent = "A guided conversation to help build out your profile — the agent will ask about things worth remembering, but you can stop at any point. Whatever's been said already stays saved.";
+          modeToggleBtn.textContent = 'Skip to Profile Q&A →';
+        } else {
+          chatCardTitle.textContent = 'Your Profile';
+          chatCardDescription.textContent = "Ask what's currently known about you, or just tell it something to add or correct — this talks directly to your About Me note.";
+          modeToggleBtn.textContent = '← Redo the onboarding interview';
+        }
+
+        const threadId = isOnboarding ? 'onboarding' : 'profile_chat';
+        let messages = [];
+        try {
+          messages = await getThreadMessages(threadId);
+        } catch (err) {
+          console.error('Failed to load thread history:', err);
+        }
+
+        const greeting = isOnboarding
+          ? "Hey — let's get to know you a bit. Nothing here is required, and you can stop whenever you like. To start, what do you do for work, or spend most of your time on?"
+          : "What would you like to know, or is there something to add or correct?";
+
+        chatWidget = new ChatWidget(chatRoot, {
+          threadId,
+          mode,
+          // Only pass a greeting when there's no history to show — avoids
+          // the constructor appending a greeting bubble immediately
+          // before loadHistory() clears it again.
+          greeting: messages.length === 0 ? greeting : null,
+        });
+        if (messages.length > 0) {
+          chatWidget.loadHistory(messages);
+        }
+      }
+
+      modeToggleBtn.addEventListener('click', () => {
+        renderChat(currentMode === 'onboarding' ? 'profile_chat' : 'onboarding');
       });
+
+      const onboardLocationInput = document.getElementById('onboardLocationInput');
+      const onboardTimezoneInput = document.getElementById('onboardTimezoneInput');
+      const onboardTimezoneOptions = document.getElementById('onboardTimezoneOptions');
+      const onboardDetectTimezoneBtn = document.getElementById('onboardDetectTimezoneBtn');
+      const onboardSaveBasicsBtn = document.getElementById('onboardSaveBasicsBtn');
+      const onboardBasicsStatus = document.getElementById('onboardBasicsStatus');
+
+      if (typeof Intl.supportedValuesOf === 'function') {
+        for (const tz of Intl.supportedValuesOf('timeZone')) {
+          const opt = document.createElement('option');
+          opt.value = tz;
+          onboardTimezoneOptions.appendChild(opt);
+        }
+      }
+
+      onboardDetectTimezoneBtn.addEventListener('click', () => {
+        onboardTimezoneInput.value = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      });
+
+      onboardSaveBasicsBtn.addEventListener('click', async () => {
+        onboardBasicsStatus.textContent = 'Saving...';
+        onboardBasicsStatus.style.color = '#888';
+        try {
+          await updateSettings({
+            default_location: onboardLocationInput.value,
+            timezone: onboardTimezoneInput.value,
+          });
+          onboardBasicsStatus.textContent = 'Saved.';
+          onboardBasicsStatus.style.color = '#00adb5';
+        } catch (error) {
+          console.error('Failed to save basics:', error);
+          onboardBasicsStatus.textContent = 'Failed to save — check the timezone name is a valid IANA zone.';
+          onboardBasicsStatus.style.color = '#ff6b6b';
+        }
+      });
+
+      let settingsData;
+      try {
+        settingsData = await getSettings();
+      } catch (error) {
+        console.error('Failed to load settings:', error);
+        settingsData = {};
+      }
+
+      onboardLocationInput.value = settingsData.default_location || '';
+      // Prefill with the browser's detected zone only if nothing's been set
+      // yet, so a first-time visit starts with a sensible guess.
+      onboardTimezoneInput.value = settingsData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+      await renderChat(settingsData.onboarding_complete ? 'profile_chat' : 'onboarding');
     }
   </script>
 </body>

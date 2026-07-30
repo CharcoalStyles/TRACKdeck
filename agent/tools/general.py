@@ -8,6 +8,7 @@ import requests
 import os
 
 from agent.settings import settings
+from utils import onboarding_state
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,21 @@ def get_current_datetime() -> str:
     now_string = now.strftime("%-I:%M %p on %A %-d %B %Y")
     logger.info("Current date and time: %s", now_string)
     return f"The current date and time is: {now_string}"
+
+# ---------------------------------------------------------------------------
+# Onboarding
+# ---------------------------------------------------------------------------
+
+@tool
+def mark_onboarding_complete() -> str:
+    """Call this once the guided onboarding interview's main areas (preferences, people,
+    routine, interests) feel reasonably covered — only when the onboarding mode addendum's
+    guidance applies, not during ordinary chat or profile Q&A. Marks onboarding complete so
+    the dashboard defaults to the profile Q&A view instead of the interview. Safe to call
+    more than once; the user can still switch back to the interview manually afterward."""
+    onboarding_state.mark_onboarding_complete()
+    logger.info("Onboarding marked complete.")
+    return "Onboarding marked complete."
 
 # ---------------------------------------------------------------------------
 # Web Search

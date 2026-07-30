@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Errors — Assistant Dashboard</title>
+  <link rel="stylesheet" href="/static/css/theme.css">
+</head>
+
+<body>
+
+  <header id="appHeader"></header>
+
+  <main>
+    <div class="card">
+      <h2>Device Errors</h2>
+      <p class="description">Error reports from the ESP32-S3 — includes suppressed repeats (deduped per error type within a cooldown window), not just ones that triggered a Gotify alert.</p>
+      <div class="field-row"><button type="button" id="refreshBtn" class="secondary-btn">Refresh</button></div>
+      <div class="save-status" id="errorsStatus"></div>
+    </div>
+
+    <div id="errorsList"></div>
+  </main>
+
+  <script type="module">
+    import { listDeviceErrors } from '/static/js/api.js';
+    import { requireSession } from '/static/js/auth.js';
+    import { renderNav } from '/static/js/nav.js';
+
+    renderNav('errors');
+
+    if (await requireSession()) {
+      const refreshBtn = document.getElementById('refreshBtn');
+      const errorsStatus = document.getElementById('errorsStatus');
+      const errorsList = document.getElementById('errorsList');
+
+      function showStatus(el, text, ok = true) {
+        el.textContent = text;
+        el.style.color = ok ? '#00adb5' : '#ff6b6b';
+      }
+
+      function formatTime(epochSeconds) {
+        return new Date(epochSeconds * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+      }
+
+      function renderError(err) {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        const heading = document.createElement('h2');
+        heading.textContent = `${formatTime(err.created_at)} — ${err.error_type}`;
+
+        const statusBadge = document.createElement('span');
+        statusBadge.textContent = err.alerted ? ' Alerted' : ' Suppressed';
+        statusBadge.style.color = err.alerted ? '#00adb5' : '#888';
+        statusBadge.style.fontSize = '0.8rem';
+        statusBadge.style.fontWeight = '600';
+        heading.appendChild(statusBadge);
+
+        card.appendChild(heading);
+
+        if (err.message) {
+          const message = document.createElement('p');
+          message.className = 'description';
+          message.style.marginBottom = '0.5rem';
+          message.textContent = err.message;
+          card.appendChild(message);
+        }
+
+        const detailParts = [];
+        if (err.firmware_version) detailParts.push(`firmware ${err.firmware_version}`);
+        if (err.wake_reason) detailParts.push(`wake=${err.wake_reason}`);
+        if (err.reset_reason) detailParts.push(`reset=${err.reset_reason}`);
+        if (err.battery_pct !== null) detailParts.push(`battery=${err.battery_pct}%`);
+        else if (err.battery_mv !== null) detailParts.push(`battery=${err.battery_mv}mV`);
+        if (err.rssi_dbm !== null) detailParts.push(`rssi=${err.rssi_dbm}dBm`);
+        if (err.free_internal_heap_bytes !== null) detailParts.push(`free_internal_heap=${err.free_internal_heap_bytes}B`);
+
+        if (detailParts.length > 0) {
+          const detail = document.createElement('p');
+          detail.style.margin = '0';
+          detail.style.fontSize = '0.8rem';
+          detail.style.color = '#888';
+          detail.textContent = detailParts.join(' · ');
+          card.appendChild(detail);
+        }
+
+        return card;
+      }
+
+      async function loadErrors() {
+        showStatus(errorsStatus, 'Loading...', true);
+        try {
+          const { errors } = await listDeviceErrors();
+          errorsList.replaceChildren();
+          if (errors.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'card';
+            empty.innerHTML = '<p class="description" style="margin:0;">No device errors reported.</p>';
+            errorsList.appendChild(empty);
+          } else {
+            for (const err of errors) {
+              errorsList.appendChild(renderError(err));
+            }
+          }
+          showStatus(errorsStatus, '', true);
+        } catch (error) {
+          console.error('Failed to load device errors:', error);
+          showStatus(errorsStatus, 'Failed to load.', false);
+        }
+      }
+
+      refreshBtn.addEventListener('click', loadErrors);
+      loadErrors();
+    }
+  </script>
+</body>
+
+</html>

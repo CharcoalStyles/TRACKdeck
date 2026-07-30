@@ -12,15 +12,28 @@
 # Whichever of these actually exist on disk get wiped; the other is just
 # skipped.
 #
+# onboarding_complete.flag (see utils/onboarding_state.py) is wiped
+# alongside memory.db, not treated as durable state — it reflects whether
+# the "onboarding" thread's conversation reached a natural conclusion, and
+# that conversation's history lives in memory.db, which this script always
+# clears. Leaving the flag standing after memory.db is wiped would mean
+# static/profile.html defaults to the Profile Q&A view over an onboarding
+# thread that no longer has any history — an inconsistent state.
+#
 # The Obsidian vault (your actual notes, About Me, Inbox) is NOT touched
 # by default. It's synced live to every device you've paired via
 # Syncthing — deleting it here would delete it everywhere once sync
 # runs. Pass --vault if you genuinely want that too.
 #
 # checkins.db (mental-health check-in history, see utils/checkins_store.py)
-# is also NOT touched, deliberately and unconditionally — it's a structured
-# log meant to persist for future trend/digest use, not disposable state
-# like Chroma/memory.db are.
+# and device_errors.db (device error history, see utils/device_errors_store.py)
+# are also NOT touched, deliberately and unconditionally — they're
+# structured logs meant to persist for future trend/digest use, not
+# disposable state like Chroma/memory.db are.
+#
+# The bundled Radicale calendar data (./data/radicale) is likewise NOT
+# touched — it's real calendar events, the same "not disposable" category
+# as the vault and checkins.db, not derived/rebuildable state.
 #
 # Usage:
 #   ./reset_knowledge.sh                 reset memory/index/checkpoints only
@@ -38,7 +51,7 @@ for arg in "$@"; do
         --vault) WIPE_VAULT=true ;;
         --dry-run) DRY_RUN=true ;;
         --help|-h)
-            sed -n '2,26p' "$0"
+            sed -n '2,33p' "$0"
             exit 0
             ;;
         *)
@@ -52,6 +65,7 @@ done
 
 CHROMA_CANDIDATES=("./chroma_db" "./data/chroma_db")
 MEMORY_DB_CANDIDATES=("./memory.db" "./data/memory.db")
+ONBOARDING_FLAG_CANDIDATES=("./onboarding_complete.flag" "./data/onboarding_complete.flag")
 RECEIVED_NOTES_DIR="./received_notes"
 
 # Vault path: respect VAULT_PATH from .env if present, else the coded
@@ -71,6 +85,11 @@ for m in "${MEMORY_DB_CANDIDATES[@]}"; do
     [[ -f "$m" ]] && found_memory_db+=("$m")
 done
 
+found_onboarding_flag=()
+for o in "${ONBOARDING_FLAG_CANDIDATES[@]}"; do
+    [[ -f "$o" ]] && found_onboarding_flag+=("$o")
+done
+
 # --- Report what will happen -------------------------------------------
 
 echo "This will permanently delete:"
@@ -86,6 +105,13 @@ if [[ ${#found_memory_db[@]} -eq 0 ]]; then
 else
     for m in "${found_memory_db[@]}"; do
         echo "  - Thread checkpoints (memory.db): $m"
+    done
+fi
+if [[ ${#found_onboarding_flag[@]} -eq 0 ]]; then
+    echo "  - Onboarding-complete flag: none found, nothing to do"
+else
+    for o in "${found_onboarding_flag[@]}"; do
+        echo "  - Onboarding-complete flag: $o (so the Profile page shows the onboarding interview again)"
     done
 fi
 if [[ -d "$RECEIVED_NOTES_DIR" ]]; then
@@ -132,6 +158,14 @@ for m in "${found_memory_db[@]}"; do
     echo "Wiping $m ..."
     rm -f "${m:?}"
     touch "$m"   # keep it a FILE — a missing file can get bind-mounted as a directory instead
+done
+
+for o in "${found_onboarding_flag[@]}"; do
+    echo "Clearing $o ..."
+    rm -f "${o:?}"
+    touch "$o"   # empty = not complete (utils/onboarding_state.py checks content, not just
+                 # existence) — keep it a FILE, same reasoning as memory.db above, since it's
+                 # a docker-compose bind mount too
 done
 
 if [[ -d "$RECEIVED_NOTES_DIR" ]]; then

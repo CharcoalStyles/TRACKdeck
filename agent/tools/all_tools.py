@@ -14,7 +14,7 @@ from agent.memory import MemoryStore
 from agent.tools.alerts import cancel_reminder, list_reminders, set_reminder, set_timer
 from agent.tools.calendar import get_tools as get_calendar_tools
 from agent.tools.checkin import get_reflection_prompt
-from agent.tools.general import get_current_datetime, web_search
+from agent.tools.general import get_current_datetime, mark_onboarding_complete, web_search
 from agent.tools.notes import make_note_tools
 from agent.tools.weather import get_tools as get_weather_tools
 
@@ -37,6 +37,7 @@ def get_tools(memory: MemoryStore):
         cancel_reminder,
         get_reflection_prompt,
         web_search,
+        mark_onboarding_complete,
     ])
 
     return tools

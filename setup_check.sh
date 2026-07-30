@@ -2,8 +2,9 @@
 # setup_check.sh
 # Verifies (and fixes) the two runtime prerequisites that don't come from
 # `uv sync`: the Piper TTS voice model, and the
-# memory.db/reminders.db/checkins.db/alert_sounds.db/chroma_db paths that
-# docker-compose expects to already exist as the right file types.
+# memory.db/reminders.db/checkins.db/alert_sounds.db/device_errors.db/
+# onboarding_complete.flag/chroma_db paths that docker-compose expects to
+# already exist as the right file types.
 #
 # Safe to re-run — every step is idempotent.
 
@@ -36,13 +37,16 @@ else
 fi
 
 echo
-echo "== 2. memory.db / reminders.db / checkins.db / alert_sounds.db / chroma_db (docker-compose bind mounts) =="
+echo "== 2. memory.db / reminders.db / checkins.db / alert_sounds.db / device_errors.db /"
+echo "      onboarding_complete.flag / chroma_db (docker-compose bind mounts) =="
 DATA_DIR="./data"
 MEMORY_DB="${DATA_DIR}/memory.db"
 REMINDERS_DB="${DATA_DIR}/reminders.db"
 CHECKINS_DB="${DATA_DIR}/checkins.db"
 ALERT_SOUNDS_DB="${DATA_DIR}/alert_sounds.db"
 ALERT_SOUNDS_DIR="${DATA_DIR}/alert_sounds"
+DEVICE_ERRORS_DB="${DATA_DIR}/device_errors.db"
+ONBOARDING_FLAG="${DATA_DIR}/onboarding_complete.flag"
 CHROMA_DIR="${DATA_DIR}/chroma_db"
 
 mkdir -p "$DATA_DIR"
@@ -108,6 +112,30 @@ elif [[ -d "$ALERT_SOUNDS_DIR" ]]; then
 else
     echo "  Creating $ALERT_SOUNDS_DIR..."
     mkdir -p "$ALERT_SOUNDS_DIR"
+fi
+
+if [[ -d "$DEVICE_ERRORS_DB" ]]; then
+    echo "  ERROR: $DEVICE_ERRORS_DB exists but is a DIRECTORY, not a file."
+    echo "         This happens when docker compose was run before this file existed."
+    echo "         Remove it and re-run this script: rm -r '$DEVICE_ERRORS_DB'"
+    exit 1
+elif [[ -f "$DEVICE_ERRORS_DB" ]]; then
+    echo "  OK: $DEVICE_ERRORS_DB already exists as a file."
+else
+    echo "  Creating empty $DEVICE_ERRORS_DB so Docker mounts it as a file..."
+    touch "$DEVICE_ERRORS_DB"
+fi
+
+if [[ -d "$ONBOARDING_FLAG" ]]; then
+    echo "  ERROR: $ONBOARDING_FLAG exists but is a DIRECTORY, not a file."
+    echo "         This happens when docker compose was run before this file existed."
+    echo "         Remove it and re-run this script: rm -r '$ONBOARDING_FLAG'"
+    exit 1
+elif [[ -f "$ONBOARDING_FLAG" ]]; then
+    echo "  OK: $ONBOARDING_FLAG already exists as a file."
+else
+    echo "  Creating empty $ONBOARDING_FLAG so Docker mounts it as a file..."
+    touch "$ONBOARDING_FLAG"
 fi
 
 if [[ -d "$CHROMA_DIR" ]]; then

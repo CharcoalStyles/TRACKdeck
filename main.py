@@ -83,7 +83,15 @@ from jobs.digest import send_daily_digest
 from jobs.reminders import create_test_reminder, fire_reminder
 
 from agent.vault_watcher import reconcile_vault, watch_vault
-from utils import alert_sounds_store, checkins_store, device_state, reminders_store, vault
+from utils import (
+    alert_sounds_store,
+    checkins_store,
+    device_errors_store,
+    device_state,
+    onboarding_state,
+    reminders_store,
+    vault,
+)
 from utils.caldav_client import ensure_collection_exists
 from utils.mailer import send_email
 from utils.notify import notify_device_error, send_gotify
@@ -159,6 +167,7 @@ async def lifespan(app: FastAPI):
         await asyncio.to_thread(reminders_store.init_db)
         await asyncio.to_thread(device_state.init_db)
         await asyncio.to_thread(alert_sounds_store.init_db)
+        await asyncio.to_thread(device_errors_store.init_db)
         for reminder in await asyncio.to_thread(reminders_store.list_pending):
             due_local = datetime.fromtimestamp(reminder["due_at"], tz=timezone.utc)
             if due_local <= datetime.now(timezone.utc):
@@ -454,6 +463,10 @@ def _current_settings() -> dict:
         "calendar_sync_interval_minutes": settings.calendar_sync_interval_minutes,
         "wake_time": settings.wake_time,
         "device_poll_interval_seconds": settings.device_poll_interval_seconds,
+        # Read-only here — deliberately not part of SettingsUpdate below, so
+        # it can only be set via agent/tools/general.py's
+        # mark_onboarding_complete tool, not a direct POST /settings call.
+        "onboarding_complete": onboarding_state.is_onboarding_complete(),
     }
 
 
@@ -736,7 +749,35 @@ async def device_error(
     ])) or "(no further detail provided)"
 
     sent = await asyncio.to_thread(notify_device_error, report.error_type, detail)
+    await asyncio.to_thread(
+        device_errors_store.record_error,
+        report.error_type,
+        report.message,
+        report.firmware_version,
+        report.reset_reason,
+        report.wake_reason,
+        report.battery_mv,
+        report.battery_pct,
+        report.rssi_dbm,
+        report.free_internal_heap_bytes,
+        sent,
+        int(time.time()),
+    )
     return {"status": "sent" if sent else "suppressed"}
+
+
+@app.get("/device/errors")
+async def list_device_errors(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """
+    History of device-reported errors (POST /device/error above), most
+    recent first, for the dashboard's Errors page. Includes suppressed
+    occurrences too (deduped by notify.notify_device_error's per-
+    error_type cooldown), not just ones that actually triggered a Gotify
+    alert — so a repeatedly-firing condition is visible even while the
+    notification channel itself is being throttled.
+    """
+    errors = await asyncio.to_thread(device_errors_store.list_recent)
+    return {"errors": [{**e, "alerted": bool(e["alerted"])} for e in errors]}
 
 
 async def _skip_checkin(checkin_id: str) -> dict:

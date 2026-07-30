@@ -129,3 +129,10 @@ export async function deleteAlertSound(id) {
   if (!response.ok) throw new Error(`Server returned ${response.status}`);
   return response.json();
 }
+
+/** @returns {Promise<{errors: Array<{id: string, error_type: string, message: string|null, firmware_version: string|null, reset_reason: string|null, wake_reason: string|null, battery_mv: number|null, battery_pct: number|null, rssi_dbm: number|null, free_internal_heap_bytes: number|null, alerted: boolean, created_at: number}>}>} */
+export async function listDeviceErrors() {
+  const response = await fetch('/device/errors');
+  if (!response.ok) throw new Error(`Server returned ${response.status}`);
+  return response.json();
+}

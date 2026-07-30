@@ -10,19 +10,7 @@
 
 <body>
 
-  <header>
-    <h1>Assistant Dashboard</h1>
-    <nav>
-      <a href="/static/index.html" class="active">Chat</a>
-      <a href="/static/onboarding.html">Onboarding</a>
-      <a href="/static/profile.html">Profile</a>
-      <a href="/static/settings.html">Settings</a>
-      <a href="/static/testing.html">Testing</a>
-      <a href="/static/checkins.html">Check-Ins</a>
-      <a href="/calendar/" target="_blank" rel="noopener" title="Manage calendars (create/rename/delete) — to view or edit events, use a CalDAV app like Thunderbird or your phone's calendar">Calendar</a>
-      <a href="#" id="logoutBtn">Log out</a>
-    </nav>
-  </header>
+  <header id="appHeader"></header>
 
   <div class="chat-page">
     <aside class="sidebar">
@@ -39,12 +27,10 @@
   <script type="module">
     import { ChatWidget } from '/static/js/chat.js';
     import { listThreads, createNewThread, getThreadMessages } from '/static/js/api.js';
-    import { requireSession, logout } from '/static/js/auth.js';
+    import { requireSession } from '/static/js/auth.js';
+    import { renderNav } from '/static/js/nav.js';
 
-    document.getElementById('logoutBtn').addEventListener('click', async (e) => {
-      e.preventDefault();
-      await logout();
-    });
+    renderNav('chat');
 
     // requireSession() already redirects to /static/login.html on 401 —
     // the rest of this page's logic only runs for an authenticated session.

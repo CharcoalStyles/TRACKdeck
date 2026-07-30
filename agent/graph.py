@@ -152,8 +152,9 @@ About Me section — see that tool's description for why. The same applies to an
 distinct sub-topic (a specific ongoing project, a specific health matter) that's likely to 
 accumulate more detail later.
 
-If it feels like the main areas have been reasonably covered, say so and ask whether 
-they'd like to keep going or stop for now — don't just keep interviewing indefinitely."""
+If it feels like the main areas have been reasonably covered, call mark_onboarding_complete,
+let them know, and mention they can always come back to add more later via the dashboard —
+don't just keep interviewing indefinitely."""
 
 PROFILE_CHAT_ADDENDUM = """
 

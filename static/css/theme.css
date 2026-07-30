@@ -352,6 +352,65 @@ nav a.active {
 }
 
 /* ===================================================================
+   Admin nav dropdown (static/js/nav.js) — native <details>/<summary>,
+   no JS needed for open/close since every item is a full page navigation.
+   =================================================================== */
+
+nav details {
+  position: relative;
+}
+
+nav details summary {
+  color: #999;
+  font-size: 0.95rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  list-style: none;
+}
+
+nav details summary::-webkit-details-marker {
+  display: none;
+}
+
+nav details summary::after {
+  content: ' \25BE';
+  font-size: 0.7em;
+}
+
+nav details summary:hover {
+  color: #e0e0e0;
+  background: #222;
+}
+
+nav details[open] summary,
+nav details.active summary {
+  color: #00adb5;
+  background: #1c2b2c;
+}
+
+nav .nav-admin-menu {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  background: #1e1e1e;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 160px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+}
+
+nav .nav-admin-menu a {
+  padding: 0.5rem 0.7rem;
+}
+
+/* ===================================================================
    Chat widget (static/js/chat.js)
    =================================================================== */
 
