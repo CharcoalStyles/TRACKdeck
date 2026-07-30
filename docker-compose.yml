@@ -41,6 +41,13 @@ services:
       # they vanish on every container recreation. jobs/digest.py's nightly
       # sweep prunes anything older than 24h, so this shouldn't grow large.
       - ./received_notes:/app/received_notes
+      # Hugging Face cache (the faster-whisper model utils/transcription.py
+      # loads on startup). Without this the container's filesystem is
+      # ephemeral, so every rebuild/recreation re-downloads the model from
+      # scratch — and since that download happens at import time, before
+      # uvicorn binds, a slow/stuck download takes the whole app down, not
+      # just voice features.
+      - ./data/hf_cache:/root/.cache/huggingface
     env_file:
       # Loads .env.docker specifically — NOT .env. These are separate files
       # that must be kept in sync by hand (e.g. VAULT_PATH legitimately

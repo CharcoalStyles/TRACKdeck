@@ -59,6 +59,7 @@ ALERT_SOUNDS_DIR="${DATA_DIR}/alert_sounds"
 DEVICE_ERRORS_DB="${DATA_DIR}/device_errors.db"
 ONBOARDING_FLAG="${DATA_DIR}/onboarding_complete.flag"
 CHROMA_DIR="${DATA_DIR}/chroma_db"
+HF_CACHE_DIR="${DATA_DIR}/hf_cache"
 
 mkdir -p "$DATA_DIR"
 
@@ -154,6 +155,14 @@ if [[ -d "$CHROMA_DIR" ]]; then
 else
     echo "  Creating $CHROMA_DIR..."
     mkdir -p "$CHROMA_DIR"
+fi
+
+if [[ -d "$HF_CACHE_DIR" ]]; then
+    echo "  OK: $HF_CACHE_DIR already exists as a directory."
+else
+    echo "  Creating $HF_CACHE_DIR (Hugging Face cache for the faster-whisper model,"
+    echo "  so it persists across rebuilds instead of re-downloading every time)..."
+    mkdir -p "$HF_CACHE_DIR"
 fi
 
 echo

@@ -10,6 +10,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# faster-whisper pulls its model from Hugging Face on first use (see
+# utils/transcription.py) and caches it here. Left at the default location
+# under /root so docker-compose.yml can bind-mount it to a host path and
+# make it survive rebuilds/recreations instead of re-downloading every time.
+ENV HF_HOME=/root/.cache/huggingface
+
 # Copy dependency files first so Docker can cache the install layer
 # and skip it on rebuilds when only app code has changed
 COPY pyproject.toml uv.lock ./
