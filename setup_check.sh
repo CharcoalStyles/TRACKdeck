@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # setup_check.sh
-# Verifies (and fixes) the two runtime prerequisites that don't come from
-# `uv sync`: the Piper TTS voice model, and the
+# Verifies (and fixes) the two runtime prerequisites the docker-compose
+# build/mounts need that aren't already handled elsewhere: the Piper TTS
+# voice model (baked into the image by the dockerfile's `COPY . .`, so it
+# has to exist on the host *before* `docker compose up --build`), and the
 # memory.db/reminders.db/checkins.db/alert_sounds.db/device_errors.db/
 # onboarding_complete.flag/chroma_db paths that docker-compose expects to
 # already exist as the right file types.
+#
+# Only needs bash + curl — no uv/python/piper-tts required on the host,
+# since the voice model is fetched directly from its Hugging Face URL.
 #
 # Safe to re-run — every step is idempotent.
 
@@ -14,6 +19,9 @@ MODEL_DIR=".models"
 VOICE_NAME="en_US-lessac-medium"
 ONNX_PATH="${MODEL_DIR}/${VOICE_NAME}.onnx"
 JSON_PATH="${MODEL_DIR}/${VOICE_NAME}.onnx.json"
+# Matches piper-tts's own download_voices.py URL_FORMAT for this voice
+# (lang_family=en, lang_code=en_US, voice_name=lessac, voice_quality=medium).
+VOICE_BASE_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium"
 
 echo "== 1. Piper TTS voice model =="
 mkdir -p "$MODEL_DIR"
@@ -21,17 +29,20 @@ mkdir -p "$MODEL_DIR"
 if [[ -f "$ONNX_PATH" && -f "$JSON_PATH" ]]; then
     echo "  OK: $ONNX_PATH and $JSON_PATH already present."
 else
-    echo "  Missing model files — downloading '$VOICE_NAME' via piper.download_voices..."
-    # Requires piper-tts to be installed (it's in pyproject.toml already).
-    # If you're using uv: `uv run python -m piper.download_voices ...`
-    python3 -m piper.download_voices --data-dir "$MODEL_DIR" "$VOICE_NAME"
+    echo "  Missing model files — downloading '$VOICE_NAME' from Hugging Face..."
+    if ! command -v curl >/dev/null 2>&1; then
+        echo "  ERROR: 'curl' is required to download the voice model but isn't on PATH."
+        exit 1
+    fi
+    curl -fL -o "$ONNX_PATH" "${VOICE_BASE_URL}/${VOICE_NAME}.onnx?download=true"
+    curl -fL -o "$JSON_PATH" "${VOICE_BASE_URL}/${VOICE_NAME}.onnx.json?download=true"
 
     if [[ -f "$ONNX_PATH" && -f "$JSON_PATH" ]]; then
         echo "  Downloaded successfully."
     else
         echo "  ERROR: download ran but expected files still missing. Check filenames"
-        echo "         in $MODEL_DIR/ — the downloader may have used a slightly"
-        echo "         different name than routes/synth.py expects."
+        echo "         in $MODEL_DIR/ — routes/synth.py expects exactly"
+        echo "         '$VOICE_NAME.onnx' and '$VOICE_NAME.onnx.json'."
         exit 1
     fi
 fi
