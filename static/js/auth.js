@@ -20,17 +20,6 @@ export async function requireSession() {
   return true;
 }
 
-/** @returns {Promise<string>} the raw API_TOKEN, for callers (e.g.
- * static/voice.html) that need to hit a device-token-only route like
- * POST /voice directly from the browser. Only reachable to a session
- * already past requireSession(). */
-export async function getDeviceToken() {
-  const response = await fetch('/device/token');
-  if (!response.ok) throw new Error(`Server returned ${response.status}`);
-  const data = await response.json();
-  return data.token;
-}
-
 export async function logout() {
   await fetch('/logout', { method: 'POST' });
   location.replace('/static/login.html');

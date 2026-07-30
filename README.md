@@ -359,7 +359,6 @@ state management, for a tool with exactly one user.
 | Page | Purpose |
 |---|---|
 | `index.html` | Chat — sidebar of addressable threads + main window, default mode |
-| `voice.html` | Voice Test — mic recording against the real `/voice` pipeline, `sync`/`one_shot` toggles |
 | `onboarding.html` | Guided profile interview |
 | `profile.html` | Query & update the profile conversationally |
 | `settings.html` | Standing toggles (currently: learning mode) |
@@ -442,7 +441,6 @@ integration degraded or unavailable.
 |---|---|---|---|
 | `/login` | POST | none | Password → session cookie for the dashboard |
 | `/logout` | POST | none | Clears the session cookie |
-| `/device/token` | GET | session-or-token | Lets an already-logged-in dashboard fetch `API_TOKEN` (only used by the Voice Test page, to call the device-token-only `/voice`) |
 | `/text` | POST | session-or-token | Talk to the agent as text. `thread_id`, `one_shot`, `mode` optional |
 | `/voice` | POST | `API_TOKEN` | Audio upload. `sync`, `one_shot` form fields for testing |
 | `/threads` | GET | session-or-token | Sidebar thread list |

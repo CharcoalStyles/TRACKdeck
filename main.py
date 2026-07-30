@@ -90,6 +90,7 @@ from utils.notify import send_gotify
 
 from voice import router as voice_router
 from routes.synth import router as synth_router
+from routes.transcribe import router as transcribe_router
 from routes.calendar_proxy import router as calendar_proxy_router
 
 # ---------------------------------------------------------------------------
@@ -244,6 +245,7 @@ app.add_middleware(
 )
 app.include_router(voice_router)  # /voice
 app.include_router(synth_router)  # /synthesize
+app.include_router(transcribe_router)  # /transcribe
 app.include_router(calendar_proxy_router)  # /calendar — proxies the bundled Radicale UI
 
 
@@ -321,19 +323,6 @@ async def login(body: LoginRequest, request: Request):
 async def logout(request: Request):
     request.session.clear()
     return {"status": "ok"}
-
-
-@app.get("/device/token")
-async def get_device_token(_: Annotated[None, Depends(auth.require_session_or_token)]):
-    """
-    Lets an already-session-authenticated dashboard obtain the raw
-    API_TOKEN, so static/voice.html's browser mic test (which calls the
-    device-token-only POST /voice directly, see auth.py) still has a
-    credential to attach. Only reachable to a caller who already cleared
-    the session-or-token gate — not to any anonymous visitor, unlike the
-    old always-on api.js token-injection this replaces.
-    """
-    return {"token": os.environ["API_TOKEN"]}
 
 
 @app.post("/text", response_model=AssistantResponse)

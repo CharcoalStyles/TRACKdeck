@@ -20,6 +20,7 @@
 //   chat.setThread(threadId, historyMessages);  // switch/load on click
 
 import { sendText } from './api.js';
+import { attachVoiceButton } from './voiceInput.js';
 
 export class ChatWidget {
   constructor(rootEl, { threadId = null, mode = null, oneShot = false, greeting = null, onReply = null } = {}) {
@@ -32,6 +33,7 @@ export class ChatWidget {
       <div class="chat-log"></div>
       <form class="chat-input-row">
         <input type="text" class="chat-input" placeholder="Type a message..." autocomplete="off" />
+        <button type="button" class="mic-btn" aria-label="Dictate message" title="Dictate message">🎙️</button>
         <button type="submit">Send</button>
       </form>
     `;
@@ -39,6 +41,12 @@ export class ChatWidget {
     this.logEl = rootEl.querySelector('.chat-log');
     this.formEl = rootEl.querySelector('.chat-input-row');
     this.inputEl = rootEl.querySelector('.chat-input');
+    this.micBtn = rootEl.querySelector('.mic-btn');
+
+    attachVoiceButton(this.micBtn, {
+      onTranscript: (text) => this._sendDictated(text),
+      onError: (err) => this._handleVoiceError(err),
+    });
 
     this.formEl.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -99,6 +107,7 @@ export class ChatWidget {
 
     this.inputEl.value = '';
     this.inputEl.disabled = true;
+    this.micBtn.disabled = true;
     this._appendMessage('user', text);
     const loadingBubble = this._appendLoading();
 
@@ -125,7 +134,24 @@ export class ChatWidget {
       this._appendMessage('assistant', '(Something went wrong sending that — try again.)');
     } finally {
       this.inputEl.disabled = false;
+      this.micBtn.disabled = false;
       this.inputEl.focus();
     }
+  }
+
+  /** Called with the transcribed text once dictation finishes — feeds it
+   * through the exact same send path as a typed message. */
+  _sendDictated(text) {
+    if (!text.trim()) {
+      this._appendMessage('assistant', "(Didn't catch that — try again.)");
+      return;
+    }
+    this.inputEl.value = text;
+    this._handleSend();
+  }
+
+  _handleVoiceError(err) {
+    console.error('Dictation failed:', err);
+    this._appendMessage('assistant', '(Could not use the microphone — try typing instead.)');
   }
 }

@@ -65,12 +65,11 @@ from fastapi import (
     UploadFile,
     File,
 )
-from faster_whisper import WhisperModel
-
 import auth
 from jobs import checkin as checkin_jobs
 from agent.runtime import run_agent
 from utils.notify import notify_error
+from utils.transcription import transcribe_audio
 
 logger = logging.getLogger(__name__)
 
@@ -78,10 +77,6 @@ UPLOAD_DIR = "./received_notes"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 router = APIRouter()
-
-# Initialize the model strictly on CPU
-# Options: "tiny", "base", "small", "medium", "large-v3"
-whisper_model = WhisperModel("medium", device="cpu", compute_type="int8")
 
 
 async def _transcribe_and_run(
@@ -99,8 +94,7 @@ async def _transcribe_and_run(
     that check-in's own thread instead of resolved by keyword/recency, and
     the check-in is marked answered.
     """
-    segments, _ = whisper_model.transcribe(audio_path, beam_size=5)
-    transcription = " ".join(segment.text for segment in segments).strip()
+    transcription = transcribe_audio(audio_path)
 
     if not transcription:
         return "", "", ""
@@ -192,8 +186,7 @@ async def receive_checkin_voice(checkin_id: str, file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed writing audio: {str(e)}")
 
-    segments, _ = whisper_model.transcribe(audio_path, beam_size=5)
-    transcription = " ".join(segment.text for segment in segments).strip()
+    transcription = transcribe_audio(audio_path)
     if not transcription:
         return {"transcription": "", "reply": ""}
 

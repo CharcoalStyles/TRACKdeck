@@ -57,7 +57,7 @@
         <textarea id="replyInput" placeholder="Type your reply..."></textarea>
         <div class="checkin-actions">
           <button type="button" id="sendBtn" class="primary-btn">Send</button>
-          <button type="button" id="recordBtn" class="record-btn">Or record a voice reply</button>
+          <button type="button" id="recordBtn" class="mic-btn">Or record a voice reply</button>
           <button type="button" id="skipBtn" class="secondary-btn">Skip this one</button>
         </div>
         <div id="voiceStatus"></div>
@@ -68,6 +68,12 @@
   </main>
 
   <script type="module">
+    // Recorder makes no network calls of its own (unlike transcribeAudio/
+    // attachVoiceButton in the same module), so it's safe to import here
+    // despite this page's no-session, magic-link trust model — see the
+    // comment on #replyInput above for why api.js/chat.js/auth.js are not.
+    import { Recorder } from '/static/js/voiceInput.js';
+
     const params = new URLSearchParams(location.search);
     const checkinId = params.get('id');
     const category = params.get('category') || '';
@@ -157,28 +163,13 @@
         }
       });
 
-      // Voice reply, adapted from static/voice.html's recording widget —
-      // posts to the magic-link endpoint below, no auth header.
-      let mediaRecorder;
-      let audioChunks = [];
-      let isRecording = false;
+      // Voice reply — posts to the magic-link endpoint below, no auth header.
+      const recorder = new Recorder();
 
       recordBtn.addEventListener('click', async () => {
-        if (!isRecording) {
-          audioChunks = [];
+        if (!recorder.isRecording) {
           try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-            mediaRecorder.ondataavailable = (event) => {
-              if (event.data.size > 0) audioChunks.push(event.data);
-            };
-            mediaRecorder.onstop = async () => {
-              const blob = new Blob(audioChunks, { type: 'audio/webm' });
-              await sendVoiceReply(blob);
-              stream.getTracks().forEach(track => track.stop());
-            };
-            mediaRecorder.start();
-            isRecording = true;
+            await recorder.start();
             recordBtn.textContent = 'Stop recording';
             recordBtn.classList.add('recording');
             voiceStatus.textContent = 'Listening...';
@@ -187,11 +178,11 @@
             voiceStatus.textContent = 'Error: Mic access denied.';
           }
         } else {
-          mediaRecorder.stop();
-          isRecording = false;
           recordBtn.textContent = 'Or record a voice reply';
           recordBtn.classList.remove('recording');
           voiceStatus.textContent = 'Processing...';
+          const blob = await recorder.stop();
+          await sendVoiceReply(blob);
         }
       });
 
