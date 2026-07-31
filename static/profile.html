@@ -13,35 +13,6 @@
   <header id="appHeader"></header>
 
   <main>
-    <div class="card" id="basicsCard" style="display: none;">
-      <h2>The Basics</h2>
-      <p class="description">
-        These are used directly by tools (weather, calendar, the daily digest) rather than
-        recorded as profile facts, so they're set here instead of through the conversation
-        below. Skip if you're not sure — sensible defaults are already in place.
-      </p>
-
-      <div class="field-row">
-        <label for="onboardLocationInput">Default location</label>
-        <input type="text" id="onboardLocationInput" placeholder="e.g. Canberra">
-      </div>
-
-      <div class="field-row">
-        <label for="onboardTimezoneInput">Timezone</label>
-        <div class="field-with-button">
-          <input type="text" id="onboardTimezoneInput" list="onboardTimezoneOptions" placeholder="e.g. Australia/Canberra">
-          <button type="button" id="onboardDetectTimezoneBtn" class="secondary-btn">Detect</button>
-        </div>
-        <datalist id="onboardTimezoneOptions"></datalist>
-      </div>
-
-      <div class="field-row">
-        <button type="button" id="onboardSaveBasicsBtn" class="primary-btn">Save</button>
-      </div>
-
-      <div class="save-status" id="onboardBasicsStatus"></div>
-    </div>
-
     <div class="card">
       <h2 id="chatCardTitle">Your Profile</h2>
       <p class="description" id="chatCardDescription"></p>
@@ -54,14 +25,13 @@
 
   <script type="module">
     import { ChatWidget } from '/static/js/chat.js';
-    import { getSettings, updateSettings, getThreadMessages } from '/static/js/api.js';
+    import { getSettings, getThreadMessages } from '/static/js/api.js';
     import { requireSession } from '/static/js/auth.js';
     import { renderNav } from '/static/js/nav.js';
 
     renderNav('profile');
 
     if (await requireSession()) {
-      const basicsCard = document.getElementById('basicsCard');
       const chatCardTitle = document.getElementById('chatCardTitle');
       const chatCardDescription = document.getElementById('chatCardDescription');
       const chatRoot = document.getElementById('chat-root');
@@ -77,7 +47,6 @@
       async function renderChat(mode) {
         currentMode = mode;
         const isOnboarding = mode === 'onboarding';
-        basicsCard.style.display = isOnboarding ? '' : 'none';
 
         if (isOnboarding) {
           chatCardTitle.textContent = 'Get to Know You';
@@ -118,42 +87,6 @@
         renderChat(currentMode === 'onboarding' ? 'profile_chat' : 'onboarding');
       });
 
-      const onboardLocationInput = document.getElementById('onboardLocationInput');
-      const onboardTimezoneInput = document.getElementById('onboardTimezoneInput');
-      const onboardTimezoneOptions = document.getElementById('onboardTimezoneOptions');
-      const onboardDetectTimezoneBtn = document.getElementById('onboardDetectTimezoneBtn');
-      const onboardSaveBasicsBtn = document.getElementById('onboardSaveBasicsBtn');
-      const onboardBasicsStatus = document.getElementById('onboardBasicsStatus');
-
-      if (typeof Intl.supportedValuesOf === 'function') {
-        for (const tz of Intl.supportedValuesOf('timeZone')) {
-          const opt = document.createElement('option');
-          opt.value = tz;
-          onboardTimezoneOptions.appendChild(opt);
-        }
-      }
-
-      onboardDetectTimezoneBtn.addEventListener('click', () => {
-        onboardTimezoneInput.value = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      });
-
-      onboardSaveBasicsBtn.addEventListener('click', async () => {
-        onboardBasicsStatus.textContent = 'Saving...';
-        onboardBasicsStatus.style.color = '#888';
-        try {
-          await updateSettings({
-            default_location: onboardLocationInput.value,
-            timezone: onboardTimezoneInput.value,
-          });
-          onboardBasicsStatus.textContent = 'Saved.';
-          onboardBasicsStatus.style.color = '#00adb5';
-        } catch (error) {
-          console.error('Failed to save basics:', error);
-          onboardBasicsStatus.textContent = 'Failed to save — check the timezone name is a valid IANA zone.';
-          onboardBasicsStatus.style.color = '#ff6b6b';
-        }
-      });
-
       let settingsData;
       try {
         settingsData = await getSettings();
@@ -161,11 +94,6 @@
         console.error('Failed to load settings:', error);
         settingsData = {};
       }
-
-      onboardLocationInput.value = settingsData.default_location || '';
-      // Prefill with the browser's detected zone only if nothing's been set
-      // yet, so a first-time visit starts with a sensible guess.
-      onboardTimezoneInput.value = settingsData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
       await renderChat(settingsData.onboarding_complete ? 'profile_chat' : 'onboarding');
     }
