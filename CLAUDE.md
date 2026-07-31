@@ -48,9 +48,12 @@ VAULT_PATH=./data/vault CALDAV_URL=http://localhost:5232/myuser/personal/ uv run
 
 # Full stack — CALDAV_USERNAME/PASSWORD/URL need to be set in .env.docker
 # first (see .env.example), same as any other secret; the caldav service
-# is otherwise fully self-provisioning, no setup_check.sh step needed for it
+# is otherwise fully self-provisioning, no setup_check.sh step needed for it.
+# --env-file is required: it's how ASSISTANT_PORT/CALDAV_PORT/SYNCTHING_GUI_*
+# in .env.docker reach docker-compose.yml's port mappings (see that file's
+# header comment for why env_file: alone isn't enough).
 ./setup_check.sh          # once, before first run — Piper model + memory.db/reminders.db/chroma_db setup
-docker compose up --build
+docker compose --env-file .env.docker up --build
 
 # Wipe accumulated memory (Chroma + thread checkpoints), vault preserved unless --vault passed
 ./reset_knowledge.sh [--vault] [--dry-run]

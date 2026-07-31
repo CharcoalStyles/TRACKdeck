@@ -171,5 +171,6 @@ echo
 echo "Note: the bundled Radicale calendar service (docker-compose.yml's"
 echo "\`caldav\`) is fully self-provisioning — it needs no setup here. Just set"
 echo "CALDAV_USERNAME/CALDAV_PASSWORD/CALDAV_URL in .env.docker (same as any"
-echo "other secret in that file) and \`docker compose up\` handles the rest."
+echo "other secret in that file) and \`docker compose --env-file .env.docker up\`"
+echo "handles the rest."
 echo "See README's \"First-run calendar setup\" for details."

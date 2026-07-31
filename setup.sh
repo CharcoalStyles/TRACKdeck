@@ -72,6 +72,6 @@ echo "== 3. Piper voice model + DB bind-mount files (setup_check.sh) =="
 echo
 echo "All set. Next steps:"
 echo "  - Fill in CalDAV/Gotify/SMTP values in .env / .env.docker if you want those features."
-echo "  - Full stack (primary):  docker compose up --build"
+echo "  - Full stack (primary):  docker compose --env-file .env.docker up --build"
 echo "  - Local dev (needs uv):  uv run uvicorn main:app --reload"
 echo "See README.md's \"Running it\" section for the rest."

@@ -3,19 +3,23 @@
 # For local development, just run `uv run uvicorn main:app --reload` directly.
 # This file is for when you want the app running as a managed service.
 #
-# Usage:
-#   docker compose up --build          # first run
-#   docker compose up -d               # background
-#   docker compose logs -f assistant   # tail logs
+# Usage — the --env-file flag is required: this project keeps container
+# secrets/config in .env.docker instead of the Compose-default .env, and
+# that separate name means Compose won't pick it up for the ${VAR}
+# substitutions below (ASSISTANT_PORT/CALDAV_PORT/SYNCTHING_GUI_*) on its
+# own — env_file: below only injects vars into the container, it doesn't
+# feed substitution in this file.
+#   docker compose --env-file .env.docker up --build   # first run
+#   docker compose --env-file .env.docker up -d        # background
+#   docker compose logs -f assistant                    # tail logs
 #
 # One-time manual step after first `docker compose up`: Syncthing's device
 # ID is generated per-instance, so pairing this instance with your other
-# devices has to be done once via its web GUI — that GUI is deliberately
-# NOT published below (see the syncthing service comments). To reach it
-# for setup, either temporarily add `- "127.0.0.1:8384:8384"` to its ports
-# and browse to http://localhost:8384, or SSH-tunnel to the host:
+# devices has to be done once via its web GUI, published at
+# SYNCTHING_GUI_HOST:SYNCTHING_GUI_PORT (default 127.0.0.1:8384, see the
+# syncthing service below) — browse to http://localhost:8384, or if you
+# changed SYNCTHING_GUI_HOST off localhost, SSH-tunnel to the host instead:
 #   ssh -L 8384:localhost:8384 your-host
-# and remove the temporary port mapping again once pairing is done.
 
 services:
 
@@ -23,7 +27,7 @@ services:
     build: .
     container_name: pa-assistant
     ports:
-      - "8000:8000"
+      - "${ASSISTANT_PORT:-8000}:8000"
     volumes:
       # Persist SQLite and Chroma outside the container so they survive rebuilds
       - ./data/memory.db:/app/memory.db
@@ -124,7 +128,7 @@ services:
     # boundary from the dashboard's session/API_TOKEN auth, same treatment
     # as Syncthing's GUI port below.
     ports:
-      - "5232:5232"
+      - "${CALDAV_PORT:-5232}:5232"
     restart: unless-stopped
 
   syncthing:
@@ -148,10 +152,11 @@ services:
       - "22000:22000/tcp"
       - "22000:22000/udp"
       #- "21027:21027/udp"  # local discovery
-      #- "8384:8384"
-      # Deliberately NOT publishing 8384 (the web GUI) here. By default
-      # Syncthing only binds its GUI to localhost *inside* the container,
-      # so leaving this unpublished means it isn't reachable from the
-      # network at all — see the one-time setup note above for how to
-      # reach it when you actually need to pair a device.
+      # Web GUI, for the one-time device-pairing step (see the note at the
+      # top of this file). Bound to 127.0.0.1 by default — reachable from
+      # this host only, never the LAN — via SYNCTHING_GUI_HOST/PORT in
+      # .env.docker (needs `docker compose --env-file .env.docker up`, see
+      # CLAUDE.md/README.md). Set SYNCTHING_GUI_HOST=0.0.0.0 there if you
+      # want it reachable beyond this host instead of SSH-tunneling in.
+      - "${SYNCTHING_GUI_HOST:-127.0.0.1}:${SYNCTHING_GUI_PORT:-8384}:8384"
     restart: unless-stopped

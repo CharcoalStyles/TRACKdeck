@@ -438,6 +438,12 @@ See `.env.example` for the full list. Grouped by what needs external setup:
   HTTPS-terminating reverse proxy/tunnel; see `.env.example`'s comment for why doing it
   earlier silently breaks login.
 - **`LEARNING_MODE_DEFAULT`** — startup default; live-changeable after that via `/settings`.
+- **`ASSISTANT_PORT`, `CALDAV_PORT`, `SYNCTHING_GUI_HOST`, `SYNCTHING_GUI_PORT`** —
+  `docker-compose.yml`-only, host-side port mappings (defaults: `8000`, `5232`,
+  `127.0.0.1`, `8384`). `SYNCTHING_GUI_HOST` stays `127.0.0.1` unless changed, so
+  Syncthing's web GUI (needed once for device pairing) is reachable from this host only,
+  never the LAN. Only take effect with `--env-file .env.docker` on the compose command —
+  see "Running it" below.
 
 `API_TOKEN`, `DASHBOARD_PASSWORD`, and `SESSION_SECRET_KEY` specifically are checked at
 startup (`main.py`) — the app refuses to boot at all if any of them is still the literal
@@ -491,6 +497,13 @@ a change to the compose file itself, not to an env file's contents. After editin
 either `docker compose down` then `up` again, or `docker compose up -d --force-recreate
 <service>` for just the one that changed.
 
+Another gotcha: `docker-compose.yml` uses `.env.docker` (not Compose's default `.env`) for
+container secrets, via each service's `env_file:` — but that directive only injects vars
+*into* the container, it doesn't feed the `${ASSISTANT_PORT}`/`${CALDAV_PORT}`/
+`${SYNCTHING_GUI_HOST}`/`${SYNCTHING_GUI_PORT}` substitutions used for host port mappings
+in the compose file itself. Every command below needs `--env-file .env.docker` for those
+to resolve — without it they silently fall back to the hardcoded defaults.
+
 Local dev, full hot-reload:
 ```bash
 uv run uvicorn main:app --reload
@@ -499,14 +512,14 @@ uv run uvicorn main:app --reload
 Syncthing and the bundled CalDAV server (Radicale) need to run somewhere stable even during
 dev — they don't need to be the same process as the app:
 ```bash
-docker compose up syncthing caldav -d
+docker compose --env-file .env.docker up syncthing caldav -d
 VAULT_PATH=./data/vault CALDAV_URL=http://localhost:5232/myuser/personal/ uv run uvicorn main:app --reload
 ```
 
 Full stack:
 ```bash
 ./setup_check.sh          # once, before first run — Piper model, DB bind-mount files
-docker compose up --build
+docker compose --env-file .env.docker up --build
 ```
 
 Bound to all interfaces, so other devices on the LAN (phone, laptop, the ESP32) can reach
@@ -538,7 +551,7 @@ The username must match the first path segment of the URL (Radicale scopes each 
 their own `/<user>/...` path) — `personal` can be any collection name you like. Then:
 
 ```bash
-docker compose up -d
+docker compose --env-file .env.docker up -d
 ```
 
 That's it. Two things happen automatically on startup:
