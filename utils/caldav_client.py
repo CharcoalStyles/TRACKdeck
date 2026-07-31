@@ -159,7 +159,7 @@ def create_or_update_event(uid, summary, start_iso, end_iso, description="", loc
     ics_lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
-        "PRODID:-//adhi-backend//CalDAV Client//EN",
+        "PRODID:-//TRACKdeck-backend//CalDAV Client//EN",
         "BEGIN:VEVENT",
         f"UID:{uid}",
         f"DTSTART:{start_iso}",

@@ -21,7 +21,7 @@ export function renderNav(activePage) {
   const isAdminActive = ADMIN_PAGES.includes(activePage);
 
   header.innerHTML = `
-    <h1>Assistant Dashboard</h1>
+    <h1>TRACKdeck</h1>
     <nav>
       <a href="/static/index.html" class="${activePage === 'chat' ? 'active' : ''}">Chat</a>
       <a href="/static/profile.html" class="${activePage === 'profile' ? 'active' : ''}">Profile</a>
