@@ -1,10 +1,11 @@
 import os
 import re
 import xml.etree.ElementTree as ET
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import requests
+from dateutil.rrule import rrulestr
 from requests.auth import HTTPBasicAuth
 
 # ==========================================
@@ -73,8 +74,50 @@ def parse_ics(ics_text):
             event_details["description"] = value
         elif key == "UID":
             event_details["uid"] = value
+        elif key == "RRULE":
+            event_details["rrule"] = value
 
     return event_details
+
+
+def _parse_ics_datetime(value: str) -> Optional[datetime]:
+    """Parses an RFC 5545 UTC DATE-TIME value ('YYYYMMDDTHHMMSSZ', the only
+    shape this codebase ever writes — see utils/datetime.py's text_to_utc)
+    into an aware UTC datetime. Returns None for anything else (e.g. a
+    DATE-only all-day value), which callers treat as "can't expand."""
+    try:
+        return datetime.strptime(value, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return None
+
+
+def _expand_recurring_event(event: dict, range_start: datetime, range_end: datetime) -> list:
+    """Expands one recurring VEVENT into its individual occurrences that
+    fall within [range_start, range_end]. Needed because CalDAV's
+    time-range REPORT filter matches the master resource as a whole (RFC
+    4791 9.9 has the server consider the full recurrence set when
+    deciding *whether* it matches) — it doesn't return one XML response
+    per occurrence, so occurrence expansion happens on this side."""
+    dtstart = _parse_ics_datetime(event.get("start", ""))
+    if dtstart is None:
+        return [event]
+
+    try:
+        rule = rrulestr(f"RRULE:{event['rrule']}", dtstart=dtstart)
+    except (ValueError, TypeError):
+        return [event]
+
+    dtend = _parse_ics_datetime(event.get("end", ""))
+    duration = (dtend - dtstart) if dtend else None
+
+    occurrences = []
+    for occ_start in rule.between(range_start, range_end, inc=True):
+        occurrence = dict(event)
+        occurrence["start"] = occ_start.strftime("%Y%m%dT%H%M%SZ")
+        if duration is not None:
+            occurrence["end"] = (occ_start + duration).strftime("%Y%m%dT%H%M%SZ")
+        occurrences.append(occurrence)
+    return occurrences
 
 
 _ICS_DURATION_PATTERN = re.compile(
@@ -143,9 +186,13 @@ def _escape_ics_text(value):
     )
 
 
-def create_or_update_event(uid, summary, start_iso, end_iso, description="", location=""):
+def create_or_update_event(uid, summary, start_iso, end_iso, description="", location="", rrule=None):
     """
-    Creates or updates an event.
+    Creates or updates an event. `rrule` is an RFC 5545 RRULE value (e.g.
+    "FREQ=WEEKLY;BYDAY=MO,WE,FR") for a repeating event, or None for a
+    one-off. Like description/location, this is a full replace — updating
+    an existing event without passing `rrule` again drops any recurrence
+    it previously had.
     """
     url = f"{BASE_URL}{uid}.ics"
 
@@ -154,6 +201,13 @@ def create_or_update_event(uid, summary, start_iso, end_iso, description="", loc
     # written into the ICS as the literal string "None".
     description = description or ""
     location = location or ""
+
+    if rrule:
+        dtstart = _parse_ics_datetime(start_iso) or datetime.now(timezone.utc)
+        try:
+            rrulestr(f"RRULE:{rrule}", dtstart=dtstart)
+        except (ValueError, TypeError) as e:
+            return {"success": False, "error": f"Invalid recurrence rule '{rrule}': {e}"}
 
     # Base event structure
     ics_lines = [
@@ -168,7 +222,9 @@ def create_or_update_event(uid, summary, start_iso, end_iso, description="", loc
         f"DESCRIPTION:{_escape_ics_text(description)}",
         f"LOCATION:{_escape_ics_text(location)}"
     ]
-        
+    if rrule:
+        ics_lines.append(f"RRULE:{rrule}")
+
     ics_lines.extend(["END:VEVENT", "END:VCALENDAR"])
     
     ics_body = "\r\n".join(ics_lines)  # iCalendar spec prefers CRLF line endings
@@ -256,10 +312,18 @@ def get_events_in_range(start_iso, end_iso):
         'c': 'urn:ietf:params:xml:ns:caldav'
     }
     
+    range_start = _parse_ics_datetime(start_iso)
+    range_end = _parse_ics_datetime(end_iso)
+
     events_list = []
     for response_node in root.findall('d:response', namespaces):
         calendar_data = response_node.find('.//c:calendar-data', namespaces).text
-        if calendar_data:
-            events_list.append(parse_ics(calendar_data))
-            
+        if not calendar_data:
+            continue
+        parsed = parse_ics(calendar_data)
+        if parsed.get("rrule") and range_start and range_end:
+            events_list.extend(_expand_recurring_event(parsed, range_start, range_end))
+        else:
+            events_list.append(parsed)
+
     return {"success": True, "events": events_list}

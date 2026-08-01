@@ -44,7 +44,7 @@ def get_calendar_event(uid: str) -> str:
         return f"Failed to retrieve event. {response.get('error') or response.get('message') or 'Unknown error'}"
 
 @tool
-def add_calendar_event(title: str, start: str, end: Optional[str] = None, description: Optional[str] = None, location: Optional[str] = None) -> str:
+def add_calendar_event(title: str, start: str, end: Optional[str] = None, description: Optional[str] = None, location: Optional[str] = None, recurrence: Optional[str] = None) -> str:
     """Add an event to the calendar.
 
     Args:
@@ -53,10 +53,18 @@ def add_calendar_event(title: str, start: str, end: Optional[str] = None, descri
         end (Optional[str], optional): The end date and time of the event. Defaults to one hour after the start time.
         description (Optional[str], optional): A description of the event. Defaults to None.
         location (Optional[str], optional): The location of the event. Defaults to None.
-    """ 
+        recurrence (Optional[str], optional): An RFC 5545 RRULE value if this event
+            repeats — e.g. "FREQ=DAILY", "FREQ=WEEKLY;BYDAY=MO,WE,FR",
+            "FREQ=WEEKLY;INTERVAL=2" (every two weeks), "FREQ=MONTHLY;BYMONTHDAY=15",
+            "FREQ=DAILY;COUNT=10" (stop after 10 occurrences), or
+            "FREQ=WEEKLY;UNTIL=20261231T000000Z" (stop by a date, always UTC/"Z").
+            Leave unset for a one-off event. This is for events that actually repeat on
+            the calendar — a single reminder that happens once, even a relative one like
+            "30 minutes before my appointment," should still use set_reminder instead.
+    """
 
     start_UTC = text_to_utc(start)
-    
+
     # If no end date is provided, set teh end time to an hour after the start time
     if end is None:
         end_UTC = add_time_to_UTC_text(start_UTC, timedelta(hours=1))
@@ -66,6 +74,7 @@ def add_calendar_event(title: str, start: str, end: Optional[str] = None, descri
     logger.info("Adding event: %s from %s to %s", title, start_UTC, end_UTC)
     logger.debug("Description: %s", description)
     logger.debug("Location: %s", location)
+    logger.debug("Recurrence: %s", recurrence)
 
 
     uid = str(uuid.uuid4())
@@ -77,6 +86,7 @@ def add_calendar_event(title: str, start: str, end: Optional[str] = None, descri
         end_iso=end_UTC,
         description=description,
         location=location,
+        rrule=recurrence,
     )
 
     if response.get("success"):
@@ -122,7 +132,7 @@ def get_calendar_events(start: str, end: str) -> str:
         return f"Failed to retrieve events. {response.get('error') or response.get('message') or 'Unknown error'}"
 
 @tool
-def update_calendar_event(uid: str, title: str, start: str, end: str, description: Optional[str] = None, location: Optional[str] = None) -> str:
+def update_calendar_event(uid: str, title: str, start: str, end: str, description: Optional[str] = None, location: Optional[str] = None, recurrence: Optional[str] = None) -> str:
     """Update an event in the calendar.
 
     Args:
@@ -132,7 +142,11 @@ def update_calendar_event(uid: str, title: str, start: str, end: str, descriptio
         end (str): The end date and time of the event
         description (Optional[str], optional): A description of the event. Defaults to None.
         location (Optional[str], optional): The location of the event. Defaults to None.
-    """ 
+        recurrence (Optional[str], optional): An RFC 5545 RRULE value, same format as
+            add_calendar_event. This replaces the event's recurrence outright — to keep
+            an existing repeat pattern, pass it again; omitting it turns a repeating
+            event into a one-off.
+    """
 
     start_UTC = text_to_utc(start)
     end_UTC = text_to_utc(end)
@@ -147,6 +161,7 @@ def update_calendar_event(uid: str, title: str, start: str, end: str, descriptio
         end_iso=end_UTC,
         description=description,
         location=location,
+        rrule=recurrence,
     )
 
     if response.get("success"):
