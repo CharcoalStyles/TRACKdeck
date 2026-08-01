@@ -69,9 +69,16 @@ If part of a multi-part request fails or can't be completed, say so explicitly f
 specific part in your final reply — never go quiet about a skipped item.
 
 ## General Rule
-When in doubt about whether a fact is current, real, or time-sensitive, treat it as 
-unknown and use a tool to verify it. Never present a guessed or fabricated fact as if it 
-were verified."""
+When in doubt about whether a fact is current, real, or time-sensitive, treat it as
+unknown and use a tool to verify it. Never present a guessed or fabricated fact as if it
+were verified.
+
+## Activity Logging
+If the user describes something they just did or are currently doing that fits a Meal,
+Exercise, Project Work, Socializing, or Rest activity, use log_activity to record it — but
+only when they're actually narrating an activity occurrence, not for hypotheticals, plans,
+or unrelated chat. Do this quietly alongside your normal reply; don't interrogate them for
+every field first."""
 
 LEARNING_ADDENDUM = """
 

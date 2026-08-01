@@ -136,3 +136,19 @@ export async function listDeviceErrors() {
   if (!response.ok) throw new Error(`Server returned ${response.status}`);
   return response.json();
 }
+
+/** @returns {Promise<{entries: Array<{id: string, occurred_at: number, activity_type: string, subject: string, duration: string|null, mood_energy: number|null, reflection: string|null, created_at: number}>}>} */
+export async function getActivityLog({ days = 30, activityType = null } = {}) {
+  const params = new URLSearchParams({ days: String(days) });
+  if (activityType) params.set('activity_type', activityType);
+  const response = await fetch(`/activity-log?${params}`);
+  if (!response.ok) throw new Error(`Server returned ${response.status}`);
+  return response.json();
+}
+
+/** @returns {Promise<{mood_by_day: Array<{date: string, avg_mood: number, count: number}>, duration_by_type: Array<{activity_type: string, total_minutes: number, entry_count: number}>}>} */
+export async function getActivityLogSummary({ days = 30 } = {}) {
+  const response = await fetch(`/activity-log/summary?days=${days}`);
+  if (!response.ok) throw new Error(`Server returned ${response.status}`);
+  return response.json();
+}

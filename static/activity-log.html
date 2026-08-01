@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Activity Log — TRACKdeck</title>
+  <link rel="stylesheet" href="/static/css/theme.css">
+</head>
+
+<body>
+
+  <header id="appHeader"></header>
+
+  <main>
+    <div class="card">
+      <h2>Activity Log</h2>
+      <p class="description">A structured record of meals, exercise, project work, socializing, and rest — logged by talking to the assistant. Read-only here; log new entries through chat or voice.</p>
+      <div class="filter-row">
+        <select id="daysFilter">
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+        <select id="typeFilter">
+          <option value="">All types</option>
+          <option value="Meal">Meal</option>
+          <option value="Exercise">Exercise</option>
+          <option value="Project Work">Project Work</option>
+          <option value="Socializing">Socializing</option>
+          <option value="Rest">Rest</option>
+        </select>
+        <button type="button" id="refreshBtn" class="secondary-btn">Refresh</button>
+      </div>
+      <div class="save-status" id="activityLogStatus"></div>
+    </div>
+
+    <div class="card">
+      <h2>Mood / Energy Over Time</h2>
+      <div id="moodChart" class="viz-chart"></div>
+    </div>
+
+    <div class="card">
+      <h2>Time by Activity Type</h2>
+      <div id="durationChart" class="viz-chart"></div>
+    </div>
+
+    <div id="activityList"></div>
+  </main>
+
+  <script type="module">
+    import { getActivityLog, getActivityLogSummary } from '/static/js/api.js';
+    import { requireSession } from '/static/js/auth.js';
+    import { renderNav } from '/static/js/nav.js';
+
+    renderNav('activity-log');
+
+    if (await requireSession()) {
+      const SVG_NS = 'http://www.w3.org/2000/svg';
+
+      // Fixed entity->color mapping (dataviz skill's validated dark categorical
+      // slots 1/2/3/4/5 — passes CVD/contrast checks against this page's card
+      // surface, see the dataviz skill's validate_palette.js). Color always
+      // follows the activity type, never its position in a given result set.
+      const ACTIVITY_COLORS = {
+        'Meal': '#3987e5',
+        'Exercise': '#d95926',
+        'Project Work': '#199e70',
+        'Socializing': '#c98500',
+        'Rest': '#d55181',
+      };
+      const CHART_INK = { muted: '#888', grid: '#2a2a2a', axis: '#444' };
+
+      const daysFilter = document.getElementById('daysFilter');
+      const typeFilter = document.getElementById('typeFilter');
+      const refreshBtn = document.getElementById('refreshBtn');
+      const activityLogStatus = document.getElementById('activityLogStatus');
+      const activityList = document.getElementById('activityList');
+      const moodChartEl = document.getElementById('moodChart');
+      const durationChartEl = document.getElementById('durationChart');
+
+      function showStatus(el, text, ok = true) {
+        el.textContent = text;
+        el.style.color = ok ? '#00adb5' : '#ff6b6b';
+      }
+
+      function formatDateTime(epochSeconds) {
+        return new Date(epochSeconds * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+      }
+
+      function formatDay(dateStr) {
+        return new Date(`${dateStr}T00:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric' });
+      }
+
+      function formatMinutes(totalMinutes) {
+        if (totalMinutes < 60) return `${totalMinutes}m`;
+        const hours = Math.floor(totalMinutes / 60);
+        const mins = totalMinutes % 60;
+        return mins === 0 ? `${hours}h` : `${hours}h ${mins}m`;
+      }
+
+      function svgEl(tag, attrs = {}) {
+        const el = document.createElementNS(SVG_NS, tag);
+        for (const [key, value] of Object.entries(attrs)) el.setAttribute(key, String(value));
+        return el;
+      }
+
+      // ---- Shared hover tooltip (one per chart container) ----
+
+      function getTooltip(container) {
+        let tooltip = container.querySelector('.viz-tooltip');
+        if (!tooltip) {
+          tooltip = document.createElement('div');
+          tooltip.className = 'viz-tooltip';
+          container.appendChild(tooltip);
+        }
+        return tooltip;
+      }
+
+      function showTooltip(container, xPx, yPx, valueText, labelText) {
+        const tooltip = getTooltip(container);
+        tooltip.replaceChildren();
+        const value = document.createElement('div');
+        value.className = 'viz-tooltip-value';
+        value.textContent = valueText;
+        const label = document.createElement('div');
+        label.className = 'viz-tooltip-label';
+        label.textContent = labelText;
+        tooltip.appendChild(value);
+        tooltip.appendChild(label);
+        tooltip.style.left = `${xPx}px`;
+        tooltip.style.top = `${yPx}px`;
+        tooltip.classList.add('visible');
+      }
+
+      function hideTooltip(container) {
+        const tooltip = container.querySelector('.viz-tooltip');
+        if (tooltip) tooltip.classList.remove('visible');
+      }
+
+      // Converts viewBox coordinates to on-screen pixels within `container`
+      // (the div the <svg width="100%"> scales against) so the tooltip, an
+      // absolutely-positioned sibling, lines up with the mark that triggered it.
+      function toContainerPx(container, viewBoxWidth, vx, vy) {
+        const scale = container.clientWidth / viewBoxWidth;
+        return [vx * scale, vy * scale];
+      }
+
+      // ---- Mood/Energy over time (line + markers) ----
+
+      function renderMoodChart(moodByDay) {
+        moodChartEl.replaceChildren();
+        if (moodByDay.length === 0) {
+          const empty = document.createElement('p');
+          empty.className = 'viz-empty';
+          empty.textContent = 'Not enough data yet — log a few entries with a mood/energy level to see this chart.';
+          moodChartEl.appendChild(empty);
+          return;
+        }
+
+        const width = 640, height = 220;
+        const marginLeft = 28, marginRight = 16, marginTop = 16, marginBottom = 28;
+        const plotWidth = width - marginLeft - marginRight;
+        const plotHeight = height - marginTop - marginBottom;
+        const dayMs = 86400000;
+
+        const dayTime = (dateStr) => new Date(`${dateStr}T00:00:00`).getTime();
+        const dates = moodByDay.map((d) => dayTime(d.date));
+        const minDate = Math.min(...dates);
+        const maxDate = Math.max(...dates);
+        const dateSpan = Math.max(maxDate - minDate, dayMs);
+
+        const xFor = (t) => marginLeft + ((t - minDate) / dateSpan) * plotWidth;
+        const yFor = (mood) => marginTop + (1 - (mood - 1) / 9) * plotHeight;
+
+        const svg = svgEl('svg', {
+          viewBox: `0 0 ${width} ${height}`,
+          role: 'img',
+          'aria-label': 'Mood and energy level over time, scale 1 to 10',
+        });
+
+        for (const tick of [1, 5, 10]) {
+          const y = yFor(tick);
+          svg.appendChild(svgEl('line', { x1: marginLeft, x2: width - marginRight, y1: y, y2: y, stroke: CHART_INK.grid, 'stroke-width': 1 }));
+          const label = svgEl('text', { x: marginLeft - 8, y: y + 3, 'text-anchor': 'end', 'font-size': 10, fill: CHART_INK.muted });
+          label.textContent = String(tick);
+          svg.appendChild(label);
+        }
+
+        const firstLabel = svgEl('text', { x: marginLeft, y: height - 8, 'text-anchor': 'start', 'font-size': 10, fill: CHART_INK.muted });
+        firstLabel.textContent = formatDay(moodByDay[0].date);
+        svg.appendChild(firstLabel);
+        const lastLabel = svgEl('text', { x: width - marginRight, y: height - 8, 'text-anchor': 'end', 'font-size': 10, fill: CHART_INK.muted });
+        lastLabel.textContent = formatDay(moodByDay[moodByDay.length - 1].date);
+        svg.appendChild(lastLabel);
+
+        // Break the line wherever consecutive days-with-data aren't
+        // adjacent calendar days, so a gap in logging reads as a gap,
+        // not an interpolated trend across missing days.
+        let segment = [];
+        const segments = [];
+        moodByDay.forEach((point, i) => {
+          if (segment.length > 0 && dayTime(point.date) - dayTime(moodByDay[i - 1].date) > dayMs) {
+            segments.push(segment);
+            segment = [];
+          }
+          segment.push(point);
+        });
+        if (segment.length > 0) segments.push(segment);
+
+        const lineColor = ACTIVITY_COLORS['Meal'];
+        for (const seg of segments) {
+          if (seg.length > 1) {
+            const points = seg.map((p) => `${xFor(dayTime(p.date))},${yFor(p.avg_mood)}`).join(' ');
+            svg.appendChild(svgEl('polyline', {
+              points, fill: 'none', stroke: lineColor, 'stroke-width': 2,
+              'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+            }));
+          }
+        }
+
+        for (const point of moodByDay) {
+          const cx = xFor(dayTime(point.date));
+          const cy = yFor(point.avg_mood);
+
+          const marker = svgEl('circle', { cx, cy, r: 6, fill: lineColor, stroke: '#1e1e1e', 'stroke-width': 2 });
+          svg.appendChild(marker);
+
+          // Transparent hit target, bigger than the painted marker so
+          // hover is reliable (see dataviz skill's interaction.md).
+          const hit = svgEl('circle', { cx, cy, r: 12, fill: 'transparent' });
+          hit.style.cursor = 'pointer';
+          hit.addEventListener('pointerenter', () => {
+            marker.setAttribute('r', 8);
+            const [xPx, yPx] = toContainerPx(moodChartEl, width, cx, cy);
+            const entryWord = point.count === 1 ? 'entry' : 'entries';
+            showTooltip(moodChartEl, xPx, yPx, `${point.avg_mood} / 10`, `${formatDay(point.date)} · ${point.count} ${entryWord}`);
+          });
+          hit.addEventListener('pointerleave', () => {
+            marker.setAttribute('r', 6);
+            hideTooltip(moodChartEl);
+          });
+          svg.appendChild(hit);
+        }
+
+        moodChartEl.appendChild(svg);
+      }
+
+      // ---- Time by activity type (bar chart) ----
+
+      function renderDurationChart(durationByType) {
+        durationChartEl.replaceChildren();
+        if (durationByType.length === 0) {
+          const empty = document.createElement('p');
+          empty.className = 'viz-empty';
+          empty.textContent = 'Not enough data yet — log some entries with a duration to see this chart.';
+          durationChartEl.appendChild(empty);
+          return;
+        }
+
+        const width = 640, height = 200;
+        const marginLeft = 16, marginRight = 16, marginTop = 24, marginBottom = 32;
+        const plotWidth = width - marginLeft - marginRight;
+        const plotHeight = height - marginTop - marginBottom;
+
+        const maxMinutes = Math.max(...durationByType.map((d) => d.total_minutes), 1);
+        const bandWidth = plotWidth / durationByType.length;
+        const barWidth = Math.min(24, bandWidth * 0.5);
+        const baselineY = marginTop + plotHeight;
+
+        const svg = svgEl('svg', {
+          viewBox: `0 0 ${width} ${height}`,
+          role: 'img',
+          'aria-label': 'Total time logged by activity type',
+        });
+        svg.appendChild(svgEl('line', { x1: marginLeft, x2: width - marginRight, y1: baselineY, y2: baselineY, stroke: CHART_INK.axis, 'stroke-width': 1 }));
+
+        durationByType.forEach((d, i) => {
+          const bandCenter = marginLeft + bandWidth * (i + 0.5);
+          const barHeight = Math.max((d.total_minutes / maxMinutes) * plotHeight, 2);
+          const barTop = baselineY - barHeight;
+          const color = ACTIVITY_COLORS[d.activity_type] || CHART_INK.muted;
+          const r = Math.min(4, barHeight / 2);
+          const left = bandCenter - barWidth / 2;
+          const right = bandCenter + barWidth / 2;
+
+          // 4px rounded top corners, square baseline (dataviz skill's bar mark spec).
+          const bar = svgEl('path', {
+            d: `M ${left} ${baselineY} V ${barTop + r} Q ${left} ${barTop} ${left + r} ${barTop} `
+              + `H ${right - r} Q ${right} ${barTop} ${right} ${barTop + r} V ${baselineY} Z`,
+            fill: color,
+          });
+          svg.appendChild(bar);
+
+          const valueLabel = svgEl('text', { x: bandCenter, y: barTop - 6, 'text-anchor': 'middle', 'font-size': 10, fill: CHART_INK.muted });
+          valueLabel.textContent = formatMinutes(d.total_minutes);
+          svg.appendChild(valueLabel);
+
+          const catLabel = svgEl('text', { x: bandCenter, y: height - 10, 'text-anchor': 'middle', 'font-size': 10, fill: CHART_INK.muted });
+          catLabel.textContent = d.activity_type;
+          svg.appendChild(catLabel);
+
+          const hit = svgEl('rect', { x: bandCenter - bandWidth / 2, y: marginTop, width: bandWidth, height: plotHeight, fill: 'transparent' });
+          hit.style.cursor = 'pointer';
+          hit.addEventListener('pointerenter', () => {
+            bar.setAttribute('opacity', 0.75);
+            const [xPx, yPx] = toContainerPx(durationChartEl, width, bandCenter, barTop);
+            const entryWord = d.entry_count === 1 ? 'entry' : 'entries';
+            showTooltip(durationChartEl, xPx, yPx, formatMinutes(d.total_minutes), `${d.activity_type} · ${d.entry_count} ${entryWord}`);
+          });
+          hit.addEventListener('pointerleave', () => {
+            bar.setAttribute('opacity', 1);
+            hideTooltip(durationChartEl);
+          });
+          svg.appendChild(hit);
+        });
+
+        durationChartEl.appendChild(svg);
+      }
+
+      // ---- Raw entry list ----
+
+      function renderEntry(entry) {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        const heading = document.createElement('h2');
+        const dot = document.createElement('span');
+        dot.className = 'activity-dot';
+        dot.style.backgroundColor = ACTIVITY_COLORS[entry.activity_type] || '#888';
+        heading.appendChild(dot);
+        heading.appendChild(document.createTextNode(`${entry.activity_type} — ${formatDateTime(entry.occurred_at)}`));
+        card.appendChild(heading);
+
+        const hasDetail = Boolean(entry.duration) || entry.mood_energy !== null || Boolean(entry.reflection);
+        const subject = document.createElement('p');
+        subject.className = 'description';
+        subject.style.marginBottom = hasDetail ? '0.5rem' : '0';
+        subject.textContent = entry.subject;
+        card.appendChild(subject);
+
+        const detailParts = [];
+        if (entry.duration) detailParts.push(entry.duration);
+        if (entry.mood_energy !== null) detailParts.push(`mood/energy ${entry.mood_energy}/10`);
+        if (detailParts.length > 0) {
+          const detail = document.createElement('p');
+          detail.className = 'activity-entry-detail';
+          detail.textContent = detailParts.join(' · ');
+          card.appendChild(detail);
+        }
+
+        if (entry.reflection) {
+          const reflection = document.createElement('p');
+          reflection.className = 'activity-entry-reflection';
+          reflection.textContent = entry.reflection;
+          card.appendChild(reflection);
+        }
+
+        return card;
+      }
+
+      async function loadAll() {
+        showStatus(activityLogStatus, 'Loading...', true);
+        const days = Number(daysFilter.value);
+        const activityType = typeFilter.value || null;
+        try {
+          const [{ entries }, summary] = await Promise.all([
+            getActivityLog({ days, activityType }),
+            getActivityLogSummary({ days }),
+          ]);
+
+          renderMoodChart(summary.mood_by_day);
+          renderDurationChart(summary.duration_by_type);
+
+          activityList.replaceChildren();
+          if (entries.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'card';
+            const emptyText = document.createElement('p');
+            emptyText.className = 'description';
+            emptyText.style.margin = '0';
+            emptyText.textContent = 'No activity logged in this range yet — try telling the assistant about something you did.';
+            empty.appendChild(emptyText);
+            activityList.appendChild(empty);
+          } else {
+            for (const entry of entries) {
+              activityList.appendChild(renderEntry(entry));
+            }
+          }
+          showStatus(activityLogStatus, '', true);
+        } catch (error) {
+          console.error('Failed to load activity log:', error);
+          showStatus(activityLogStatus, 'Failed to load.', false);
+        }
+      }
+
+      refreshBtn.addEventListener('click', loadAll);
+      daysFilter.addEventListener('change', loadAll);
+      typeFilter.addEventListener('change', loadAll);
+      loadAll();
+    }
+  </script>
+</body>
+
+</html>

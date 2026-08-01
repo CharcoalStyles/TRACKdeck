@@ -11,6 +11,7 @@ from langchain_core.tools import tool
 
 from agent.memory import MemoryStore
 
+from agent.tools.activity_log import log_activity
 from agent.tools.alerts import cancel_reminder, list_reminders, set_reminder, set_timer
 from agent.tools.calendar import get_tools as get_calendar_tools
 from agent.tools.checkin import get_reflection_prompt
@@ -44,6 +45,7 @@ def get_tools(memory: MemoryStore):
         web_search,
         mark_onboarding_complete,
         set_home_location,
+        log_activity,
     ])
 
     return tools

@@ -9,8 +9,8 @@
 // logout link still works even if the session check is about to
 // redirect):
 //   import { renderNav } from '/static/js/nav.js';
-//   renderNav('chat');  // 'chat' | 'profile' | 'settings' | 'testing' |
-//                        // 'checkins' | 'alert-sounds' | 'errors'
+//   renderNav('chat');  // 'chat' | 'activity-log' | 'profile' | 'settings' |
+//                        // 'testing' | 'checkins' | 'alert-sounds' | 'errors'
 
 import { logout } from './auth.js';
 
@@ -24,6 +24,7 @@ export function renderNav(activePage) {
     <h1>TRACKdeck</h1>
     <nav>
       <a href="/static/index.html" class="${activePage === 'chat' ? 'active' : ''}">Chat</a>
+      <a href="/static/activity-log.html" class="${activePage === 'activity-log' ? 'active' : ''}">Activity Log</a>
       <a href="/static/profile.html" class="${activePage === 'profile' ? 'active' : ''}">Profile</a>
       <details class="nav-admin${isAdminActive ? ' active' : ''}">
         <summary>Admin</summary>

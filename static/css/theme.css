@@ -613,3 +613,93 @@ nav .nav-admin-menu a {
   height: 100%;
   flex: 1;
 }
+
+/* ===================================================================
+   Activity Log page (static/activity-log.html) — filter row, inline
+   SVG charts (see the dataviz skill), and per-entry list markup.
+   =================================================================== */
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.filter-row select {
+  background: #252525;
+  border: 1px solid #333;
+  color: #e0e0e0;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.viz-chart {
+  position: relative;
+}
+
+.viz-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.viz-empty {
+  color: #666;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.viz-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.78rem;
+  color: #e0e0e0;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  transition: opacity 0.1s ease;
+  z-index: 5;
+  white-space: nowrap;
+  transform: translate(-50%, -100%);
+}
+
+.viz-tooltip.visible {
+  opacity: 1;
+}
+
+.viz-tooltip .viz-tooltip-value {
+  font-weight: 700;
+  color: #fff;
+}
+
+.viz-tooltip .viz-tooltip-label {
+  color: #888;
+  margin-top: 0.15rem;
+}
+
+.activity-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 0.4rem;
+}
+
+.activity-entry-detail {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #888;
+}
+
+.activity-entry-reflection {
+  margin: 0.6rem 0 0;
+  color: #e0e0e0;
+  border-left: 3px solid #00adb5;
+  padding-left: 0.75rem;
+}

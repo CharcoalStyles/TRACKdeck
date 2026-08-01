@@ -227,5 +227,8 @@ checkins.db-wal
 device_state.db
 device_state.db-shm
 device_state.db-wal
+activity_log.db
+activity_log.db-shm
+activity_log.db-wal
 .models/
 data/

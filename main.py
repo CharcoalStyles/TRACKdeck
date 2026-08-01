@@ -7,7 +7,7 @@ import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime, time as dtime, timezone
+from datetime import datetime, time as dtime, timedelta, timezone
 from typing import Annotated
 
 import uvicorn
@@ -74,6 +74,7 @@ from agent.settings import (
 )
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
+from jobs import activity_log as activity_log_jobs
 from jobs import checkin as checkin_jobs
 from jobs.bedtime import send_bedtime_reminder
 from jobs.calendar_sync import sync_calendar_reminders
@@ -84,6 +85,7 @@ from jobs.reminders import create_test_reminder, fire_reminder
 
 from agent.vault_watcher import reconcile_vault, watch_vault
 from utils import (
+    activity_log_store,
     alert_sounds_store,
     checkins_store,
     device_errors_store,
@@ -168,6 +170,7 @@ async def lifespan(app: FastAPI):
         await asyncio.to_thread(device_state.init_db)
         await asyncio.to_thread(alert_sounds_store.init_db)
         await asyncio.to_thread(device_errors_store.init_db)
+        await asyncio.to_thread(activity_log_store.init_db)
         for reminder in await asyncio.to_thread(reminders_store.list_pending):
             due_local = datetime.fromtimestamp(reminder["due_at"], tz=timezone.utc)
             if due_local <= datetime.now(timezone.utc):
@@ -393,6 +396,49 @@ async def todays_checkins(_: Annotated[None, Depends(auth.require_session_or_tok
     end_ts = int(end_local.astimezone(timezone.utc).timestamp())
     reflections = await checkin_jobs.reflections_between(app_state.memory, start_ts, end_ts)
     return {"checkins": reflections}
+
+
+def _activity_log_range(days: int) -> tuple[int, int]:
+    local_tz = settings.zoneinfo()
+    now_local = datetime.now(local_tz)
+    start_local = datetime.combine((now_local - timedelta(days=days)).date(), dtime.min, tzinfo=local_tz)
+    end_local = datetime.combine(now_local.date(), dtime.max, tzinfo=local_tz)
+    start_ts = int(start_local.astimezone(timezone.utc).timestamp())
+    end_ts = int(end_local.astimezone(timezone.utc).timestamp())
+    return start_ts, end_ts
+
+
+@app.get("/activity-log")
+async def list_activity_log(
+    _: Annotated[None, Depends(auth.require_session_or_token)],
+    days: int = 30,
+    activity_type: str | None = None,
+):
+    """Raw entries for the dashboard's Activity Log page, most recent
+    first, over the trailing `days` local-calendar days (default 30).
+    Optional activity_type filter for the page's type dropdown.
+    """
+    start_ts, end_ts = _activity_log_range(days)
+    entries = await asyncio.to_thread(
+        activity_log_store.list_between, start_ts, end_ts, activity_type
+    )
+    return {"entries": entries}
+
+
+@app.get("/activity-log/summary")
+async def activity_log_summary(
+    _: Annotated[None, Depends(auth.require_session_or_token)],
+    days: int = 30,
+):
+    """Pre-aggregated data for the dashboard's two charts, over the
+    trailing `days` local-calendar days — mood/energy averaged per day,
+    and total duration per activity type (entries with an unparseable
+    duration, e.g. "All Day", are excluded from the duration aggregate
+    but still appear in GET /activity-log's raw list).
+    """
+    start_ts, end_ts = _activity_log_range(days)
+    entries = await asyncio.to_thread(activity_log_store.list_between, start_ts, end_ts)
+    return activity_log_jobs.summarize(entries)
 
 
 @app.get("/health")
