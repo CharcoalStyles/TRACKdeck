@@ -136,11 +136,14 @@ services:
     container_name: pa-syncthing
     hostname: pa-syncthing
     environment:
-      # Match these to the UID/GID that owns ./data on the host (`id -u`,
-      # `id -g`) so the assistant container (running as its own user) and
-      # Syncthing don't fight over file ownership in the shared vault.
-      - PUID=1000
-      - PGID=1000
+      # Must match the UID/GID that owns ./data on the host so the
+      # assistant container (running as its own user) and Syncthing don't
+      # fight over file ownership in the shared vault. setup_check.sh
+      # auto-populates PUID/PGID in .env.docker from `id -u`/`id -g` of
+      # whoever runs it, so this should never need manual editing — the
+      # 1000 fallback only matters if setup_check.sh was skipped.
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
     volumes:
       - ./data/syncthing-config:/var/syncthing/config
       # Same host path as the assistant service's vault mount above —

@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 # setup_check.sh
-# Verifies (and fixes) the two runtime prerequisites the docker-compose
+# Verifies (and fixes) the runtime prerequisites the docker-compose
 # build/mounts need that aren't already handled elsewhere: the Piper TTS
 # voice model (baked into the image by the dockerfile's `COPY . .`, so it
-# has to exist on the host *before* `docker compose up --build`), and the
+# has to exist on the host *before* `docker compose up --build`); the
 # memory.db/reminders.db/checkins.db/alert_sounds.db/device_errors.db/
 # onboarding_complete.flag/chroma_db paths that docker-compose expects to
-# already exist as the right file types.
+# already exist as the right file types; the syncthing-config/vault/
+# radicale directories (must exist as this user *before* `docker compose
+# up`, or Docker auto-creates them as root on first run and the
+# syncthing/caldav containers can't write to them); and PUID/PGID in
+# .env.docker (must match this user, or Syncthing can't write its config).
 #
 # Only needs bash + curl — no uv/python/piper-tts required on the host,
 # since the voice model is fetched directly from its Hugging Face URL.
@@ -163,6 +167,42 @@ else
     echo "  Creating $HF_CACHE_DIR (Hugging Face cache for the faster-whisper model,"
     echo "  so it persists across rebuilds instead of re-downloading every time)..."
     mkdir -p "$HF_CACHE_DIR"
+fi
+
+echo
+echo "== 3. syncthing-config / vault / radicale directories =="
+echo "      (must exist before 'docker compose up', or Docker auto-creates"
+echo "      them as root on first run and the containers can't write to them)"
+SYNCTHING_CONFIG_DIR="${DATA_DIR}/syncthing-config"
+VAULT_DIR="${DATA_DIR}/vault"
+RADICALE_CONFIG_DIR="${DATA_DIR}/radicale/config"
+RADICALE_DATA_DIR="${DATA_DIR}/radicale/data"
+
+for dir in "$SYNCTHING_CONFIG_DIR" "$VAULT_DIR" "$RADICALE_CONFIG_DIR" "$RADICALE_DATA_DIR"; do
+    if [[ -d "$dir" ]]; then
+        echo "  OK: $dir already exists."
+    else
+        echo "  Creating $dir..."
+        mkdir -p "$dir"
+    fi
+done
+
+echo
+echo "== 4. PUID/PGID (docker-compose.yml's syncthing service) =="
+ENV_DOCKER=".env.docker"
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
+
+if [[ ! -f "$ENV_DOCKER" ]]; then
+    echo "  SKIP: $ENV_DOCKER doesn't exist yet — copy .env.example to $ENV_DOCKER"
+    echo "        and re-run this script so PUID/PGID can be set automatically."
+elif grep -q '^PUID=' "$ENV_DOCKER" && grep -q '^PGID=' "$ENV_DOCKER"; then
+    echo "  OK: PUID/PGID already set in $ENV_DOCKER (left as-is)."
+else
+    echo "  Setting PUID=$HOST_UID / PGID=$HOST_GID in $ENV_DOCKER (matches this user,"
+    echo "  who owns the directories just created above)..."
+    grep -q '^PUID=' "$ENV_DOCKER" || printf 'PUID=%s\n' "$HOST_UID" >> "$ENV_DOCKER"
+    grep -q '^PGID=' "$ENV_DOCKER" || printf 'PGID=%s\n' "$HOST_GID" >> "$ENV_DOCKER"
 fi
 
 echo
