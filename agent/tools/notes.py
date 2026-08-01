@@ -52,8 +52,16 @@ def make_note_tools(memory: MemoryStore):
     # changes, or both decide a linked-note topic is new and create duplicates.
     _about_me_lock = asyncio.Lock()
 
+    # Same race as _about_me_lock, but for project folders: two concurrent
+    # get_or_create_project calls fuzzy-matching the same not-yet-created
+    # name shouldn't both decide it's new and each write a starter overview
+    # note into it.
+    _project_lock = asyncio.Lock()
+
     @tool
-    async def save_note(title: str, content: str, tags: Optional[list[str]] = None) -> str:
+    async def save_note(
+        title: str, content: str, tags: Optional[list[str]] = None, project: Optional[str] = None
+    ) -> str:
         """Create a brand new note in the vault. Use this when the user wants
         to jot something down or remember something new. If it might relate
         to an existing note, search_notes first — prefer append_to_note or
@@ -63,6 +71,9 @@ def make_note_tools(memory: MemoryStore):
             title: A short, specific title for the note.
             content: The body of the note.
             tags: Optional list of lowercase category tags.
+            project: If this note belongs to an ongoing project, its name
+                (as returned by get_or_create_project) — files the note
+                inside that project's folder instead of the vault root.
         """
         now = vault.now_iso()
         note = vault.Note(
@@ -75,22 +86,34 @@ def make_note_tools(memory: MemoryStore):
             source="agent",
             body=content.strip() + "\n",
         )
-        path = vault.unique_note_path(title)
+        project_dir = None
+        if project:
+            project_dir, _ = vault.get_or_create_project_dir(project)
+        path = vault.unique_note_path(title, project=project_dir)
         note.path = path
         vault.write_note_atomic(path, vault.serialize_note(note))
         await index_note_file(memory, path)
         return f"Note saved: '{title}' (id: {note.id})."
 
     @tool
-    def search_notes(query: str) -> str:
+    def search_notes(query: str, project: Optional[str] = None) -> str:
         """Search saved notes for information. Returns short excerpts with
         each note's id — use read_note with that id if you need the full
         note before editing it.
 
         Args:
             query: What to search for in past notes.
+            project: If the user is actively discussing a specific ongoing
+                project, its name (as returned by get_or_create_project) —
+                scopes the search to just that project's notes instead of
+                the whole vault. Leave unset for a normal, vault-wide
+                search.
         """
-        results = memory.search_notes(query, n_results=5)
+        resolved_project = None
+        if project:
+            match = vault.match_project_dir(project)
+            resolved_project = match.name if match else None
+        results = memory.search_notes(query, n_results=5, project=resolved_project)
         if not results:
             return "No matching notes found."
         lines = [f"[id: {r['id']}] {r['title']} — {r['excerpt']}" for r in results]
@@ -271,6 +294,70 @@ def make_note_tools(memory: MemoryStore):
         )
 
     @tool
+    async def get_or_create_project(name: str) -> str:
+        """Get (or create) a dedicated vault folder for one ongoing project,
+        so all the notes/ideas that build up on it over many separate
+        conversations live together and can be searched as a unit. Returns
+        the project's canonical name — use that exact string with
+        save_note's and search_notes's `project` argument afterward.
+
+        Use this for a recurring, evolving body of work (a side project, a
+        creative endeavor) the user comes back to repeatedly across
+        sessions — not for a single one-off note, and not for a specific
+        person/topic that belongs in About Me (use get_or_create_linked_note
+        for that instead).
+
+        This always resolves to the same folder for the same project —
+        fuzzy-matches close variations of a name used before rather than
+        creating a near-duplicate folder for what's really the same
+        project. Safe to call even when the project already exists.
+
+        Args:
+            name: The project's name (e.g. "Track Deck"). Use the same name
+                consistently once created.
+        """
+        async with _project_lock:
+            project_dir, created = vault.get_or_create_project_dir(name)
+            if not created:
+                return (
+                    f"Project '{project_dir.name}' already exists. Use save_note(..., "
+                    f"project='{project_dir.name}') and search_notes(..., "
+                    f"project='{project_dir.name}') to work with it."
+                )
+
+            now = vault.now_iso()
+            note = vault.Note(
+                id=vault.generate_id(),
+                title=name,
+                created=now,
+                updated=now,
+                tags=[],
+                aliases=[],
+                source="agent",
+                body="## Overview\n\n## Notes\n",
+            )
+            path = vault.unique_note_path(name, project=project_dir)
+            note.path = path
+            vault.write_note_atomic(path, vault.serialize_note(note))
+            await index_note_file(memory, path)
+
+        return (
+            f"Created a new project folder '{project_dir.name}' with an overview note. "
+            f"Use save_note(..., project='{project_dir.name}') to add notes to it, and "
+            f"search_notes(..., project='{project_dir.name}') to search only within it."
+        )
+
+    @tool
+    def list_projects() -> str:
+        """List all existing project folders in the vault. Check this before
+        calling get_or_create_project if you're unsure whether a project the
+        user mentions already exists."""
+        projects = vault.list_project_dirs()
+        if not projects:
+            return "No projects yet."
+        return "\n".join(f"- {p.name}" for p in projects)
+
+    @tool
     def read_about_me() -> str:
         """Read everything currently known about the user from their About
         Me note. Use this to check what's already recorded before deciding
@@ -288,5 +375,7 @@ def make_note_tools(memory: MemoryStore):
         update_note_section,
         remember_about_me,
         get_or_create_linked_note,
+        get_or_create_project,
+        list_projects,
         read_about_me,
     )

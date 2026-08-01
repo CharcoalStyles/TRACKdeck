@@ -149,12 +149,19 @@ class MemoryStore:
     # Notes
     # ------------------------------------------------------------------
 
-    def upsert_note(self, note_id: str, content: str, title: str, path: str, mtime: float) -> None:
+    def upsert_note(
+        self, note_id: str, content: str, title: str, path: str, mtime: float, project: str = ""
+    ) -> None:
         """
         Index (or re-index) a note file by its stable frontmatter id. The
         markdown file on disk is the source of truth — this just keeps the
         search index current with it. Safe to call repeatedly for the same
         note; always overwrites rather than duplicating.
+
+        `project` is the note's containing project folder name, or "" for a
+        vault-root note — Chroma metadata values can't be None, so an empty
+        string is the "no project" sentinel. Lets search_notes scope a query
+        to one project via a `where` filter.
         """
         if not content or not str(content).strip():
             content = title or "Untitled"
@@ -168,7 +175,7 @@ class MemoryStore:
             ids=[note_id],
             embeddings=[embedding],
             documents=[content],
-            metadatas=[{"title": title, "path": path, "mtime": mtime}],
+            metadatas=[{"title": title, "path": path, "mtime": mtime, "project": project}],
         )
 
     def delete_note(self, note_id: str) -> None:
@@ -197,19 +204,25 @@ class MemoryStore:
             for note_id, meta in zip(results.get("ids", []), results.get("metadatas", []))
         }
 
-    def search_notes(self, query: str, n_results: int = 5) -> list[dict]:
+    def search_notes(self, query: str, n_results: int = 5, project: str | None = None) -> list[dict]:
         """
         Semantic search over the notes index. Returns short excerpts, not
         full bodies — deliberately, to keep search results cheap on
         context. Callers should use read_note for the complete note.
+
+        `project`, if given, scopes the search to that project's notes only
+        (via a Chroma metadata `where` filter) instead of the whole vault.
         """
         if self.notes.count() == 0:
             return []
         embedding = self._embed(query)
-        results = self.notes.query(
-            query_embeddings=[embedding],
-            n_results=min(n_results, self.notes.count()),
-        )
+        query_kwargs = {
+            "query_embeddings": [embedding],
+            "n_results": min(n_results, self.notes.count()),
+        }
+        if project:
+            query_kwargs["where"] = {"project": project}
+        results = self.notes.query(**query_kwargs)
         output = []
         for note_id, doc, meta in zip(
             results["ids"][0], results["documents"][0], results["metadatas"][0]

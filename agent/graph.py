@@ -78,7 +78,15 @@ If the user describes something they just did or are currently doing that fits a
 Exercise, Project Work, Socializing, or Rest activity, use log_activity to record it — but
 only when they're actually narrating an activity occurrence, not for hypotheticals, plans,
 or unrelated chat. Do this quietly alongside your normal reply; don't interrogate them for
-every field first."""
+every field first.
+
+## Projects
+If the user is developing an ongoing project — ideas, notes, or plans that build up over
+many separate conversations, not a single one-off note and not a specific person/topic —
+check list_projects (or just try get_or_create_project) to get or create a dedicated vault
+folder for it. Use save_note with that project's name to file its notes together there,
+and pass the same project name to search_notes whenever the user is actively discussing
+that project, so retrieval stays scoped to it instead of pulling in unrelated notes."""
 
 LEARNING_ADDENDUM = """
 

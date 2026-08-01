@@ -4,15 +4,18 @@ utils/notify.py
 Push notifications for background-task failures, via a self-hosted Gotify
 instance.
 
-Required env vars: GOTIFY_URL, GOTIFY_TOKEN
+Gotify URL/token are agent.settings fields (seeded from GOTIFY_URL/
+GOTIFY_TOKEN at startup, editable/persisted live via the Settings page
+from there) rather than read directly from os.environ.
 """
 from __future__ import annotations
 
 import logging
-import os
 import time
 
 import httpx
+
+from agent.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +34,8 @@ def send_gotify(title: str, message: str, priority: int = 5, click_url: str | No
     notification opens that URL when tapped — used by jobs/checkin.py's
     fire_checkin to link straight to static/checkin.html.
     """
-    url = f"{os.environ['GOTIFY_URL'].rstrip('/')}/message"
-    params = {"token": os.environ["GOTIFY_TOKEN"]}
+    url = f"{settings.gotify_url.rstrip('/')}/message"
+    params = {"token": settings.gotify_token}
     payload = {"title": title, "message": message, "priority": priority}
     if click_url:
         payload["extras"] = {"client::notification": {"click": {"url": click_url}}}

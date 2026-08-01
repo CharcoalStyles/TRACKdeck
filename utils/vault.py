@@ -12,9 +12,16 @@ Vault layout:
                       interaction (e.g. typed on your phone via Obsidian
                       mobile). Watched and auto-processed into a real,
                       indexed note, then removed from Inbox.
-        <note>.md     Processed notes live flat at the vault root — no
-                      category folders. Tags and [[links]] do the
-                      organizing, not folder placement.
+        <note>.md     Processed notes live flat at the vault root by
+                      default — no category folders. Tags and [[links]] do
+                      the organizing, not folder placement.
+        <Project>/    The one deliberate exception: a project folder groups
+                      together all the notes for one ongoing project (see
+                      get_or_create_project_dir/get_or_create_project in
+                      agent/tools/notes.py). One level deep only, no
+                      nesting — a note's containing folder *is* its
+                      project, there's no separate registry to keep in
+                      sync.
 
 Frontmatter schema:
     id:      stable short id, generated once, never changes. This is the
@@ -41,12 +48,19 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from pathlib import Path
 
 import yaml
 
 INBOX_DIRNAME = "Inbox"
 FRONTMATTER_DELIM = "---"
+
+# Same threshold convention as agent/keywords.py's fuzzy thread-keyword
+# matching — tolerates the model or a voice transcription phrasing a
+# project name slightly differently without spawning a near-duplicate
+# folder for what's really the same project.
+PROJECT_MATCH_THRESHOLD = 0.75
 
 # The About Me note is a singleton with a fixed, known location, unlike
 # ordinary notes. It's referenced constantly (every turn learning mode is
@@ -221,8 +235,10 @@ def _claim_path(path: Path) -> bool:
     return True
 
 
-def unique_note_path(title: str) -> Path:
-    """Pick a non-colliding filename in the vault root for a new note.
+def unique_note_path(title: str, project: Path | None = None) -> Path:
+    """Pick a non-colliding filename for a new note — in the vault root, or
+    inside `project` (a project folder from get_or_create_project_dir) if
+    given.
 
     The candidate is claimed with an exclusive create (not just an
     existence check) so a concurrent writer computing the same slug —
@@ -231,16 +247,16 @@ def unique_note_path(title: str) -> Path:
     The caller's subsequent write_note_atomic replaces this empty
     placeholder with the actual content.
     """
-    root = vault_root()
-    root.mkdir(parents=True, exist_ok=True)
+    target_dir = project if project is not None else vault_root()
+    target_dir.mkdir(parents=True, exist_ok=True)
     slug = slugify(title)
 
-    candidate = root / f"{slug}.md"
+    candidate = target_dir / f"{slug}.md"
     if _claim_path(candidate):
         return candidate
 
     for _ in range(5):
-        candidate = root / f"{slug}-{generate_id()}.md"
+        candidate = target_dir / f"{slug}-{generate_id()}.md"
         if _claim_path(candidate):
             return candidate
 
@@ -248,15 +264,84 @@ def unique_note_path(title: str) -> Path:
 
 
 # ---------------------------------------------------------------------------
+# Project folders
+# ---------------------------------------------------------------------------
+
+def is_project_dir(path: Path) -> bool:
+    """True for a vault-root subdirectory that groups one project's notes —
+    everything except Inbox and dotfile directories (e.g. Obsidian's own
+    .obsidian)."""
+    return (
+        path.is_dir()
+        and path.parent == vault_root()
+        and path.name != INBOX_DIRNAME
+        and not path.name.startswith(".")
+    )
+
+
+def list_project_dirs() -> list[Path]:
+    root = vault_root()
+    if not root.exists():
+        return []
+    return [p for p in root.iterdir() if is_project_dir(p)]
+
+
+def match_project_dir(name: str) -> Path | None:
+    """Fuzzy-match `name` against existing project folder names, tolerant of
+    the model (or a voice transcription) phrasing a project name slightly
+    differently each time. Pure lookup — never creates anything."""
+    projects = list_project_dirs()
+    slug = slugify(name)
+    for p in projects:
+        if p.name == slug:
+            return p
+
+    candidate = name.strip().lower()
+    best_dir = None
+    best_ratio = 0.0
+    for p in projects:
+        ratio = SequenceMatcher(None, candidate, p.name.replace("-", " ").lower()).ratio()
+        if ratio > best_ratio:
+            best_ratio = ratio
+            best_dir = p
+
+    if best_dir is not None and best_ratio >= PROJECT_MATCH_THRESHOLD:
+        return best_dir
+    return None
+
+
+def get_or_create_project_dir(name: str) -> tuple[Path, bool]:
+    """Get (or create) the folder for a project. Returns (dir, created)."""
+    existing = match_project_dir(name)
+    if existing is not None:
+        return existing, False
+
+    root = vault_root()
+    project_dir = root / slugify(name)
+    # slugify already strips anything that could escape vault_root() (path
+    # separators, "..", etc.) — this is a cheap defense-in-depth check on
+    # top of that, since nothing else in this module guards against path
+    # traversal from user/model-supplied names.
+    if not project_dir.resolve().is_relative_to(root.resolve()):
+        raise ValueError(f"Unsafe project name: {name!r}")
+    project_dir.mkdir(parents=True, exist_ok=True)
+    return project_dir, True
+
+
+# ---------------------------------------------------------------------------
 # Listing / lookup
 # ---------------------------------------------------------------------------
 
 def list_vault_notes() -> list[Path]:
-    """All managed note files at the vault root (flat, excludes Inbox)."""
+    """All managed note files at the vault root and one level inside any
+    project folder (excludes Inbox)."""
     root = vault_root()
     if not root.exists():
         return []
-    return [p for p in root.iterdir() if p.is_file() and not is_ignorable(p)]
+    notes = [p for p in root.iterdir() if p.is_file() and not is_ignorable(p)]
+    for project_dir in list_project_dirs():
+        notes.extend(p for p in project_dir.iterdir() if p.is_file() and not is_ignorable(p))
+    return notes
 
 
 def list_inbox_files() -> list[Path]:

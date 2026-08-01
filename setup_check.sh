@@ -4,9 +4,10 @@
 # build/mounts need that aren't already handled elsewhere: the Piper TTS
 # voice model (baked into the image by the dockerfile's `COPY . .`, so it
 # has to exist on the host *before* `docker compose up --build`); the
-# memory.db/reminders.db/checkins.db/alert_sounds.db/device_errors.db/
-# onboarding_complete.flag/chroma_db paths that docker-compose expects to
-# already exist as the right file types; the syncthing-config/vault/
+# memory.db/reminders.db/checkins.db/settings.db/alert_sounds.db/
+# device_errors.db/onboarding_complete.flag/chroma_db paths that
+# docker-compose expects to already exist as the right file types; the
+# syncthing-config/vault/
 # radicale directories (must exist as this user *before* `docker compose
 # up`, or Docker auto-creates them as root on first run and the
 # syncthing/caldav containers can't write to them); and PUID/PGID in
@@ -52,12 +53,13 @@ else
 fi
 
 echo
-echo "== 2. memory.db / reminders.db / checkins.db / alert_sounds.db / device_errors.db /"
-echo "      onboarding_complete.flag / chroma_db (docker-compose bind mounts) =="
+echo "== 2. memory.db / reminders.db / checkins.db / settings.db / alert_sounds.db /"
+echo "      device_errors.db / onboarding_complete.flag / chroma_db (docker-compose bind mounts) =="
 DATA_DIR="./data"
 MEMORY_DB="${DATA_DIR}/memory.db"
 REMINDERS_DB="${DATA_DIR}/reminders.db"
 CHECKINS_DB="${DATA_DIR}/checkins.db"
+SETTINGS_DB="${DATA_DIR}/settings.db"
 ALERT_SOUNDS_DB="${DATA_DIR}/alert_sounds.db"
 ALERT_SOUNDS_DIR="${DATA_DIR}/alert_sounds"
 DEVICE_ERRORS_DB="${DATA_DIR}/device_errors.db"
@@ -105,6 +107,18 @@ elif [[ -f "$CHECKINS_DB" ]]; then
 else
     echo "  Creating empty $CHECKINS_DB so Docker mounts it as a file..."
     touch "$CHECKINS_DB"
+fi
+
+if [[ -d "$SETTINGS_DB" ]]; then
+    echo "  ERROR: $SETTINGS_DB exists but is a DIRECTORY, not a file."
+    echo "         This happens when docker compose was run before this file existed."
+    echo "         Remove it and re-run this script: rm -r '$SETTINGS_DB'"
+    exit 1
+elif [[ -f "$SETTINGS_DB" ]]; then
+    echo "  OK: $SETTINGS_DB already exists as a file."
+else
+    echo "  Creating empty $SETTINGS_DB so Docker mounts it as a file..."
+    touch "$SETTINGS_DB"
 fi
 
 if [[ -d "$ALERT_SOUNDS_DB" ]]; then

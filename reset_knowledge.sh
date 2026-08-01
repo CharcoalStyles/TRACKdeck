@@ -31,6 +31,10 @@
 # structured logs meant to persist for future trend/digest use, not
 # disposable state like Chroma/memory.db are.
 #
+# settings.db (standing app-level toggles, see utils/settings_store.py) is
+# likewise NOT touched — it's durable configuration (timezone, digest
+# time, Gotify credentials, etc.), not accumulated memory.
+#
 # The bundled Radicale calendar data (./data/radicale) is likewise NOT
 # touched — it's real calendar events, the same "not disposable" category
 # as the vault and checkins.db, not derived/rebuildable state.

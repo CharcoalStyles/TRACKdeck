@@ -66,6 +66,11 @@
       </div>
 
       <div class="field-row">
+        <label for="digestEmailToInput">Recipient email</label>
+        <input type="email" id="digestEmailToInput" placeholder="e.g. you@example.com">
+      </div>
+
+      <div class="field-row">
         <button type="button" id="saveDigestTimeBtn" class="primary-btn">Save</button>
       </div>
 
@@ -74,7 +79,7 @@
 
     <div class="card">
       <h2>Mental-Health Check-Ins</h2>
-      <p class="description">Local time short reflective prompts may start firing each day (paired with the existing bedtime setting as the end of the window). Takes effect immediately, no restart needed.</p>
+      <p class="description">Local time window short reflective prompts may fire in each day. Takes effect immediately, no restart needed.</p>
 
       <div class="field-row">
         <label for="wakeTimeInput">Earliest check-in time</label>
@@ -82,10 +87,41 @@
       </div>
 
       <div class="field-row">
+        <label for="latestCheckinTimeInput">Latest check-in time</label>
+        <input type="time" id="latestCheckinTimeInput">
+      </div>
+
+      <div class="field-row">
         <button type="button" id="saveWakeTimeBtn" class="primary-btn">Save</button>
       </div>
 
       <div class="save-status" id="wakeTimeStatus"></div>
+    </div>
+
+    <div class="card">
+      <h2>Notifications</h2>
+      <p class="description">Gotify server used for push notifications (reminders, check-ins, errors), and the base URL used to build check-in tap-to-open links in those pushes.</p>
+
+      <div class="field-row">
+        <label for="gotifyUrlInput">Gotify URL</label>
+        <input type="text" id="gotifyUrlInput" placeholder="e.g. https://gotify.example.com">
+      </div>
+
+      <div class="field-row">
+        <label for="gotifyTokenInput">Gotify token</label>
+        <input type="password" id="gotifyTokenInput" placeholder="e.g. AbCdEfGhIjKlMno">
+      </div>
+
+      <div class="field-row">
+        <label for="publicBaseUrlInput">Public base URL</label>
+        <input type="text" id="publicBaseUrlInput" placeholder="e.g. https://assistant.example.com">
+      </div>
+
+      <div class="field-row">
+        <button type="button" id="saveNotificationsBtn" class="primary-btn">Save</button>
+      </div>
+
+      <div class="save-status" id="notificationsStatus"></div>
     </div>
 
     <div class="card">
@@ -124,12 +160,20 @@
       const locationStatus = document.getElementById('locationStatus');
 
       const digestTimeInput = document.getElementById('digestTimeInput');
+      const digestEmailToInput = document.getElementById('digestEmailToInput');
       const saveDigestTimeBtn = document.getElementById('saveDigestTimeBtn');
       const digestStatus = document.getElementById('digestStatus');
 
       const wakeTimeInput = document.getElementById('wakeTimeInput');
+      const latestCheckinTimeInput = document.getElementById('latestCheckinTimeInput');
       const saveWakeTimeBtn = document.getElementById('saveWakeTimeBtn');
       const wakeTimeStatus = document.getElementById('wakeTimeStatus');
+
+      const gotifyUrlInput = document.getElementById('gotifyUrlInput');
+      const gotifyTokenInput = document.getElementById('gotifyTokenInput');
+      const publicBaseUrlInput = document.getElementById('publicBaseUrlInput');
+      const saveNotificationsBtn = document.getElementById('saveNotificationsBtn');
+      const notificationsStatus = document.getElementById('notificationsStatus');
 
       const pollIntervalInput = document.getElementById('pollIntervalInput');
       const savePollIntervalBtn = document.getElementById('savePollIntervalBtn');
@@ -158,7 +202,15 @@
           defaultLocationInput.value = data.default_location || '';
           timezoneInput.value = data.timezone || '';
           digestTimeInput.value = data.digest_time || '';
+          digestEmailToInput.value = data.digest_email_to || '';
           wakeTimeInput.value = data.wake_time || '';
+          latestCheckinTimeInput.value = data.latest_checkin_time || '';
+          gotifyUrlInput.value = data.gotify_url || '';
+          gotifyTokenInput.value = '';
+          gotifyTokenInput.placeholder = data.gotify_token_set
+            ? 'Saved — leave blank to keep'
+            : 'e.g. AbCdEfGhIjKlMno';
+          publicBaseUrlInput.value = data.public_base_url || '';
           pollIntervalInput.value = data.device_poll_interval_seconds ?? '';
         } catch (error) {
           console.error('Failed to load settings:', error);
@@ -209,10 +261,13 @@
         showStatus(digestStatus, 'Saving...', true);
         digestStatus.style.color = '#888';
         try {
-          await updateSettings({ digest_time: digestTimeInput.value });
+          await updateSettings({
+            digest_time: digestTimeInput.value,
+            digest_email_to: digestEmailToInput.value,
+          });
           showStatus(digestStatus, 'Saved.');
         } catch (error) {
-          console.error('Failed to save digest time:', error);
+          console.error('Failed to save digest settings:', error);
           showStatus(digestStatus, 'Failed to save.', false);
         }
       });
@@ -221,11 +276,36 @@
         showStatus(wakeTimeStatus, 'Saving...', true);
         wakeTimeStatus.style.color = '#888';
         try {
-          await updateSettings({ wake_time: wakeTimeInput.value });
+          await updateSettings({
+            wake_time: wakeTimeInput.value,
+            latest_checkin_time: latestCheckinTimeInput.value,
+          });
           showStatus(wakeTimeStatus, 'Saved.');
         } catch (error) {
-          console.error('Failed to save wake time:', error);
+          console.error('Failed to save check-in window:', error);
           showStatus(wakeTimeStatus, 'Failed to save.', false);
+        }
+      });
+
+      saveNotificationsBtn.addEventListener('click', async () => {
+        showStatus(notificationsStatus, 'Saving...', true);
+        notificationsStatus.style.color = '#888';
+        try {
+          const update = {
+            gotify_url: gotifyUrlInput.value,
+            public_base_url: publicBaseUrlInput.value,
+          };
+          // Leaving the token field blank keeps the currently saved token —
+          // only send it when the user actually typed a new one.
+          if (gotifyTokenInput.value) {
+            update.gotify_token = gotifyTokenInput.value;
+          }
+          await updateSettings(update);
+          showStatus(notificationsStatus, 'Saved.');
+          loadSettings();
+        } catch (error) {
+          console.error('Failed to save notification settings:', error);
+          showStatus(notificationsStatus, 'Failed to save.', false);
         }
       });
 

@@ -66,6 +66,7 @@ from agent.scheduler import (
     wake_trigger,
 )
 from agent.settings import (
+    apply_persisted,
     is_valid_digest_time,
     is_valid_poll_interval_seconds,
     is_valid_sync_interval_minutes,
@@ -92,6 +93,7 @@ from utils import (
     device_state,
     onboarding_state,
     reminders_store,
+    settings_store,
     vault,
 )
 from utils.caldav_client import ensure_collection_exists
@@ -110,6 +112,13 @@ from routes.alert_sounds import router as alert_sounds_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Load settings.db before anything below reads a setting — in
+    # particular before the daily_digest/bedtime_reminder jobs are
+    # registered further down, since digest_trigger()/bedtime_trigger()
+    # bake settings.digest_time/bedtime in at add_job() time.
+    await asyncio.to_thread(settings_store.init_db)
+    apply_persisted(await asyncio.to_thread(settings_store.load_all))
+
     chroma_client = make_chroma_client()
     embedding_fn = make_embedding_function()
     app_state.memory = MemoryStore(chroma_client, embedding_fn)
@@ -470,11 +479,29 @@ class SettingsUpdate(BaseModel):
     # jobs/checkin.py, jobs/day_start.py). Same rescheduling behavior as
     # digest_time/bedtime, separate job.
     wake_time: str | None = None
+    # "HH:MM" 24-hour local time check-in prompts must stop firing by (see
+    # jobs/checkin.py) — independent from bedtime, read fresh at
+    # schedule-time so no APScheduler reschedule is needed.
+    latest_checkin_time: str | None = None
     # Seconds between the ESP32-S3's deep-sleep wake/poll cycles (see
     # main.py's POST /device/sync). No APScheduler job to reschedule —
     # the device reads this on its next sync and self-schedules its own
     # sleep duration.
     device_poll_interval_seconds: int | None = None
+    # Daily digest recipient (utils/mailer.py). Blank is a valid
+    # "not configured yet" state, same as the unset env var today.
+    digest_email_to: str | None = None
+    # Base URL for check-in magic links (jobs/checkin.py). Blank is a
+    # valid "no click-through link" state, same as today.
+    public_base_url: str | None = None
+    # Self-hosted Gotify server URL (utils/notify.py). Blank is a valid
+    # "not configured yet" state.
+    gotify_url: str | None = None
+    # Gotify app token (utils/notify.py). A real credential — GET
+    # /settings never echoes it back, only whether one is set
+    # (_current_settings' gotify_token_set). Sending it here replaces the
+    # stored value; omit it entirely to leave the existing token alone.
+    gotify_token: str | None = None
 
     @model_validator(mode="after")
     def _check_values(self):
@@ -490,6 +517,8 @@ class SettingsUpdate(BaseModel):
             raise ValueError("calendar_sync_interval_minutes must be between 1 and 1440")
         if self.wake_time is not None and not is_valid_digest_time(self.wake_time):
             raise ValueError(f"'{self.wake_time}' is not a valid HH:MM 24-hour time")
+        if self.latest_checkin_time is not None and not is_valid_digest_time(self.latest_checkin_time):
+            raise ValueError(f"'{self.latest_checkin_time}' is not a valid HH:MM 24-hour time")
         if self.device_poll_interval_seconds is not None and not is_valid_poll_interval_seconds(
             self.device_poll_interval_seconds
         ):
@@ -508,7 +537,14 @@ def _current_settings() -> dict:
         "bedtime": settings.bedtime,
         "calendar_sync_interval_minutes": settings.calendar_sync_interval_minutes,
         "wake_time": settings.wake_time,
+        "latest_checkin_time": settings.latest_checkin_time,
         "device_poll_interval_seconds": settings.device_poll_interval_seconds,
+        "digest_email_to": settings.digest_email_to,
+        "public_base_url": settings.public_base_url,
+        "gotify_url": settings.gotify_url,
+        # Never echo the raw token back to the browser — just whether one
+        # is configured, enough for the Settings page's placeholder text.
+        "gotify_token_set": bool(settings.gotify_token),
         # Read-only here — deliberately not part of SettingsUpdate below, so
         # it can only be set via agent/tools/general.py's
         # mark_onboarding_complete tool, not a direct POST /settings call.
@@ -529,16 +565,24 @@ async def update_settings(
 ):
     """Update standing app-level toggles. Only fields present in the
     request body are changed. Takes effect immediately — settings are
-    read fresh on every agent turn, no restart needed.
+    read fresh on every agent turn, no restart needed. Every changed
+    field is also write-through persisted to settings.db
+    (utils/settings_store.py) so it survives a restart.
 
     timezone/digest_time/bedtime/calendar_sync_interval_minutes/wake_time
     also live-reschedule their APScheduler jobs, since they're registered
     as fixed triggers rather than being read fresh like the other settings.
+    latest_checkin_time needs no reschedule — jobs/checkin.py reads it
+    fresh at schedule-time, same as bedtime's use there today.
     """
+    changed: dict[str, str] = {}
+
     if update.learning_mode is not None:
         settings.learning_mode = update.learning_mode
+        changed["learning_mode"] = "true" if update.learning_mode else "false"
     if update.default_location is not None:
         settings.default_location = update.default_location.strip()
+        changed["default_location"] = settings.default_location
 
     reschedule_digest = update.timezone is not None or update.digest_time is not None
     reschedule_bedtime = update.timezone is not None or update.bedtime is not None
@@ -546,16 +590,38 @@ async def update_settings(
     reschedule_day_start = update.timezone is not None or update.wake_time is not None
     if update.timezone is not None:
         settings.timezone = update.timezone
+        changed["timezone"] = update.timezone
     if update.digest_time is not None:
         settings.digest_time = update.digest_time
+        changed["digest_time"] = update.digest_time
     if update.bedtime is not None:
         settings.bedtime = update.bedtime
+        changed["bedtime"] = update.bedtime
     if update.calendar_sync_interval_minutes is not None:
         settings.calendar_sync_interval_minutes = update.calendar_sync_interval_minutes
+        changed["calendar_sync_interval_minutes"] = str(update.calendar_sync_interval_minutes)
     if update.wake_time is not None:
         settings.wake_time = update.wake_time
+        changed["wake_time"] = update.wake_time
+    if update.latest_checkin_time is not None:
+        settings.latest_checkin_time = update.latest_checkin_time
+        changed["latest_checkin_time"] = update.latest_checkin_time
     if update.device_poll_interval_seconds is not None:
         settings.device_poll_interval_seconds = update.device_poll_interval_seconds
+        changed["device_poll_interval_seconds"] = str(update.device_poll_interval_seconds)
+    if update.digest_email_to is not None:
+        settings.digest_email_to = update.digest_email_to.strip()
+        changed["digest_email_to"] = settings.digest_email_to
+    if update.public_base_url is not None:
+        settings.public_base_url = update.public_base_url.strip()
+        changed["public_base_url"] = settings.public_base_url
+    if update.gotify_url is not None:
+        settings.gotify_url = update.gotify_url.strip()
+        changed["gotify_url"] = settings.gotify_url
+    if update.gotify_token is not None:
+        settings.gotify_token = update.gotify_token
+        changed["gotify_token"] = update.gotify_token
+
     if reschedule_digest:
         scheduler.reschedule_job("daily_digest", trigger=digest_trigger())
     if reschedule_bedtime:
@@ -564,6 +630,8 @@ async def update_settings(
         scheduler.reschedule_job("calendar_reminder_sync", trigger=calendar_sync_trigger())
     if reschedule_day_start:
         scheduler.reschedule_job("day_start", trigger=wake_trigger())
+    if changed:
+        await asyncio.to_thread(settings_store.set_many, changed)
 
     return _current_settings()
 

@@ -33,6 +33,7 @@ services:
       - ./data/memory.db:/app/memory.db
       - ./data/reminders.db:/app/reminders.db
       - ./data/checkins.db:/app/checkins.db
+      - ./data/settings.db:/app/settings.db
       - ./data/alert_sounds.db:/app/alert_sounds.db
       - ./data/alert_sounds:/app/alert_sounds
       - ./data/device_errors.db:/app/device_errors.db

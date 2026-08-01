@@ -51,12 +51,14 @@ Content:
 # ---------------------------------------------------------------------------
 
 def _index_note_sync(memory: MemoryStore, note: vault.Note) -> None:
+    project = "" if note.path.parent == vault.vault_root() else note.path.parent.name
     memory.upsert_note(
         note_id=note.id,
         content=note.body,
         title=note.title,
         path=str(note.path.relative_to(vault.vault_root())),
         mtime=note.path.stat().st_mtime,
+        project=project,
     )
 
 
@@ -281,7 +283,7 @@ async def watch_vault(memory: MemoryStore) -> None:
                     if change_type in (Change.added, Change.modified) and path.exists():
                         await process_inbox_file(memory, path)
 
-                elif path.parent == root:
+                elif path.parent == root or vault.is_project_dir(path.parent):
                     if change_type in (Change.added, Change.modified) and path.exists():
                         await index_note_file(memory, path)
                     elif change_type == Change.deleted:

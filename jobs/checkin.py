@@ -27,14 +27,13 @@ agent/scheduler.py):
 Every place that's about to schedule a NEW check-in checks the day's
 target (3-5, decided once by jobs/day_start.py and persisted via
 utils.checkins_store's day_plans table) and the waking-hours window
-(settings.wake_time/settings.bedtime) first, and no-ops if either is
-exhausted.
+(settings.wake_time/settings.latest_checkin_time) first, and no-ops if
+either is exhausted.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import random
 import time
 import uuid
@@ -73,25 +72,25 @@ def _pick_category(exclude: str | None, high_used: bool) -> str:
     return random.choice(eligible)  # always non-empty: excludes at most 2 of 3
 
 
-def _local_wake_and_bedtime(now_local: datetime) -> tuple[datetime, datetime]:
+def _local_checkin_window(now_local: datetime) -> tuple[datetime, datetime]:
     wake_hour, wake_minute = (int(p) for p in settings.wake_time.split(":"))
-    bed_hour, bed_minute = (int(p) for p in settings.bedtime.split(":"))
+    end_hour, end_minute = (int(p) for p in settings.latest_checkin_time.split(":"))
     wake_dt = now_local.replace(hour=wake_hour, minute=wake_minute, second=0, microsecond=0)
-    bed_dt = now_local.replace(hour=bed_hour, minute=bed_minute, second=0, microsecond=0)
-    return wake_dt, bed_dt
+    checkin_end_dt = now_local.replace(hour=end_hour, minute=end_minute, second=0, microsecond=0)
+    return wake_dt, checkin_end_dt
 
 
 def waking_day_bounds(now_local: datetime) -> tuple[int, int]:
-    """UTC epoch (start, end) for today's waking window ([wake_time,
-    bedtime) on now_local's calendar date) — the day-boundary concept this
-    feature uses for its 3-5/day cap and once/day 'high' rule. Deliberately
-    separate from jobs/digest.py's midnight-anchored _todays_utc_bounds:
-    the whole feature lives inside the waking window, not the calendar
-    day."""
-    wake_dt, bed_dt = _local_wake_and_bedtime(now_local)
+    """UTC epoch (start, end) for today's check-in window ([wake_time,
+    latest_checkin_time) on now_local's calendar date) — the day-boundary
+    concept this feature uses for its 3-5/day cap and once/day 'high'
+    rule. Deliberately separate from jobs/digest.py's midnight-anchored
+    _todays_utc_bounds: the whole feature lives inside this window, not
+    the calendar day."""
+    wake_dt, checkin_end_dt = _local_checkin_window(now_local)
     return (
         int(wake_dt.astimezone(timezone.utc).timestamp()),
-        int(bed_dt.astimezone(timezone.utc).timestamp()),
+        int(checkin_end_dt.astimezone(timezone.utc).timestamp()),
     )
 
 
@@ -116,10 +115,10 @@ def _mint_thread() -> tuple[str, str]:
 def _checkin_click_url(checkin: dict) -> str | None:
     """Deep-link into static/checkin.html for Gotify's tap-to-open extras.
     None (no click action, plain notification still fires) if
-    PUBLIC_BASE_URL isn't set — additive, not required, so a missing var
-    degrades gracefully instead of turning every firing into a reported
-    error."""
-    base = os.environ.get("PUBLIC_BASE_URL")
+    public_base_url isn't set — additive, not required, so a missing
+    value degrades gracefully instead of turning every firing into a
+    reported error."""
+    base = settings.public_base_url
     if not base:
         return None
     params = urlencode({
@@ -192,10 +191,11 @@ async def schedule_first_of_day(
 ) -> None:
     """Called by jobs/day_start.py's start_of_day_setup(). Idempotent —
     no-ops if today already has any scheduled/fired row, or we're outside
-    [wake_time, bedtime) right now — safe to call unconditionally at
-    startup as a catch-up for "app was down through today's wake_time"."""
-    wake_dt, bed_dt = _local_wake_and_bedtime(now_local)
-    if not (wake_dt <= now_local < bed_dt):
+    [wake_time, latest_checkin_time) right now — safe to call
+    unconditionally at startup as a catch-up for "app was down through
+    today's wake_time"."""
+    wake_dt, checkin_end_dt = _local_checkin_window(now_local)
+    if not (wake_dt <= now_local < checkin_end_dt):
         return
     if await asyncio.to_thread(checkins_store.count_scheduled_today, day_start_utc, day_end_utc):
         return
@@ -203,7 +203,7 @@ async def schedule_first_of_day(
         return
 
     scheduled_at = max(now_local, wake_dt) + _random_delay(WAKE_JITTER_RANGE)
-    if scheduled_at >= bed_dt:
+    if scheduled_at >= checkin_end_dt:
         return
     await _create_and_schedule(scheduled_at, _pick_category(None, False), None)
 
@@ -272,8 +272,8 @@ async def _schedule_next(resolved: dict, outcome: str) -> None:
         retry_of = None
 
     scheduled_at = now_local + delay
-    _, bed_dt = _local_wake_and_bedtime(now_local)
-    if scheduled_at >= bed_dt:
+    _, checkin_end_dt = _local_checkin_window(now_local)
+    if scheduled_at >= checkin_end_dt:
         return  # tomorrow's wake_time cron job (jobs/day_start.py) starts the next day's plan
     await _create_and_schedule(scheduled_at, category, retry_of)
 
@@ -306,7 +306,7 @@ async def next_wake_at() -> int:
         return pending[0]["scheduled_at"]
 
     now_local = datetime.now(settings.zoneinfo())
-    wake_dt, _ = _local_wake_and_bedtime(now_local)
+    wake_dt, _ = _local_checkin_window(now_local)
     if now_local >= wake_dt:
         wake_dt += timedelta(days=1)
     return int(wake_dt.astimezone(timezone.utc).timestamp())

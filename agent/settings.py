@@ -6,9 +6,13 @@ for things like one_shot (which varies call to call). These are settings
 you flip occasionally, meant to be managed from the dashboard rather than
 passed on every request.
 
-Held in memory only, not persisted to disk — each one starts from an env
-var default at startup, and can be changed live via GET/POST /settings
-in main.py.
+Held in memory (this module's `Settings` singleton), each field starting
+from an env var default or hardcoded default at startup, and changeable
+live via GET/POST /settings in main.py. Persisted to settings.db
+(utils/settings_store.py) so edits survive a restart — main.py's
+lifespan loads settings.db into this singleton via apply_persisted()
+before anything reads a setting, and POST /settings write-throughs every
+change.
 """
 from __future__ import annotations
 
@@ -85,11 +89,21 @@ class Settings:
     calendar_sync_interval_minutes: int = 30
 
     # "HH:MM" 24-hour local time check-in prompts may start firing (see
-    # jobs/checkin.py, jobs/day_start.py) — paired with `bedtime` as the
-    # end of the waking-hours window. Same rescheduling/validation pattern
-    # as digest_time/bedtime. No env var, same reasoning as
+    # jobs/checkin.py, jobs/day_start.py) — paired with `latest_checkin_time`
+    # as the end of the waking-hours window. Same rescheduling/validation
+    # pattern as digest_time/bedtime. No env var, same reasoning as
     # default_location above.
     wake_time: str = "07:00"
+
+    # "HH:MM" 24-hour local time check-in prompts must stop firing by (see
+    # jobs/checkin.py) — the other end of the waking-hours window,
+    # deliberately independent from `bedtime` (the wind-down nudge) so the
+    # two can be tuned separately. Default matches bedtime's own default so
+    # upgrading is a no-op until explicitly changed. No rescheduling needed
+    # (read fresh at schedule-time, not baked into a registered cron
+    # trigger) — same validation pattern as digest_time/bedtime/wake_time.
+    # No env var, same reasoning as default_location above.
+    latest_checkin_time: str = "21:20"
 
     # Seconds between the ESP32-S3's deep-sleep wake cycles (see
     # main.py's POST /device/sync, jobs/device_sync.py) — returned in
@@ -98,8 +112,70 @@ class Settings:
     # as default_location above.
     device_poll_interval_seconds: int = 300
 
+    # Recipient address for the daily digest email (jobs/digest.py,
+    # utils/mailer.py). Seeded from DIGEST_EMAIL_TO at startup so an
+    # existing deployment keeps working unchanged, but editable live from
+    # here afterward — same "one source of truth once configured" pattern
+    # as the fields above.
+    digest_email_to: str = os.environ.get("DIGEST_EMAIL_TO", "")
+
+    # Base URL used to build check-in magic-link URLs (jobs/checkin.py's
+    # _checkin_click_url) for Gotify's tap-to-open extras. Seeded from
+    # PUBLIC_BASE_URL; blank is a valid "no click-through link" state, same
+    # as today.
+    public_base_url: str = os.environ.get("PUBLIC_BASE_URL", "")
+
+    # Self-hosted Gotify server URL for push notifications (utils/notify.py).
+    # Seeded from GOTIFY_URL; blank is a valid "not configured yet" state.
+    gotify_url: str = os.environ.get("GOTIFY_URL", "")
+
+    # Gotify app token (utils/notify.py). Seeded from GOTIFY_TOKEN. Unlike
+    # every other field here, this is a real credential — GET /settings
+    # never echoes it back (main.py's _current_settings() reports only
+    # whether one is set), and the Settings page treats it as
+    # write-only/blank-to-keep.
+    gotify_token: str = os.environ.get("GOTIFY_TOKEN", "")
+
     def zoneinfo(self) -> ZoneInfo:
         return ZoneInfo(self.timezone)
 
 
 settings = Settings()
+
+
+def apply_persisted(values: dict[str, str]) -> None:
+    """Overlay settings.db (utils/settings_store.py) onto the class
+    defaults/env fallbacks above. Called once at startup (main.py's
+    lifespan), before any field is read to build a live APScheduler
+    trigger, so a persisted digest_time/bedtime/wake_time takes effect
+    from the very first job registration, not just on the next edit.
+
+    sqlite3 only stores strings, so each field is parsed back to its real
+    type here — explicit per-field, not a generic loop, to match this
+    module's existing style."""
+    if "learning_mode" in values:
+        settings.learning_mode = values["learning_mode"] == "true"
+    if "default_location" in values:
+        settings.default_location = values["default_location"]
+    if "timezone" in values:
+        settings.timezone = values["timezone"]
+    if "digest_time" in values:
+        settings.digest_time = values["digest_time"]
+    if "bedtime" in values:
+        settings.bedtime = values["bedtime"]
+    if "calendar_sync_interval_minutes" in values:
+        settings.calendar_sync_interval_minutes = int(values["calendar_sync_interval_minutes"])
+    if "wake_time" in values:
+        settings.wake_time = values["wake_time"]
+    if "latest_checkin_time" in values:
+        settings.latest_checkin_time = values["latest_checkin_time"]
+    if "device_poll_interval_seconds" in values:
+        settings.device_poll_interval_seconds = int(values["device_poll_interval_seconds"])
+    if "digest_email_to" in values:
+        settings.digest_email_to = values["digest_email_to"]
+    if "public_base_url" in values:
+        settings.public_base_url = values["public_base_url"]
+    if "gotify_url" in values:
+        settings.gotify_url = values["gotify_url"]
+    if "gotify_token" in values:
+        settings.gotify_token = values["gotify_token"]
