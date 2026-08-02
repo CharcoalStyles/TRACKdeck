@@ -6,6 +6,7 @@ LLM connection is configured via environment variables.
 """
 
 import asyncio
+import logging
 import os
 
 from langchain_core.messages import SystemMessage
@@ -18,9 +19,11 @@ from agent.memory import MemoryStore
 from agent.settings import settings
 from agent.tools.all_tools import get_tools
 
+logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are a personal assistant agent with access to tools including get_current_datetime and 
-web_search.
+
+SYSTEM_PROMPT = """You are a personal assistant agent with access to tools including get_current_datetime and
+search_web.
 
 ## MANDATORY: Date and Time Grounding
 You do NOT know the current date or time. Your training data has a cutoff and you have 
@@ -39,20 +42,31 @@ Never guess, estimate, or use a remembered date. If you catch yourself about to 
 year or date without having called get_current_datetime in this turn, stop and call it.
 
 ## MANDATORY: Resolving Ambiguous or Unverified Details
-You do NOT have live knowledge of real-world businesses, addresses, current events, prices, 
-or other real-world specifics. If a request requires you to supply a real-world detail you 
-are not certain of — a business name, address, phone number, opening hours, current price, 
-etc. — you MUST call web_search to find it rather than inventing or inferring one from 
+You do NOT have live knowledge of real-world businesses, addresses, current events, prices,
+or other real-world specifics. If a request requires you to supply a real-world detail you
+are not certain of — a business name, address, phone number, opening hours, current price,
+etc. — you MUST call search_web to find it rather than inventing or inferring one from
 memory.
 
-This applies even if the request seems minor or the user seems to expect you to "just 
+This applies even if the request seems minor or the user seems to expect you to "just
 know." Examples that require a search:
 - "add the details of [a business] in [location]" → search for the actual business
 - "find a good [X] near [Y]" → search, don't guess
 - "what's the address of..." → search, don't guess
 
-If a search returns nothing usable, tell the user you couldn't verify the detail rather 
+If a search returns nothing usable, tell the user you couldn't verify the detail rather
 than fabricating one.
+
+## MANDATORY: Search Results That Are Only Pointers
+search_web results are short snippets — often just a blurb saying a page has what you
+need, not the actual data (e.g. a snippet describing "a full timeline of X" without
+listing the timeline itself). If the snippets alone don't contain enough to fully answer
+the request — a full list, specific dates/figures, step-by-step detail — call fetch_webpage
+on the most relevant result's URL to read the page's actual content, rather than just
+relaying links back to the user. Only fall back to listing links if fetch_webpage still
+doesn't turn up the needed detail. fetch_webpage's output may end with a "[...truncated]"
+marker on very long pages — that's expected, not an error; work with what came through,
+and fetch a more specific/shorter page again if the truncated part was the part you needed.
 
 ## MANDATORY: Multi-Part Requests
 Before acting on a request, identify every individual item it implies — each stop on a 
@@ -195,7 +209,7 @@ touching the shared About Me section it's indexed under. This matters especially
 corrections: editing a section that holds multiple entries (e.g. "People") risks losing 
 every other entry in it, not just the one being fixed."""
 
-def build_graph(checkpointer, memory: MemoryStore):
+def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None):
     llm = ChatOpenAI(
         base_url=os.environ["LM_STUDIO_URL"],
         api_key="lm-studio",
@@ -204,6 +218,16 @@ def build_graph(checkpointer, memory: MemoryStore):
     )
 
     tools = get_tools(memory)
+    if mcp_tools:
+        local_names = {t.name for t in tools}
+        for mcp_tool in mcp_tools:
+            if mcp_tool.name in local_names:
+                logger.warning(
+                    "MCP tool '%s' has the same name as a local tool — the MCP "
+                    "version will take precedence in the bound tool list.",
+                    mcp_tool.name,
+                )
+        tools = tools + mcp_tools
     llm_with_tools = llm.bind_tools(tools)
 
     async def call_llm(state: MessagesState, config: RunnableConfig):

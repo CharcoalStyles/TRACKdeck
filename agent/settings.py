@@ -16,6 +16,7 @@ change.
 """
 from __future__ import annotations
 
+import json
 import os
 from zoneinfo import ZoneInfo, available_timezones
 
@@ -48,6 +49,68 @@ def is_valid_poll_interval_seconds(value: int) -> bool:
     # the device's wifi radio (and battery) for no benefit; above a day
     # defeats the point of "poll for what's coming up."
     return 30 <= value <= 86400
+
+
+def parse_mcp_servers(value: str) -> dict:
+    """Parses/validates the mcp_servers JSON setting into
+    {server_name: {enabled, transport, ...}}. Raises ValueError with a
+    human-readable message on anything malformed, so main.py's /settings
+    handler can surface it as a 422 rather than silently persisting
+    something agent/tools/all_tools.py's get_mcp_tools() can't use.
+
+    Only 'stdio' (a local subprocess) and 'streamable_http' (a URL) are
+    supported — the two transports actually worth supporting for a
+    single-user local setup; langchain-mcp-adapters' other options (sse,
+    websocket) aren't validated here."""
+    try:
+        data = json.loads(value or "{}")
+    except json.JSONDecodeError as e:
+        raise ValueError(f"mcp_servers must be valid JSON: {e}") from e
+    if not isinstance(data, dict):
+        raise ValueError("mcp_servers must be a JSON object of {server_name: config}")
+    for name, config in data.items():
+        if not isinstance(config, dict):
+            raise ValueError(f"mcp_servers['{name}'] must be an object")
+        transport = config.get("transport")
+        if transport == "stdio":
+            if not config.get("command"):
+                raise ValueError(f"mcp_servers['{name}']: stdio transport requires 'command'")
+        elif transport == "streamable_http":
+            if not config.get("url"):
+                raise ValueError(f"mcp_servers['{name}']: streamable_http transport requires 'url'")
+        else:
+            raise ValueError(f"mcp_servers['{name}']: transport must be 'stdio' or 'streamable_http'")
+    return data
+
+
+def _default_mcp_servers() -> str:
+    """Seeded once from SEARXNG_URL at first run, same "env var default,
+    dashboard source of truth after that" pattern as digest_email_to/
+    gotify_url below — otherwise upgrading this app would silently drop
+    web search (previously a plain tool, now the third-party
+    searxng-mcp-server run over MCP) until someone notices and re-adds it
+    by hand. Run via `uvx` (bundled with `uv`, which this project already
+    depends on) rather than added to this project's own dependencies —
+    it's a fairly heavy transitive dependency chain (MarkItDown's
+    format-detection stack), fully isolated in uvx's own cache instead of
+    polluting this app's venv. Exposes search_web/search_images/
+    search_videos/search_news/fetch_url — see
+    https://github.com/IceWreck/SearxNG-MCP-Server."""
+    if not os.environ.get("SEARXNG_URL"):
+        return "{}"
+    return json.dumps({
+        "searxng": {
+            "enabled": True,
+            "transport": "stdio",
+            "command": "uvx",
+            "args": ["searxng-mcp-server"],
+            # SEARXNG_URL isn't in the MCP stdio client's default-inherited
+            # env subset (HOME/LOGNAME/PATH/SHELL/TERM/USER) — passing it
+            # here merges it in (mcp.client.stdio.stdio_client unions
+            # server.env over those safe defaults, doesn't replace them).
+            "env": {"SEARXNG_URL": os.environ.get("SEARXNG_URL", "")},
+        }
+    })
 
 
 class Settings:
@@ -136,8 +199,31 @@ class Settings:
     # write-only/blank-to-keep.
     gotify_token: str = os.environ.get("GOTIFY_TOKEN", "")
 
+    # JSON-encoded {server_name: {enabled, transport, ...}} — MCP (Model
+    # Context Protocol) servers whose tools get merged into the agent's
+    # tool list alongside the hand-rolled ones in agent/tools/ (see
+    # agent/tools/all_tools.py's get_mcp_tools(), agent/graph.py's
+    # build_graph()). No env var for the setting itself — dashboard-only,
+    # same reasoning as default_location above — but the *value* is
+    # seeded once from SEARXNG_URL if set, see _default_mcp_servers().
+    # Unlike every other field here, this one only takes effect on the
+    # next app restart: the tool list is fetched once when the graph is
+    # built at startup (main.py's lifespan), not re-fetched per request.
+    mcp_servers: str = _default_mcp_servers()
+
     def zoneinfo(self) -> ZoneInfo:
         return ZoneInfo(self.timezone)
+
+    def mcp_server_configs(self) -> dict:
+        """Enabled servers from mcp_servers, with the 'enabled' key
+        stripped — exactly the {name: connection} shape
+        MultiServerMCPClient's constructor expects."""
+        servers = parse_mcp_servers(self.mcp_servers)
+        return {
+            name: {k: v for k, v in config.items() if k != "enabled"}
+            for name, config in servers.items()
+            if config.get("enabled", True)
+        }
 
 
 settings = Settings()
@@ -179,3 +265,5 @@ def apply_persisted(values: dict[str, str]) -> None:
         settings.gotify_url = values["gotify_url"]
     if "gotify_token" in values:
         settings.gotify_token = values["gotify_token"]
+    if "mcp_servers" in values:
+        settings.mcp_servers = values["mcp_servers"]

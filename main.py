@@ -71,8 +71,10 @@ from agent.settings import (
     is_valid_poll_interval_seconds,
     is_valid_sync_interval_minutes,
     is_valid_timezone,
+    parse_mcp_servers,
     settings,
 )
+from agent.tools.all_tools import get_mcp_tools
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from jobs import activity_log as activity_log_jobs
@@ -142,8 +144,17 @@ async def lifespan(app: FastAPI):
             caldav_setup.get("error"),
         )
 
+    # Fetched once at startup, not per-request — settings.mcp_servers
+    # changes need a restart to take effect (see its docstring in
+    # agent/settings.py). Best-effort per server (get_mcp_tools() isolates
+    # failures), so one misbehaving MCP server never blocks the app from
+    # starting.
+    mcp_tools = await get_mcp_tools()
+    if mcp_tools:
+        logger.info("Loaded %d tool(s) from MCP servers: %s", len(mcp_tools), [t.name for t in mcp_tools])
+
     async with AsyncSqliteSaver.from_conn_string("memory.db") as checkpointer:
-        app_state.graph = build_graph(checkpointer, app_state.memory)
+        app_state.graph = build_graph(checkpointer, app_state.memory, mcp_tools=mcp_tools)
 
         scheduler.add_job(
             send_daily_digest,
@@ -502,6 +513,11 @@ class SettingsUpdate(BaseModel):
     # (_current_settings' gotify_token_set). Sending it here replaces the
     # stored value; omit it entirely to leave the existing token alone.
     gotify_token: str | None = None
+    # JSON-encoded {server_name: {enabled, transport, ...}} for MCP
+    # servers (agent/settings.py's mcp_servers). Unlike every other field
+    # here, this only takes effect on the next app restart — the tool
+    # list is fetched once at startup, not read fresh per request.
+    mcp_servers: str | None = None
 
     @model_validator(mode="after")
     def _check_values(self):
@@ -525,6 +541,8 @@ class SettingsUpdate(BaseModel):
             raise ValueError("device_poll_interval_seconds must be between 30 and 86400")
         if self.default_location is not None and not self.default_location.strip():
             raise ValueError("default_location cannot be blank")
+        if self.mcp_servers is not None:
+            parse_mcp_servers(self.mcp_servers)  # raises ValueError on anything malformed
         return self
 
 
@@ -545,6 +563,7 @@ def _current_settings() -> dict:
         # Never echo the raw token back to the browser — just whether one
         # is configured, enough for the Settings page's placeholder text.
         "gotify_token_set": bool(settings.gotify_token),
+        "mcp_servers": settings.mcp_servers,
         # Read-only here — deliberately not part of SettingsUpdate below, so
         # it can only be set via agent/tools/general.py's
         # mark_onboarding_complete tool, not a direct POST /settings call.
@@ -574,6 +593,12 @@ async def update_settings(
     as fixed triggers rather than being read fresh like the other settings.
     latest_checkin_time needs no reschedule — jobs/checkin.py reads it
     fresh at schedule-time, same as bedtime's use there today.
+
+    mcp_servers is the one exception to "takes effect immediately" — it's
+    persisted right away like everything else, but the agent's tool list
+    is only built once at startup (main.py's lifespan), so a changed or
+    newly-added MCP server needs an app restart before the agent can use
+    it.
     """
     changed: dict[str, str] = {}
 
@@ -621,6 +646,9 @@ async def update_settings(
     if update.gotify_token is not None:
         settings.gotify_token = update.gotify_token
         changed["gotify_token"] = update.gotify_token
+    if update.mcp_servers is not None:
+        settings.mcp_servers = update.mcp_servers
+        changed["mcp_servers"] = update.mcp_servers
 
     if reschedule_digest:
         scheduler.reschedule_job("daily_digest", trigger=digest_trigger())

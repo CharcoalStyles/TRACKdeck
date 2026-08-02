@@ -1,11 +1,10 @@
-import json
 import logging
 from typing import Optional
 from datetime import datetime
 
 from langchain_core.tools import tool
 import requests
-import os
+import trafilatura
 
 from agent.scheduler import scheduler, bedtime_trigger, digest_trigger, wake_trigger
 from agent.settings import is_valid_timezone, settings
@@ -94,37 +93,45 @@ def set_home_location(location: str) -> str:
     return f"Set default location to '{resolved_name}' and timezone to '{tz_name}'."
 
 # ---------------------------------------------------------------------------
-# Web Search
+# Web Page Fetching
 # ---------------------------------------------------------------------------
 
+# Kept in step with all_tools.py's _MCP_TOOL_RESULT_CHAR_LIMIT — same
+# reasoning (bound a single tool result to what the local model's context
+# can absorb), just a separate constant since this module doesn't import
+# from all_tools.py (all_tools.py already imports from here).
+_FETCH_WEBPAGE_CHAR_LIMIT = 12000
+
+
 @tool
-def web_search(query: str) -> str:
-    """Search the web for current information.
+def fetch_webpage(url: str) -> str:
+    """Fetch a specific webpage and extract its actual main content (not
+    navigation, ads, or sidebar chrome) as clean text via boilerplate
+    removal, not just an HTML-to-markdown dump. Use this after search_web
+    when a result's snippet is only a pointer to what you need — a blurb
+    saying a page has a full timeline/list/figures — rather than the detail
+    itself, so you can read the real content instead of just relaying a
+    link back to the user.
 
     Args:
-        query: The search query.
+        url: The exact URL to fetch, usually taken from a search_web result.
     """
-
-    instance_url = os.environ.get("SEARXNG_URL")
-
-    if not instance_url:
-        logger.info("No SearXNG instance URL found. Skipping web search.")
-        return f"Web search not yet connected. Query was: '{query}'"
-    else:
-        logger.info("Searching for: %s", query)
-
-
-    # SearXNG: self-hosted, fully private
-    # Define API parameters
-    params = {
-        'q': query,
-        'format': 'json',  # Requests JSON response format
-    }
-        
     try:
-        response = requests.get(f"{instance_url}/search", params=params, timeout=10)
+        response = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
         response.raise_for_status()
-        return json.dumps(response.json())
     except requests.exceptions.RequestException as e:
-        logger.error("Error connecting to SearXNG: %s", e)
-        return f"Web search failed. Query was: '{query}'"
+        logger.error("Error fetching %s: %s", url, e)
+        return f"Couldn't fetch '{url}': {e}"
+
+    extracted = trafilatura.extract(response.text, output_format="markdown", include_links=False)
+    if not extracted:
+        return (
+            f"Couldn't extract readable article content from '{url}' — it may not be a "
+            "plain content page (e.g. requires JavaScript, or is a non-article format)."
+        )
+
+    if len(extracted) > _FETCH_WEBPAGE_CHAR_LIMIT:
+        total = len(extracted)
+        extracted = extracted[:_FETCH_WEBPAGE_CHAR_LIMIT] + f"\n\n[...truncated, {total} chars total]"
+
+    return extracted

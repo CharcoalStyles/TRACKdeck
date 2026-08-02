@@ -89,6 +89,14 @@
       line-height: 1.4;
     }
 
+    .card .description code {
+      background: #252525;
+      border-radius: 4px;
+      padding: 0.1rem 0.35rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.82rem;
+    }
+
     .voice-controls {
       text-align: center;
     }
@@ -260,13 +268,19 @@
     }
 
     .field-row input[type="text"],
-    .field-row input[type="time"] {
+    .field-row input[type="time"],
+    .field-row textarea {
       background: #252525;
       border: 1px solid #333;
       color: #e0e0e0;
       padding: 0.55rem 0.7rem;
       border-radius: 8px;
       font-size: 0.9rem;
+    }
+
+    .field-row textarea {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      resize: vertical;
     }
 
     .field-with-button {

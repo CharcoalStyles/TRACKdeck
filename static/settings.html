@@ -139,6 +139,29 @@
 
       <div class="save-status" id="pollIntervalStatus"></div>
     </div>
+
+    <div class="card">
+      <h2>MCP Servers</h2>
+      <p class="description">
+        External <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">MCP</a>
+        servers whose tools get added to the agent's toolset, as JSON:
+        <code>{"name": {"enabled": true, "transport": "stdio", "command": "...", "args": [...]}}</code>
+        for a local subprocess, or <code>{"transport": "streamable_http", "url": "..."}</code> for a
+        remote one. Requires an app restart to take effect — the tool list is only built once at
+        startup.
+      </p>
+
+      <div class="field-row">
+        <label for="mcpServersInput">Server config (JSON)</label>
+        <textarea id="mcpServersInput" rows="6" spellcheck="false" placeholder='{"example": {"enabled": true, "transport": "stdio", "command": "...", "args": ["..."]}}'></textarea>
+      </div>
+
+      <div class="field-row">
+        <button type="button" id="saveMcpServersBtn" class="primary-btn">Save</button>
+      </div>
+
+      <div class="save-status" id="mcpServersStatus"></div>
+    </div>
   </main>
 
   <script type="module">
@@ -179,6 +202,10 @@
       const savePollIntervalBtn = document.getElementById('savePollIntervalBtn');
       const pollIntervalStatus = document.getElementById('pollIntervalStatus');
 
+      const mcpServersInput = document.getElementById('mcpServersInput');
+      const saveMcpServersBtn = document.getElementById('saveMcpServersBtn');
+      const mcpServersStatus = document.getElementById('mcpServersStatus');
+
       // Common IANA zones as datalist suggestions — the input still accepts
       // any valid IANA name, this just helps autocomplete.
       if (typeof Intl.supportedValuesOf === 'function') {
@@ -212,6 +239,11 @@
             : 'e.g. AbCdEfGhIjKlMno';
           publicBaseUrlInput.value = data.public_base_url || '';
           pollIntervalInput.value = data.device_poll_interval_seconds ?? '';
+          try {
+            mcpServersInput.value = JSON.stringify(JSON.parse(data.mcp_servers || '{}'), null, 2);
+          } catch {
+            mcpServersInput.value = data.mcp_servers || '';
+          }
         } catch (error) {
           console.error('Failed to load settings:', error);
           settingsStatus.textContent = 'Could not load current settings.';
@@ -318,6 +350,24 @@
         } catch (error) {
           console.error('Failed to save poll interval:', error);
           showStatus(pollIntervalStatus, 'Failed to save — must be between 30 and 86400.', false);
+        }
+      });
+
+      saveMcpServersBtn.addEventListener('click', async () => {
+        showStatus(mcpServersStatus, 'Saving...', true);
+        mcpServersStatus.style.color = '#888';
+        try {
+          JSON.parse(mcpServersInput.value || '{}');
+        } catch (error) {
+          showStatus(mcpServersStatus, 'Not valid JSON.', false);
+          return;
+        }
+        try {
+          await updateSettings({ mcp_servers: mcpServersInput.value });
+          showStatus(mcpServersStatus, 'Saved — restart the app for this to take effect.');
+        } catch (error) {
+          console.error('Failed to save MCP servers:', error);
+          showStatus(mcpServersStatus, 'Failed to save.', false);
         }
       });
 

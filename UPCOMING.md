@@ -4,6 +4,26 @@ Ideas and follow-ups that came up during other work, not yet scheduled.
 
 ## Discussed, intentionally not built yet
 
+- **Manually check whether the model ever calls `fetch_url`.** Web search now runs over
+  MCP via the third-party `searxng-mcp-server` (`agent/settings.py`'s
+  `_default_mcp_servers()`), which bundles `search_web`, `search_images`, `search_videos`,
+  `search_news`, and `fetch_url` as one package. `fetch_url` (Microsoft's `MarkItDown`
+  under the hood) turned out to just convert a page's whole DOM to markdown with no
+  boilerplate removal — verified on `https://en.wikipedia.org/wiki/Elizabeth_II`: actual
+  article content didn't start until char 41,839 of 467,982 (8.9% in), everything before
+  that was nav/sidebar/donate-link chrome. `agent/tools/general.py`'s new `fetch_webpage`
+  (trafilatura-based, real content extraction — same page: real content from char 0, in
+  116,251 chars total before truncation) replaced it for that purpose, and
+  `agent/graph.py`'s system prompt (~lines 60-69) now points at `fetch_webpage`, not
+  `fetch_url`. But there's no way to exclude a single tool from an MCP server in the
+  current `get_mcp_tools()`/`mcp_server_configs()` plumbing, so `fetch_url` is still
+  present in the bound tool list — the model could still pick it on its own even though
+  the prompt no longer names it. Once the agent-stack visibility/tool-call-tracing work
+  from the other chat lands, check whether it actually ever does; if so, decide between
+  tightening the prompt further, building tool-level filtering for MCP servers, or dropping
+  `searxng-mcp-server` in favor of a search-only MCP server plus keeping `fetch_webpage`
+  as the sole fetch path.
+
 - **Extending linked-note splitting to accumulate real content beyond People** —
   `agent/graph.py`'s addendums now already tell the model to use
   `get_or_create_linked_note` for a specific ongoing project or health matter, not just
