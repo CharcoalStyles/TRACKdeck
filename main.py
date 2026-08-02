@@ -57,7 +57,15 @@ if os.environ.get("SESSION_SECRET_KEY") in (None, _PLACEHOLDER_SESSION_SECRET_KE
 import auth
 from agent.graph import build_graph
 from agent.memory import MemoryStore, make_chroma_client, make_embedding_function
-from agent.runtime import app_state, create_new_thread, get_thread_messages, list_threads, run_agent
+from agent.runtime import (
+    app_state,
+    create_new_thread,
+    get_thread_debug,
+    get_thread_messages,
+    list_checkpoint_thread_ids,
+    list_threads,
+    run_agent,
+)
 from agent.scheduler import (
     bedtime_trigger,
     calendar_sync_trigger,
@@ -69,6 +77,8 @@ from agent.settings import (
     apply_persisted,
     is_valid_digest_time,
     is_valid_poll_interval_seconds,
+    is_valid_recall_max_distance,
+    is_valid_recall_recency_days,
     is_valid_sync_interval_minutes,
     is_valid_timezone,
     parse_mcp_servers,
@@ -94,6 +104,7 @@ from utils import (
     device_errors_store,
     device_state,
     onboarding_state,
+    recall_log_store,
     reminders_store,
     settings_store,
     vault,
@@ -191,6 +202,7 @@ async def lifespan(app: FastAPI):
         await asyncio.to_thread(alert_sounds_store.init_db)
         await asyncio.to_thread(device_errors_store.init_db)
         await asyncio.to_thread(activity_log_store.init_db)
+        await asyncio.to_thread(recall_log_store.init_db)
         for reminder in await asyncio.to_thread(reminders_store.list_pending):
             due_local = datetime.fromtimestamp(reminder["due_at"], tz=timezone.utc)
             if due_local <= datetime.now(timezone.utc):
@@ -518,6 +530,13 @@ class SettingsUpdate(BaseModel):
     # here, this only takes effect on the next app restart — the tool
     # list is fetched once at startup, not read fresh per request.
     mcp_servers: str | None = None
+    # Cosine distance cutoff for cross-thread conversation recall
+    # (agent/graph.py, agent/memory.py's search_conversations). No
+    # rescheduling — read fresh on every agent turn.
+    recall_max_distance: float | None = None
+    # How many days back cross-thread conversation recall is allowed to
+    # reach. Same "read fresh every turn" behavior as recall_max_distance.
+    recall_recency_days: int | None = None
 
     @model_validator(mode="after")
     def _check_values(self):
@@ -543,6 +562,14 @@ class SettingsUpdate(BaseModel):
             raise ValueError("default_location cannot be blank")
         if self.mcp_servers is not None:
             parse_mcp_servers(self.mcp_servers)  # raises ValueError on anything malformed
+        if self.recall_max_distance is not None and not is_valid_recall_max_distance(
+            self.recall_max_distance
+        ):
+            raise ValueError("recall_max_distance must be greater than 0 and at most 2.0")
+        if self.recall_recency_days is not None and not is_valid_recall_recency_days(
+            self.recall_recency_days
+        ):
+            raise ValueError("recall_recency_days must be between 1 and 3650")
         return self
 
 
@@ -564,6 +591,8 @@ def _current_settings() -> dict:
         # is configured, enough for the Settings page's placeholder text.
         "gotify_token_set": bool(settings.gotify_token),
         "mcp_servers": settings.mcp_servers,
+        "recall_max_distance": settings.recall_max_distance,
+        "recall_recency_days": settings.recall_recency_days,
         # Read-only here — deliberately not part of SettingsUpdate below, so
         # it can only be set via agent/tools/general.py's
         # mark_onboarding_complete tool, not a direct POST /settings call.
@@ -649,6 +678,12 @@ async def update_settings(
     if update.mcp_servers is not None:
         settings.mcp_servers = update.mcp_servers
         changed["mcp_servers"] = update.mcp_servers
+    if update.recall_max_distance is not None:
+        settings.recall_max_distance = update.recall_max_distance
+        changed["recall_max_distance"] = str(update.recall_max_distance)
+    if update.recall_recency_days is not None:
+        settings.recall_recency_days = update.recall_recency_days
+        changed["recall_recency_days"] = str(update.recall_recency_days)
 
     if reschedule_digest:
         scheduler.reschedule_job("daily_digest", trigger=digest_trigger())
@@ -788,6 +823,37 @@ async def get_device_state(_: Annotated[None, Depends(auth.require_session_or_to
     """
     state = await asyncio.to_thread(device_state.get_state)
     return state or {}
+
+
+@app.get("/debug/threads")
+async def debug_list_threads(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """
+    Every thread_id that has ever run a turn through the graph, straight
+    from memory.db's checkpoint table — unlike GET /threads (which only
+    lists currently-addressable threads and is swept nightly), this
+    includes threads from before today's sweep or a past restart. Backs
+    the thread-debug dashboard page's thread picker.
+    """
+    return {"threads": await list_checkpoint_thread_ids()}
+
+
+@app.get("/debug/thread/{thread_id}")
+async def debug_thread(
+    thread_id: str, _: Annotated[None, Depends(auth.require_session_or_token)]
+):
+    """
+    Full, unfiltered per-thread trace for the thread-debug dashboard page:
+    the opening message, every turn including tool calls and their
+    results (GET /threads/{id}/messages filters these out for chat
+    rendering — this doesn't), and what agent/graph.py's
+    search_conversations recalled/injected on each turn (recall_log.db,
+    see utils/recall_log_store.py) — the direct visibility this was built
+    for, into the cross-thread recall leak documented in UPCOMING.md.
+    Note: there's no reasoning trace here — the model never emits
+    reasoning separate from tool calls or its final reply, so that part
+    isn't satisfiable without a reasoning-capable model swap.
+    """
+    return await get_thread_debug(thread_id)
 
 
 class DeviceTelemetry(BaseModel):

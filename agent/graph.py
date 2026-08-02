@@ -8,6 +8,7 @@ LLM connection is configured via environment variables.
 import asyncio
 import logging
 import os
+import time
 
 from langchain_core.messages import SystemMessage
 from langchain_core.runnables import RunnableConfig
@@ -18,6 +19,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from agent.memory import MemoryStore
 from agent.settings import settings
 from agent.tools.all_tools import get_tools
+from utils.recall_log_store import log_recall
 
 logger = logging.getLogger(__name__)
 
@@ -237,16 +239,36 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
             ""
         )
 
+        thread_id = (config or {}).get("configurable", {}).get("thread_id")
+        one_shot = (config or {}).get("configurable", {}).get("one_shot", False)
+        mode = (config or {}).get("configurable", {}).get("mode")
+
+        # Never recall from onboarding/profile_chat (dense, deliberately
+        # elicited personal/health disclosures — the root cause of the
+        # cross-thread leak this filtering fixes) or from the thread
+        # currently running (its own history is already in state["messages"],
+        # so recalling it here would just be a redundant duplicate).
+        exclude_thread_ids = {t for t in (thread_id, "onboarding", "profile_chat") if t}
+        min_timestamp = int(time.time()) - settings.recall_recency_days * 86400
+
         # MemoryStore/Chroma has no async client, so this still blocks — but
         # to_thread keeps it off the event loop instead of freezing every
         # other concurrent request for the duration of the search.
-        recalled = await asyncio.to_thread(memory.search_conversations, last_user_msg, n_results=3)
+        recalled = await asyncio.to_thread(
+            memory.search_conversations,
+            last_user_msg,
+            n_results=3,
+            exclude_thread_ids=exclude_thread_ids,
+            max_distance=settings.recall_max_distance,
+            min_timestamp=min_timestamp,
+        )
         memory_block = ""
         if recalled:
-            memory_block = "\n\nRELEVANT PAST CONTEXT:\n" + "\n---\n".join(recalled)
-
-        one_shot = (config or {}).get("configurable", {}).get("one_shot", False)
-        mode = (config or {}).get("configurable", {}).get("mode")
+            memory_block = "\n\nRELEVANT PAST CONTEXT:\n" + "\n---\n".join(
+                r["document"] for r in recalled
+            )
+        if thread_id:
+            await asyncio.to_thread(log_recall, thread_id, last_user_msg, recalled)
 
         addendum = ONE_SHOT_ADDENDUM if one_shot else ""
         if mode == "onboarding":

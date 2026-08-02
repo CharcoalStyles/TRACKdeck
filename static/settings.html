@@ -141,6 +141,27 @@
     </div>
 
     <div class="card">
+      <h2>Cross-Thread Recall</h2>
+      <p class="description">How the assistant pulls "relevant past context" from other conversations into a reply. A match farther than the distance cutoff is dropped, and anything older than the recency window is never considered — see the Testing page's <a href="/static/thread-debug.html">thread debug page</a> to see what's actually being recalled and tune these from real data.</p>
+
+      <div class="field-row">
+        <label for="recallMaxDistanceInput">Distance cutoff (0–2, lower = stricter)</label>
+        <input type="number" id="recallMaxDistanceInput" min="0.01" max="2" step="0.01">
+      </div>
+
+      <div class="field-row">
+        <label for="recallRecencyDaysInput">Recency window (days)</label>
+        <input type="number" id="recallRecencyDaysInput" min="1" max="3650" step="1">
+      </div>
+
+      <div class="field-row">
+        <button type="button" id="saveRecallBtn" class="primary-btn">Save</button>
+      </div>
+
+      <div class="save-status" id="recallStatus"></div>
+    </div>
+
+    <div class="card">
       <h2>MCP Servers</h2>
       <p class="description">
         External <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">MCP</a>
@@ -206,6 +227,11 @@
       const saveMcpServersBtn = document.getElementById('saveMcpServersBtn');
       const mcpServersStatus = document.getElementById('mcpServersStatus');
 
+      const recallMaxDistanceInput = document.getElementById('recallMaxDistanceInput');
+      const recallRecencyDaysInput = document.getElementById('recallRecencyDaysInput');
+      const saveRecallBtn = document.getElementById('saveRecallBtn');
+      const recallStatus = document.getElementById('recallStatus');
+
       // Common IANA zones as datalist suggestions — the input still accepts
       // any valid IANA name, this just helps autocomplete.
       if (typeof Intl.supportedValuesOf === 'function') {
@@ -239,6 +265,8 @@
             : 'e.g. AbCdEfGhIjKlMno';
           publicBaseUrlInput.value = data.public_base_url || '';
           pollIntervalInput.value = data.device_poll_interval_seconds ?? '';
+          recallMaxDistanceInput.value = data.recall_max_distance ?? '';
+          recallRecencyDaysInput.value = data.recall_recency_days ?? '';
           try {
             mcpServersInput.value = JSON.stringify(JSON.parse(data.mcp_servers || '{}'), null, 2);
           } catch {
@@ -350,6 +378,21 @@
         } catch (error) {
           console.error('Failed to save poll interval:', error);
           showStatus(pollIntervalStatus, 'Failed to save — must be between 30 and 86400.', false);
+        }
+      });
+
+      saveRecallBtn.addEventListener('click', async () => {
+        showStatus(recallStatus, 'Saving...', true);
+        recallStatus.style.color = '#888';
+        try {
+          await updateSettings({
+            recall_max_distance: parseFloat(recallMaxDistanceInput.value),
+            recall_recency_days: parseInt(recallRecencyDaysInput.value, 10),
+          });
+          showStatus(recallStatus, 'Saved.');
+        } catch (error) {
+          console.error('Failed to save recall settings:', error);
+          showStatus(recallStatus, 'Failed to save — distance must be 0–2, recency 1–3650 days.', false);
         }
       });
 

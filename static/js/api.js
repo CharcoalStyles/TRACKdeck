@@ -96,6 +96,16 @@ export async function fetchDebug(path) {
   return response.json();
 }
 
+/** @returns {Promise<{threads: Array<{thread_id: string, latest_checkpoint_id: string}>}>} */
+export async function listDebugThreads() {
+  return fetchDebug('/debug/threads');
+}
+
+/** @returns {Promise<{thread_id: string, opening_message: string|null, turns: Array<object>}>} — each "ai"-type turn may carry recall_query/recalled, the cross-thread recall that fed into it. */
+export async function getThreadDebug(threadId) {
+  return fetchDebug(`/debug/thread/${encodeURIComponent(threadId)}`);
+}
+
 /**
  * Upload an audio file to be converted into a 16kHz/16-bit mono PCM WAV
  * alert sound. @param {File} file

@@ -37,6 +37,7 @@ services:
       - ./data/alert_sounds.db:/app/alert_sounds.db
       - ./data/alert_sounds:/app/alert_sounds
       - ./data/device_errors.db:/app/device_errors.db
+      - ./data/recall_log.db:/app/recall_log.db
       - ./data/onboarding_complete.flag:/app/onboarding_complete.flag
       - ./data/chroma_db:/app/chroma_db
       # The notes vault — shared with the syncthing service below so both

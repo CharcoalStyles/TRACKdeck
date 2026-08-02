@@ -87,16 +87,54 @@ class MemoryStore:
             metadatas=[{"thread_id": thread_id, "timestamp": int(time.time())}],
         )
 
-    def search_conversations(self, query: str, n_results: int = 3) -> list[str]:
-        """Find past conversation summaries relevant to the current query."""
+    def search_conversations(
+        self,
+        query: str,
+        n_results: int = 3,
+        exclude_thread_ids: set[str] | None = None,
+        max_distance: float | None = None,
+        min_timestamp: int | None = None,
+    ) -> list[dict]:
+        """
+        Find past conversation summaries relevant to the current query.
+
+        exclude_thread_ids/max_distance/min_timestamp exist because a plain
+        similarity query has no idea which thread it's being asked from or
+        how relevant/recent a "nearest" match actually is — see
+        agent/graph.py's call_llm, the only caller, for how these get set.
+        Over-fetches past n_results since exclusion/distance filtering
+        happens after the query, then trims back down.
+
+        Returns [{"document", "thread_id", "timestamp", "distance"}, ...],
+        richer than a plain list of strings so callers can log exactly what
+        was recalled, not just the text that got injected.
+        """
         if self.conversations.count() == 0:
             return []
         embedding = self._embed(query)
-        results = self.conversations.query(
-            query_embeddings=[embedding],
-            n_results=min(n_results, self.conversations.count()),
-        )
-        return results["documents"][0] if results["documents"] else []
+        fetch_n = min(n_results * 4, self.conversations.count())
+        query_kwargs = {"query_embeddings": [embedding], "n_results": fetch_n}
+        if min_timestamp is not None:
+            query_kwargs["where"] = {"timestamp": {"$gte": min_timestamp}}
+        results = self.conversations.query(**query_kwargs)
+        if not results["documents"]:
+            return []
+
+        matches = []
+        for doc, meta, distance in zip(
+            results["documents"][0], results["metadatas"][0], results["distances"][0]
+        ):
+            if exclude_thread_ids and meta.get("thread_id") in exclude_thread_ids:
+                continue
+            if max_distance is not None and distance > max_distance:
+                continue
+            matches.append({
+                "document": doc,
+                "thread_id": meta.get("thread_id"),
+                "timestamp": meta.get("timestamp"),
+                "distance": distance,
+            })
+        return matches[:n_results]
 
     def get_conversations_between(
         self, start_ts: int, end_ts: int, exclude_thread_ids: set[str] | None = None

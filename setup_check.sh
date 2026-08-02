@@ -54,7 +54,8 @@ fi
 
 echo
 echo "== 2. memory.db / reminders.db / checkins.db / settings.db / alert_sounds.db /"
-echo "      device_errors.db / onboarding_complete.flag / chroma_db (docker-compose bind mounts) =="
+echo "      device_errors.db / recall_log.db / onboarding_complete.flag / chroma_db"
+echo "      (docker-compose bind mounts) =="
 DATA_DIR="./data"
 MEMORY_DB="${DATA_DIR}/memory.db"
 REMINDERS_DB="${DATA_DIR}/reminders.db"
@@ -63,6 +64,7 @@ SETTINGS_DB="${DATA_DIR}/settings.db"
 ALERT_SOUNDS_DB="${DATA_DIR}/alert_sounds.db"
 ALERT_SOUNDS_DIR="${DATA_DIR}/alert_sounds"
 DEVICE_ERRORS_DB="${DATA_DIR}/device_errors.db"
+RECALL_LOG_DB="${DATA_DIR}/recall_log.db"
 ONBOARDING_FLAG="${DATA_DIR}/onboarding_complete.flag"
 CHROMA_DIR="${DATA_DIR}/chroma_db"
 HF_CACHE_DIR="${DATA_DIR}/hf_cache"
@@ -154,6 +156,18 @@ elif [[ -f "$DEVICE_ERRORS_DB" ]]; then
 else
     echo "  Creating empty $DEVICE_ERRORS_DB so Docker mounts it as a file..."
     touch "$DEVICE_ERRORS_DB"
+fi
+
+if [[ -d "$RECALL_LOG_DB" ]]; then
+    echo "  ERROR: $RECALL_LOG_DB exists but is a DIRECTORY, not a file."
+    echo "         This happens when docker compose was run before this file existed."
+    echo "         Remove it and re-run this script: rm -r '$RECALL_LOG_DB'"
+    exit 1
+elif [[ -f "$RECALL_LOG_DB" ]]; then
+    echo "  OK: $RECALL_LOG_DB already exists as a file."
+else
+    echo "  Creating empty $RECALL_LOG_DB so Docker mounts it as a file..."
+    touch "$RECALL_LOG_DB"
 fi
 
 if [[ -d "$ONBOARDING_FLAG" ]]; then

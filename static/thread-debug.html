@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Thread Debug — TRACKdeck</title>
+  <link rel="stylesheet" href="/static/css/theme.css">
+</head>
+
+<body>
+
+  <header id="appHeader"></header>
+
+  <main>
+    <div class="card">
+      <h2>Thread Debug</h2>
+      <p class="description">
+        Full trace for one thread, straight from memory.db's checkpoint — including threads swept from the sidebar
+        by the nightly digest, or from before the last restart. Shows every turn (tool calls and their results
+        included, unlike the Chat page), with each assistant reply annotated by what cross-thread recall
+        (agent/graph.py's search_conversations) actually pulled in for it. There's no reasoning trace — the model
+        never emits reasoning separate from tool calls or its final reply.
+      </p>
+
+      <div class="field-row">
+        <label for="threadSelect">Thread</label>
+        <div class="field-with-button">
+          <select id="threadSelect"></select>
+          <button type="button" id="loadBtn" class="primary-btn">Load</button>
+        </div>
+      </div>
+
+      <div class="save-status" id="threadDebugStatus"></div>
+    </div>
+
+    <div id="resultContainer"></div>
+  </main>
+
+  <script type="module">
+    import { listDebugThreads, getThreadDebug } from '/static/js/api.js';
+    import { requireSession } from '/static/js/auth.js';
+    import { renderNav } from '/static/js/nav.js';
+
+    renderNav('thread-debug');
+
+    if (await requireSession()) {
+      const threadSelect = document.getElementById('threadSelect');
+      const loadBtn = document.getElementById('loadBtn');
+      const threadDebugStatus = document.getElementById('threadDebugStatus');
+      const resultContainer = document.getElementById('resultContainer');
+
+      function showStatus(text, ok = true) {
+        threadDebugStatus.textContent = text;
+        threadDebugStatus.style.color = ok ? '#00adb5' : '#ff6b6b';
+      }
+
+      function formatTime(epochSeconds) {
+        if (epochSeconds == null) return '—';
+        return new Date(epochSeconds * 1000).toLocaleString();
+      }
+
+      async function loadThreadList() {
+        try {
+          const { threads } = await listDebugThreads();
+          threadSelect.replaceChildren();
+          if (threads.length === 0) {
+            const opt = document.createElement('option');
+            opt.textContent = 'No threads yet';
+            threadSelect.appendChild(opt);
+            loadBtn.disabled = true;
+            return;
+          }
+          for (const t of threads) {
+            const opt = document.createElement('option');
+            opt.value = t.thread_id;
+            opt.textContent = t.thread_id;
+            threadSelect.appendChild(opt);
+          }
+        } catch (error) {
+          console.error('Failed to load thread list:', error);
+          showStatus('Failed to load thread list.', false);
+        }
+      }
+
+      function renderTurn(turn) {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        const heading = document.createElement('h2');
+        const roleLabel = { human: 'User', ai: 'Assistant', tool: 'Tool result' }[turn.type] ?? turn.type ?? 'Unknown';
+        heading.textContent = turn.type === 'tool' && turn.tool_name ? `Tool result — ${turn.tool_name}` : roleLabel;
+        card.appendChild(heading);
+
+        if (turn.content) {
+          const content = document.createElement('p');
+          content.className = 'description';
+          content.style.whiteSpace = 'pre-wrap';
+          content.style.margin = '0';
+          content.textContent = turn.content;
+          card.appendChild(content);
+        }
+
+        if (turn.tool_calls && turn.tool_calls.length > 0) {
+          for (const call of turn.tool_calls) {
+            const pre = document.createElement('pre');
+            pre.style.cssText = 'white-space: pre-wrap; word-break: break-word; background: #171717; border: 1px solid #2a2a2a; border-radius: 8px; padding: 0.75rem; font-size: 0.85rem; margin-top: 0.75rem;';
+            pre.textContent = `${call.name}(${JSON.stringify(call.args, null, 2)})`;
+            card.appendChild(pre);
+          }
+        }
+
+        // Cross-thread recall (agent/graph.py's search_conversations) that
+        // fed into THIS specific assistant turn — attached server-side
+        // (agent/runtime.py's get_thread_debug) since each "ai" message
+        // corresponds to exactly one recall_log row, in order.
+        if ('recalled' in turn) {
+          const recallLabel = document.createElement('p');
+          recallLabel.className = 'description';
+          recallLabel.style.cssText = 'margin: 0.75rem 0 0 0; font-size: 0.8rem; font-weight: 600;';
+          recallLabel.textContent = 'Cross-thread recall for this turn:';
+          card.appendChild(recallLabel);
+
+          if (turn.recalled.length === 0) {
+            const none = document.createElement('p');
+            none.className = 'description';
+            none.style.margin = '0.25rem 0 0 0';
+            none.textContent = 'Nothing recalled — no match cleared the distance/recency/thread-exclusion filters.';
+            card.appendChild(none);
+          } else {
+            for (const match of turn.recalled) {
+              const pre = document.createElement('pre');
+              pre.style.cssText = 'white-space: pre-wrap; word-break: break-word; background: #171717; border: 1px solid #2a2a2a; border-radius: 8px; padding: 0.75rem; font-size: 0.85rem; margin-top: 0.5rem;';
+              pre.textContent =
+                `distance=${match.distance.toFixed(3)}  thread=${match.thread_id}  ${formatTime(match.timestamp)}\n${match.document}`;
+              card.appendChild(pre);
+            }
+          }
+        }
+
+        return card;
+      }
+
+      loadBtn.addEventListener('click', async () => {
+        const threadId = threadSelect.value;
+        if (!threadId) return;
+        showStatus('Loading...', true);
+        resultContainer.replaceChildren();
+        try {
+          const data = await getThreadDebug(threadId);
+
+          const openingCard = document.createElement('div');
+          openingCard.className = 'card';
+          const openingHeading = document.createElement('h2');
+          openingHeading.textContent = 'Opening message';
+          const openingText = document.createElement('p');
+          openingText.className = 'description';
+          openingText.style.margin = '0';
+          openingText.textContent = data.opening_message ?? '(none — thread has no human message)';
+          openingCard.appendChild(openingHeading);
+          openingCard.appendChild(openingText);
+          resultContainer.appendChild(openingCard);
+
+          for (const turn of data.turns) {
+            resultContainer.appendChild(renderTurn(turn));
+          }
+
+          showStatus('', true);
+        } catch (error) {
+          console.error('Failed to load thread debug:', error);
+          showStatus('Failed to load.', false);
+        }
+      });
+
+      loadThreadList();
+    }
+  </script>
+</body>
+
+</html>

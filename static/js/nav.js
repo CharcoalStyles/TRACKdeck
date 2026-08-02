@@ -10,11 +10,12 @@
 // redirect):
 //   import { renderNav } from '/static/js/nav.js';
 //   renderNav('chat');  // 'chat' | 'activity-log' | 'profile' | 'settings' |
-//                        // 'testing' | 'checkins' | 'alert-sounds' | 'errors'
+//                        // 'testing' | 'checkins' | 'alert-sounds' | 'errors' |
+//                        // 'thread-debug'
 
 import { logout } from './auth.js';
 
-const ADMIN_PAGES = ['settings', 'testing', 'checkins', 'alert-sounds', 'errors'];
+const ADMIN_PAGES = ['settings', 'testing', 'checkins', 'alert-sounds', 'errors', 'thread-debug'];
 
 export function renderNav(activePage) {
   const header = document.getElementById('appHeader');
@@ -34,6 +35,7 @@ export function renderNav(activePage) {
           <a href="/static/checkins.html" class="${activePage === 'checkins' ? 'active' : ''}">Check-Ins</a>
           <a href="/static/alert-sounds.html" class="${activePage === 'alert-sounds' ? 'active' : ''}">Alert Sounds</a>
           <a href="/static/errors.html" class="${activePage === 'errors' ? 'active' : ''}">Errors</a>
+          <a href="/static/thread-debug.html" class="${activePage === 'thread-debug' ? 'active' : ''}">Thread Debug</a>
           <a href="/calendar/" target="_blank" rel="noopener" title="Manage calendars (create/rename/delete) — to view or edit events, use a CalDAV app like Thunderbird or your phone's calendar">Calendar</a>
         </div>
       </details>

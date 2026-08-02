@@ -79,8 +79,16 @@ Easy to conflate, genuinely separate, each solving a different problem:
    a thread "continuable."
 2. **Chroma `conversations` collection** — long-term, cross-thread semantic recall. Every
    successful turn is summarized and embedded (`agent/runtime.py`'s `run_agent`); every
-   subsequent call injects the 3 most similar past summaries as "RELEVANT PAST CONTEXT"
-   into the system prompt, regardless of thread.
+   subsequent call queries it for the 3 most similar past summaries and injects them as
+   "RELEVANT PAST CONTEXT" into the system prompt (`agent/graph.py`'s `call_llm`,
+   `agent/memory.py`'s `search_conversations`). Bounded three ways so this doesn't leak
+   sensitive or stale content across unrelated threads: a cosine-distance cutoff
+   (`settings.recall_max_distance`), a recency window (`settings.recall_recency_days`), and
+   exclusion of the `onboarding`/`profile_chat` threads plus the current thread itself as
+   sources. What actually got recalled on each turn is logged (`recall_log.db`,
+   `utils/recall_log_store.py`) and viewable per-thread on the dashboard's Thread Debug page
+   (`static/thread-debug.html`, `GET /debug/thread/{thread_id}`) — use it to tune the two
+   settings from real distances rather than guessing.
 3. **Chroma `notes` collection** — a search index *over* the Obsidian vault, not a store of
    its own. The vault (markdown files on disk) is the source of truth; Chroma is
    disposable/rebuildable. `POST /debug/reconcile-vault` rebuilds it from the files.
@@ -227,12 +235,14 @@ utils/
   datetime.py                 Calendar day-boundary helpers, parse_local_datetime
   reminders_store.py           sqlite3 CRUD for reminders.db
   settings_store.py            sqlite3 key/value store for settings.db
+  recall_log_store.py           sqlite3 log of each turn's cross-thread recall matches
   notify.py, mailer.py        Gotify, SMTP
 routes/
   synth.py                    Piper TTS (built, not wired into the production voice flow)
   calendar_proxy.py            Reverse-proxies the bundled Radicale UI at /calendar
-static/                       Dashboard (index/voice/onboarding/profile/settings .html);
-                                login.html public, js/auth.js is the client-side session gate
+static/                       Dashboard (index/voice/onboarding/profile/settings/
+                                thread-debug .html); login.html public, js/auth.js is the
+                                client-side session gate
 docker-compose.yml            assistant + syncthing + caldav (Radicale) services, shared vault volume
 setup_check.sh                 Verifies/downloads Piper models, fixes DB bind-mount gotchas
 reset_knowledge.sh              Wipes memory/index/checkpoints; vault wipe gated behind --vault
@@ -281,20 +291,24 @@ See `.env.example` for the full list. Notable ones:
   each changed field. Two flavors:
   - *No env var at all* — `default_location`, `timezone`, `wake_time`, `bedtime`,
     `latest_checkin_time`, `digest_time`, `calendar_sync_interval_minutes`,
-    `device_poll_interval_seconds` — meant to be set only from the frontend (the onboarding
-    "Basics" form, or the Settings page), so `.env` was never a second source of truth for
-    these. `timezone` (IANA name) drives date/time grounding (`agent/tools/general.py`,
-    `utils/datetime.py`), calendar day boundaries, and the cron jobs below; `digest_time`
-    (`HH:MM`) is when the daily digest fires, `bedtime` (`HH:MM`) is when the bedtime
-    reminder fires, `wake_time`/`latest_checkin_time` (`HH:MM` each) bound the
-    mental-health check-in window (`jobs/checkin.py`) — deliberately independent from
-    `bedtime`, so the wind-down nudge and the check-in cutoff can be tuned separately —
-    `calendar_sync_interval_minutes` (int, 1–1440) is how often the calendar reminder sync
-    polls, `device_poll_interval_seconds` (int, 30–86400) is the ESP32-S3's sync cadence.
+    `device_poll_interval_seconds`, `recall_max_distance`, `recall_recency_days` — meant to
+    be set only from the frontend (the onboarding "Basics" form, or the Settings page), so
+    `.env` was never a second source of truth for these. `timezone` (IANA name) drives
+    date/time grounding (`agent/tools/general.py`, `utils/datetime.py`), calendar day
+    boundaries, and the cron jobs below; `digest_time` (`HH:MM`) is when the daily digest
+    fires, `bedtime` (`HH:MM`) is when the bedtime reminder fires, `wake_time`/
+    `latest_checkin_time` (`HH:MM` each) bound the mental-health check-in window
+    (`jobs/checkin.py`) — deliberately independent from `bedtime`, so the wind-down nudge
+    and the check-in cutoff can be tuned separately — `calendar_sync_interval_minutes` (int,
+    1–1440) is how often the calendar reminder sync polls, `device_poll_interval_seconds`
+    (int, 30–86400) is the ESP32-S3's sync cadence, `recall_max_distance` (float, 0–2,
+    default 0.8) and `recall_recency_days` (int, 1–3650, default 30) bound cross-thread
+    conversation recall (`agent/graph.py`'s `call_llm`) — see the memory-systems section
+    above.
     `timezone`/`digest_time`/`bedtime`/`calendar_sync_interval_minutes`/`wake_time` changes
     also live-reschedule their APScheduler jobs (`daily_digest`/`bedtime_reminder`/
-    `calendar_reminder_sync`/`day_start`); `latest_checkin_time` needs no reschedule — read
-    fresh at schedule-time by `jobs/checkin.py`.
+    `calendar_reminder_sync`/`day_start`); `latest_checkin_time`/`recall_max_distance`/
+    `recall_recency_days` need no reschedule — read fresh on every use.
   - *Env-seeded, so an existing deployment keeps working unchanged after upgrading* —
     `digest_email_to`, `public_base_url`, `gotify_url`, `gotify_token` (from
     `DIGEST_EMAIL_TO`/`PUBLIC_BASE_URL`/`GOTIFY_URL`/`GOTIFY_TOKEN` respectively). Once

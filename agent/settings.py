@@ -51,6 +51,18 @@ def is_valid_poll_interval_seconds(value: int) -> bool:
     return 30 <= value <= 86400
 
 
+def is_valid_recall_max_distance(value: float) -> bool:
+    # Cosine distance range for the "conversations" Chroma collection is
+    # [0, 2] (0 = identical, 2 = opposite); 0 itself would mean "only an
+    # exact duplicate", not a useful lower bound, so exclude it.
+    return 0.0 < value <= 2.0
+
+
+def is_valid_recall_recency_days(value: int) -> bool:
+    # Upper bound is a sanity check, not a hard technical limit.
+    return 1 <= value <= 3650
+
+
 def parse_mcp_servers(value: str) -> dict:
     """Parses/validates the mcp_servers JSON setting into
     {server_name: {enabled, transport, ...}}. Raises ValueError with a
@@ -175,6 +187,22 @@ class Settings:
     # as default_location above.
     device_poll_interval_seconds: int = 300
 
+    # Cosine distance cutoff for agent/graph.py's cross-thread conversation
+    # recall (agent/memory.py's search_conversations) — a match farther
+    # than this from the current query is dropped rather than injected
+    # into the system prompt as "RELEVANT PAST CONTEXT". 0.8 is a rough
+    # starting point, not a measured value — tune it from real distances
+    # via the thread-debug dashboard page (which logs every turn's
+    # recalled matches, see utils/recall_log_store.py) rather than
+    # guessing blind. No env var, same reasoning as default_location above.
+    recall_max_distance: float = 0.8
+
+    # How many days back agent/graph.py's cross-thread conversation recall
+    # is allowed to reach — a summary older than this is excluded from
+    # search_conversations' query regardless of similarity. No env var,
+    # same reasoning as default_location above.
+    recall_recency_days: int = 30
+
     # Recipient address for the daily digest email (jobs/digest.py,
     # utils/mailer.py). Seeded from DIGEST_EMAIL_TO at startup so an
     # existing deployment keeps working unchanged, but editable live from
@@ -257,6 +285,10 @@ def apply_persisted(values: dict[str, str]) -> None:
         settings.latest_checkin_time = values["latest_checkin_time"]
     if "device_poll_interval_seconds" in values:
         settings.device_poll_interval_seconds = int(values["device_poll_interval_seconds"])
+    if "recall_max_distance" in values:
+        settings.recall_max_distance = float(values["recall_max_distance"])
+    if "recall_recency_days" in values:
+        settings.recall_recency_days = int(values["recall_recency_days"])
     if "digest_email_to" in values:
         settings.digest_email_to = values["digest_email_to"]
     if "public_base_url" in values:

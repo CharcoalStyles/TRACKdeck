@@ -23,7 +23,9 @@ apply.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import sqlite3
 import time
 import uuid
 from dataclasses import dataclass
@@ -34,6 +36,7 @@ from agent.keywords import generate_keyword, match_keyword_prefix
 from agent.memory import MemoryStore
 
 from utils.notify import send_gotify, notify_error
+from utils.recall_log_store import get_recall_for_thread
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +163,119 @@ async def get_thread_messages(thread_id: str) -> list[dict]:
             history.append({"role": "assistant", "content": content})
         # msg_type == "tool" (tool results) intentionally skipped
     return history
+
+
+def _list_checkpoint_thread_ids_sync() -> list[dict]:
+    conn = sqlite3.connect("memory.db")
+    try:
+        rows = conn.execute(
+            "SELECT thread_id, MAX(checkpoint_id) AS latest_checkpoint_id "
+            "FROM checkpoints GROUP BY thread_id ORDER BY 2 DESC"
+        ).fetchall()
+    except sqlite3.OperationalError:
+        # Fresh memory.db, no checkpoints table yet — no thread has run a
+        # turn through the graph since this file was created.
+        rows = []
+    finally:
+        conn.close()
+    return [{"thread_id": r[0], "latest_checkpoint_id": r[1]} for r in rows]
+
+
+async def list_checkpoint_thread_ids() -> list[dict]:
+    """
+    Every thread_id that has ever run a turn through the graph, straight
+    from memory.db's checkpoints table — independent of app_state.threads,
+    which only holds currently-addressable threads and is swept nightly
+    (jobs/digest.py). Used by the thread-debug dashboard page so a thread
+    from before today's sweep (or before the last app restart) is still
+    reachable, not just what GET /threads shows. Most recently active
+    first (checkpoint_id is monotonically increasing per thread).
+    """
+    return await asyncio.to_thread(_list_checkpoint_thread_ids_sync)
+
+
+def _stringify_message_content(content):
+    """LangChain message content is typed as str | list[dict] — the list
+    form is a sequence of multimodal content blocks (e.g.
+    {"type": "text", "text": "..."}), which is what MCP-sourced tools
+    (search_web and its searxng-mcp-server siblings, see
+    agent/settings.py's _default_mcp_servers) actually hand back as
+    ToolMessage.content; langchain_core/langgraph both pass that shape
+    through unconverted rather than stringifying it. This repo's own
+    tools all return plain str, so they're unaffected — but rendering the
+    list form as-is (main.py's /debug/thread/{id} -> static/thread-debug.html)
+    would just show "[object Object]" once JSON-serialized and dropped
+    into the DOM. Flatten text blocks back into plain text; anything else
+    falls back to a JSON dump so at least the raw shape is visible."""
+    if content is None or isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        texts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
+        if texts:
+            return "\n".join(texts)
+    try:
+        return json.dumps(content)
+    except TypeError:
+        return str(content)
+
+
+async def get_thread_debug(thread_id: str) -> dict:
+    """
+    Unfiltered per-thread history for the thread-debug dashboard page —
+    unlike get_thread_messages (which drops tool-call/tool-result messages
+    since they don't render as chat bubbles), this keeps every message so
+    tool calls and their results are visible. Also attaches this thread's
+    recall log (utils/recall_log_store.py) — what agent/graph.py's
+    search_conversations actually recalled — directly onto the "ai" turn
+    it belongs to, not as a separate trailing section: agent/graph.py's
+    call_llm logs exactly one recall_log row per invocation, and every
+    invocation produces exactly one "ai" message in state, in the same
+    order — including the tool-calling loop's intermediate steps, which
+    re-run search_conversations against the same last_user_msg each time
+    since no new human message arrives mid-loop. So the two lists are
+    reliably 1:1 orderable by simple zip, no timestamp matching needed.
+    """
+    if app_state.graph is None:
+        raise HTTPException(status_code=503, detail="Agent not initialised")
+
+    config = {"configurable": {"thread_id": thread_id}}
+    snapshot = await app_state.graph.aget_state(config)
+    messages = snapshot.values.get("messages", []) if snapshot else []
+
+    turns = []
+    opening_message = None
+    for m in messages:
+        msg_type = getattr(m, "type", None)
+        entry = {"type": msg_type, "content": _stringify_message_content(getattr(m, "content", None))}
+        if msg_type == "ai" and getattr(m, "tool_calls", None):
+            entry["tool_calls"] = [
+                {"name": tc["name"], "args": tc["args"]} for tc in m.tool_calls
+            ]
+        elif msg_type == "tool":
+            entry["tool_name"] = getattr(m, "name", None)
+            entry["tool_call_id"] = getattr(m, "tool_call_id", None)
+        turns.append(entry)
+        if opening_message is None and msg_type == "human":
+            opening_message = entry["content"]
+
+    recall_log = await asyncio.to_thread(get_recall_for_thread, thread_id)
+    recall_iter = iter(recall_log)
+    for entry in turns:
+        if entry["type"] != "ai":
+            continue
+        recalled = next(recall_iter, None)
+        if recalled is not None:
+            entry["recall_query"] = recalled["query"]
+            entry["recalled"] = recalled["recalled"]
+        # else: this thread predates recall_log.db, or has more "ai" turns
+        # than logged recalls for some other reason — leave unannotated
+        # rather than mismatching a later turn's recall onto this one.
+
+    return {
+        "thread_id": thread_id,
+        "opening_message": opening_message,
+        "turns": turns,
+    }
 
 
 def resolve_thread(text: str) -> tuple[str, str, str]:
