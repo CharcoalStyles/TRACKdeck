@@ -86,7 +86,12 @@ async def upload_alert_sound(
 ):
     _, suffix = os.path.splitext(file.filename or "")
     raw_fd, raw_path = tempfile.mkstemp(suffix=suffix or ".bin")
-    converted_fd, converted_path = tempfile.mkstemp(suffix=".wav")
+    # Same directory as the final destination so the os.replace() below is a
+    # same-device rename — /tmp is a separate filesystem from the bind-mounted
+    # ALERT_SOUNDS_DIR in Docker, which makes cross-device os.replace() fail.
+    converted_fd, converted_path = tempfile.mkstemp(
+        suffix=".wav", dir=alert_sounds_store.ALERT_SOUNDS_DIR
+    )
     os.close(raw_fd)
     os.close(converted_fd)
 
