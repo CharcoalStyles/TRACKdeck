@@ -34,8 +34,10 @@ contradicts it.
 
 ## Commands
 
-Package manager is `uv`. No lint or test tooling is configured in this repo yet (no ruff,
-no pytest, no test files exist) — don't assume commands for either.
+Package manager is `uv`. A small pytest suite exists (`tests/`, run via `uv run pytest`)
+covering thread resolution, keyword matching, datetime parsing, and vault section editing —
+no lint tooling (ruff etc.) is configured, and most feature/integration code is still
+untested.
 
 ```bash
 # Local dev, full hot-reload
@@ -52,7 +54,7 @@ VAULT_PATH=./data/vault CALDAV_URL=http://localhost:5232/myuser/personal/ uv run
 # --env-file is required: it's how ASSISTANT_PORT/CALDAV_PORT/SYNCTHING_GUI_*
 # in .env.docker reach docker-compose.yml's port mappings (see that file's
 # header comment for why env_file: alone isn't enough).
-./setup_check.sh          # once, before first run — Piper model + memory.db/reminders.db/chroma_db setup
+./setup_check.sh          # once, before first run — Piper model + SQLite DBs/chroma_db setup
 docker compose --env-file .env.docker up --build
 
 # Wipe accumulated memory (Chroma + thread checkpoints), vault preserved unless --vault passed
@@ -154,38 +156,48 @@ Learning mode and the two active modes are mutually exclusive per turn.
   Point `CALDAV_URL` at any external CalDAV server (Nextcloud, Baikal, Fastmail, etc.)
   instead if you'd rather. Weather is Open-Meteo, no key. Web search is SearXNG,
   self-hosted, degrades gracefully if `SEARXNG_URL` unset.
-- **Reminders** — `agent/tools/alerts.py`'s `set_reminder`/`set_timer` are real: `when`
-  arrives as an absolute local date/time (the system prompt's date/time-grounding rule
-  makes the LLM resolve relative language like "in 10 minutes" before calling the tool,
-  parsed via `utils/datetime.py`'s `parse_local_datetime`), persisted in `reminders.db`
-  (`utils/reminders_store.py`) and scheduled as a one-shot APScheduler job
-  (`agent/scheduler.py`'s shared `scheduler`, job id `reminder:<id>`) that calls
-  `jobs/reminders.py`'s `fire_reminder`. `list_reminders`/`cancel_reminder` round out the
-  set. Pending reminders are re-hydrated into the scheduler on startup from the DB;
-  anything overdue while the app was down fires immediately instead of being dropped.
-  Calendar-relative reminders ("30 min before my dentist appointment") also work
-  on-demand — the LLM combines `get_calendar_events`/`get_todays_events` with
-  `set_reminder` itself, no calendar involvement beyond that one turn. One-off only, no
-  recurrence — a recurring need is a calendar event, not a reminder.
-- **Calendar reminder sync** — `jobs/calendar_sync.py`'s `sync_calendar_reminders`, since
-  CalDAV has no push mechanism to notice an event manually added/moved/deleted outside the
-  agent. APScheduler `IntervalTrigger` job (`"calendar_reminder_sync"`, every
-  `settings.calendar_sync_interval_minutes` — default 30, live-reschedulable via
-  `/settings` like `digest_time`/`bedtime` — plus once at startup). Opt-in is the event's own
-  native reminder — a `VALARM` (RFC 5545, the same "remind me" toggle any calendar app's
-  editor exposes) — not a custom tag scheme; `utils/caldav_client.py`'s `parse_ics`
-  collects each `VALARM`'s `TRIGGER`, `parse_ics_duration` turns it into a `timedelta`
-  applied against the event start. Keyed by event UID
-  (`reminders_store.upsert_calendar_reminder`) so re-syncing an unchanged event is a no-op.
-  Only a UTC (`Z`-suffixed) `DTSTART` is understood — a floating/TZID-local start is
-  silently skipped. Removal is a direct `get_event(uid)` check for any tracked reminder not
-  seen in the latest range query, so an event merely pushed beyond the 14-day lookahead
-  isn't mistaken for a deletion; a fired/cancelled reminder is only revived if the event's
-  computed due time actually changed since.
+- **Reminders** (`agent/tools/alerts.py`) — `set_reminder`/`set_timer` resolve relative
+  language ("in 10 minutes") to an absolute local date/time (the system prompt's date/time-
+  grounding rule) before persisting to `reminders.db` and scheduling a one-shot APScheduler
+  job that fires it (`jobs/reminders.py`). Pending reminders are re-hydrated into the
+  scheduler on startup; anything overdue while the app was down fires immediately instead of
+  being dropped. Calendar-relative reminders ("30 min before my dentist appointment") also
+  work on-demand — the LLM combines a calendar tool with `set_reminder` itself. One-off
+  only, no recurrence — a recurring need is a calendar event, not a reminder.
+- **Calendar reminder sync** (`jobs/calendar_sync.py`) — CalDAV has no push mechanism to
+  notice an event manually added/moved/deleted outside the agent, so this polls on an
+  interval (`settings.calendar_sync_interval_minutes`, default 30) plus once at startup.
+  Opt-in is the event's own native reminder toggle (a `VALARM`, RFC 5545), not a custom tag
+  scheme; syncing is keyed by event UID so re-syncing an unchanged event is a no-op. Only a
+  UTC (`Z`-suffixed) `DTSTART` is understood — a floating/TZID-local event start is silently
+  skipped.
 - **Notifications** — `utils/notify.py` (Gotify) + `utils/mailer.py` (SMTP), single
   blocking call each via `asyncio.to_thread`. Gotify priority 3 (silent) for routine
   per-turn pushes (title includes the thread keyword), priority 7 for reminders/bedtime
   (should actually alert), priority 8 for errors.
+- **Check-ins** (`jobs/checkin.py`, `agent/tools/checkin.py`, `utils/checkins_store.py`) —
+  short reflective prompts delivered at randomized times within
+  `[wake_time, latest_checkin_time)`, primarily via `/device/sync` +
+  `POST /device/checkin/{id}/skip`. A skip gets one lighter fallback retry before the full
+  cooldown; an unanswered/expired prompt skips straight to cooldown instead, since silence
+  more likely means offline than overwhelmed. `get_reflection_prompt` lets the assistant
+  also serve a prompt on-demand mid-chat, bypassing this state machine entirely.
+- **Activity logging** (`jobs/activity_log.py`, `agent/tools/activity_log.py`,
+  `utils/activity_log_store.py`) — structured entries (type, duration, mood 1–10,
+  reflection) captured only via the `log_activity` tool, charted on the dashboard. Duration
+  is stored as free text and parsed into minutes at read time, not write time —
+  unparseable durations are silently excluded from the chart rather than guessed.
+- **Alert sounds** (`routes/alert_sounds.py`, `utils/alert_sounds_store.py`) — dashboard
+  audio uploads are transcoded to 16kHz/16-bit mono WAV and catalogued by hash; the
+  ESP32-S3 randomly picks one to play when nudging about a reminder. A separate,
+  device-audio-only channel from Reminders/Notifications above — this only supplies which
+  sound plays, delivered via metadata-diffing in `/device/sync` so only new/changed files
+  get fetched.
+- **Device error reporting** (`utils/device_errors_store.py`, `POST /device/error`) —
+  standalone channel independent of `/device/sync`, so ESP32-S3 failures (WiFi, SD-card)
+  are still reported even when sync itself never succeeds. Every occurrence is logged
+  regardless of whether it triggered a Gotify push (a 30-minute per-error-type cooldown
+  suppresses repeat alerts, not repeat logging).
 - **Daily digest** — `jobs/digest.py`, APScheduler at 20:45 `Australia/Canberra`. Pulls the
   day's Chroma conversation summaries, has the LLM write a recap, emails it, sweeps the
   thread/keyword registry. `POST /debug/digest` fires it on demand.
@@ -222,13 +234,19 @@ agent/
   scheduler.py                Shared APScheduler instance + cron trigger builders
   memory.py                  Chroma wrapper (conversations + notes collections)
   vault_watcher.py            Live watcher, Inbox ingestion, reconciliation
+  checkin_prompts.py            Reflection prompt bank for check-ins
   tools/
-    calendar.py, weather.py, general.py, alerts.py, notes.py, all_tools.py
+    calendar.py, weather.py, general.py, alerts.py, notes.py, checkin.py,
+    activity_log.py, all_tools.py
 jobs/
   digest.py                 Daily recap + keyword sweep
   bedtime.py                 Fixed nightly wind-down nudge
   reminders.py                Fires a single ad-hoc reminder
   calendar_sync.py             Polls for manually added/changed/removed calendar events
+  checkin.py                    Check-in scheduling/firing state machine
+  activity_log.py                Duration parsing for activity-log charts
+  device_sync.py                  Builds the /device/sync response payload
+  day_start.py                     Beginning-of-day setup (today's check-in target, etc.)
 utils/
   vault.py                  Frontmatter, atomic writes, section editing, About Me/linked notes
   caldav_client.py           CalDAV client, protocol-generic (any CalDAV server)
@@ -236,13 +254,22 @@ utils/
   reminders_store.py           sqlite3 CRUD for reminders.db
   settings_store.py            sqlite3 key/value store for settings.db
   recall_log_store.py           sqlite3 log of each turn's cross-thread recall matches
+  checkins_store.py             sqlite3 CRUD for check-in state
+  activity_log_store.py          sqlite3 CRUD for activity-log entries
+  alert_sounds_store.py           sqlite3 catalogue of transcoded alert-sound files
+  device_errors_store.py           sqlite3 log of ESP32-S3 error reports
+  device_state.py                   Single-row store for latest device telemetry
   notify.py, mailer.py        Gotify, SMTP
 routes/
   synth.py                    Piper TTS (built, not wired into the production voice flow)
   calendar_proxy.py            Reverse-proxies the bundled Radicale UI at /calendar
+  alert_sounds.py                Upload/transcode/serve the alert-sound library
+  transcribe.py                   Dashboard-only speech-to-text for chat input (no agent turn)
 static/                       Dashboard (index/voice/onboarding/profile/settings/
-                                thread-debug .html); login.html public, js/auth.js is the
-                                client-side session gate
+                                thread-debug/activity-log/alert-sounds/checkin(s)/errors
+                                .html); login.html public, js/auth.js is the client-side
+                                session gate
+tests/                        pytest suite — thread resolution, keywords, datetime, vault sections
 docker-compose.yml            assistant + syncthing + caldav (Radicale) services, shared vault volume
 setup_check.sh                 Verifies/downloads Piper models, fixes DB bind-mount gotchas
 reset_knowledge.sh              Wipes memory/index/checkpoints; vault wipe gated behind --vault
@@ -285,43 +312,25 @@ See `.env.example` for the full list. Notable ones:
   live-changeable via `/settings`.
 - **Standing settings in `agent/settings.py`** — all live-editable via GET/POST `/settings`
   (the dashboard's Settings page) and persisted to `settings.db`
-  (`utils/settings_store.py`, a single `key`/`value` sqlite table) so edits survive a
-  restart: `main.py`'s lifespan loads it into the `Settings` singleton via
-  `apply_persisted()` before any setting is read, and every `POST /settings` write-throughs
-  each changed field. Two flavors:
+  (`utils/settings_store.py`) so edits survive a restart: `main.py`'s lifespan loads them
+  into the `Settings` singleton via `apply_persisted()` before any setting is read. Two
+  flavors — see `agent/settings.py` itself for exact bounds and which changes
+  live-reschedule an APScheduler job:
   - *No env var at all* — `default_location`, `timezone`, `wake_time`, `bedtime`,
     `latest_checkin_time`, `digest_time`, `calendar_sync_interval_minutes`,
     `device_poll_interval_seconds`, `recall_max_distance`, `recall_recency_days` — meant to
     be set only from the frontend (the onboarding "Basics" form, or the Settings page), so
-    `.env` was never a second source of truth for these. `timezone` (IANA name) drives
-    date/time grounding (`agent/tools/general.py`, `utils/datetime.py`), calendar day
-    boundaries, and the cron jobs below; `digest_time` (`HH:MM`) is when the daily digest
-    fires, `bedtime` (`HH:MM`) is when the bedtime reminder fires, `wake_time`/
-    `latest_checkin_time` (`HH:MM` each) bound the mental-health check-in window
-    (`jobs/checkin.py`) — deliberately independent from `bedtime`, so the wind-down nudge
-    and the check-in cutoff can be tuned separately — `calendar_sync_interval_minutes` (int,
-    1–1440) is how often the calendar reminder sync polls, `device_poll_interval_seconds`
-    (int, 30–86400) is the ESP32-S3's sync cadence, `recall_max_distance` (float, 0–2,
-    default 0.8) and `recall_recency_days` (int, 1–3650, default 30) bound cross-thread
-    conversation recall (`agent/graph.py`'s `call_llm`) — see the memory-systems section
-    above.
-    `timezone`/`digest_time`/`bedtime`/`calendar_sync_interval_minutes`/`wake_time` changes
-    also live-reschedule their APScheduler jobs (`daily_digest`/`bedtime_reminder`/
-    `calendar_reminder_sync`/`day_start`); `latest_checkin_time`/`recall_max_distance`/
-    `recall_recency_days` need no reschedule — read fresh on every use.
+    `.env` was never a second source of truth for these.
   - *Env-seeded, so an existing deployment keeps working unchanged after upgrading* —
-    `digest_email_to`, `public_base_url`, `gotify_url`, `gotify_token` (from
-    `DIGEST_EMAIL_TO`/`PUBLIC_BASE_URL`/`GOTIFY_URL`/`GOTIFY_TOKEN` respectively). Once
-    saved once via `/settings`, `settings.db` — not `.env` — is the source of truth.
-    `gotify_token` is the one exception to "GET /settings echoes the current value back":
-    it's a real credential, so the response only reports `gotify_token_set` (bool); the
-    Settings page treats its input as write-only/blank-to-keep.
+    `digest_email_to`, `public_base_url`, `gotify_url`, `gotify_token`, `mcp_servers` (from
+    `DIGEST_EMAIL_TO`/`PUBLIC_BASE_URL`/`GOTIFY_URL`/`GOTIFY_TOKEN`/`SEARXNG_URL`
+    respectively). Once saved once via `/settings`, `settings.db` — not `.env` — is the
+    source of truth. `gotify_token` is the one exception to "GET /settings echoes the
+    current value back": it's a real credential, so the response only reports
+    `gotify_token_set` (bool); the Settings page treats its input as write-only/blank-to-keep.
 
 ## Known limitations (true today, not proposals — don't "fix" without asking)
 
-- `web_search`'s "not connected" fallback string in `agent/tools/general.py` is missing its
-  `f`-prefix — prints literal `'{query}'` instead of the actual query.
-- `get_todays_events` doesn't check `.get("success")` like its sibling calendar tools do.
 - `routes/synth.py` raises at import time if Piper model files are missing, taking down the
   whole app since it's imported at module load (mitigated operationally by
   `setup_check.sh`, not fixed in code).
@@ -330,6 +339,7 @@ See `.env.example` for the full list. Notable ones:
   ("threads are threads"), not an oversight.
 - In-memory thread/keyword state isn't covered by `reset_knowledge.sh` — only clears on
   app restart.
-- No automated test suite exists yet — a fair amount of subtle logic (`resolve_thread`'s
-  recency/keyword interplay, section-scoped editing boundaries, keyword fuzzy-matching,
-  reconciliation's orphan detection) has only been manually verified.
+- The pytest suite covers `resolve_thread`'s recency/keyword interplay, keyword
+  fuzzy-matching, datetime parsing, and section-scoped vault editing — reconciliation's
+  orphan detection and most feature/integration code (check-ins, activity log, alert
+  sounds, calendar sync, etc.) remain only manually verified.
