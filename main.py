@@ -473,6 +473,43 @@ async def activity_log_summary(
     return activity_log_jobs.summarize(entries)
 
 
+@app.get("/vault/notes")
+async def list_vault_notes_route(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """Every processed note in the vault (excludes Inbox — unprocessed
+    scratch, not "what's accumulated"), most recently updated first.
+    Backs the read-only vault-browse dashboard page; filtering/searching
+    happens client-side since a personal vault is small enough not to
+    need query-param plumbing for it.
+    """
+    notes = await asyncio.to_thread(vault.list_notes_summary)
+    return {"notes": notes}
+
+
+@app.get("/vault/notes/{note_id}")
+async def get_vault_note_route(
+    note_id: str, _: Annotated[None, Depends(auth.require_session_or_token)]
+):
+    """Full single note (including body) for the vault-browse page's
+    detail view."""
+    path = await asyncio.to_thread(vault.find_note_by_id, note_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Note not found")
+    note = await asyncio.to_thread(vault.parse_note, path)
+    if note is None:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return {
+        "id": note.id,
+        "title": note.title,
+        "tags": note.tags,
+        "aliases": note.aliases,
+        "project": vault.note_project(path),
+        "source": note.source,
+        "created": note.created,
+        "updated": note.updated,
+        "body": note.body,
+    }
+
+
 @app.get("/health")
 async def health():
     return {

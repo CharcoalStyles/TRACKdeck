@@ -360,6 +360,39 @@ def find_note_by_id(note_id: str) -> Path | None:
     return None
 
 
+def note_project(path: Path) -> str | None:
+    """The project folder name a note lives in, or None for a vault-root
+    note. Used to label notes for the vault-browse dashboard page."""
+    parent = path.parent
+    return parent.name if is_project_dir(parent) else None
+
+
+def list_notes_summary() -> list[dict]:
+    """Lightweight metadata for every processed note (excludes Inbox — see
+    list_vault_notes), most recently updated first. Backs GET /vault/notes;
+    kept here rather than inline in main.py since it's just another read
+    over what this module already owns."""
+    notes = []
+    for path in list_vault_notes():
+        note = parse_note(path)
+        if note is None:
+            continue
+        notes.append(
+            {
+                "id": note.id,
+                "title": note.title,
+                "tags": note.tags,
+                "project": note_project(path),
+                "source": note.source,
+                "created": note.created,
+                "updated": note.updated,
+                "excerpt": note.body.strip()[:200],
+            }
+        )
+    notes.sort(key=lambda n: n["updated"], reverse=True)
+    return notes
+
+
 def about_me_path() -> Path:
     return vault_root() / ABOUT_ME_FILENAME
 

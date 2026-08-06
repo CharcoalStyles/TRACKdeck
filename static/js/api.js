@@ -162,3 +162,17 @@ export async function getActivityLogSummary({ days = 30 } = {}) {
   if (!response.ok) throw new Error(`Server returned ${response.status}`);
   return response.json();
 }
+
+/** @returns {Promise<{notes: Array<{id: string, title: string, tags: string[], project: string|null, source: string, created: string, updated: string, excerpt: string}>}>} */
+export async function listVaultNotes() {
+  const response = await fetch('/vault/notes');
+  if (!response.ok) throw new Error(`Server returned ${response.status}`);
+  return response.json();
+}
+
+/** @returns {Promise<{id: string, title: string, tags: string[], aliases: string[], project: string|null, source: string, created: string, updated: string, body: string}>} */
+export async function getVaultNote(id) {
+  const response = await fetch(`/vault/notes/${encodeURIComponent(id)}`);
+  if (!response.ok) throw new Error(`Server returned ${response.status}`);
+  return response.json();
+}
