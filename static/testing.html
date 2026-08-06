@@ -64,8 +64,12 @@
 
     <div class="card">
       <h2>Ad-Hoc Reminder</h2>
-      <p class="description">Creates a real reminder due ~10 seconds from now and schedules it — exercises the full pipeline (store → scheduler → fire → Gotify), not just the fire step.</p>
-      <div class="field-row"><button type="button" id="reminderBtn" class="primary-btn">Create test reminder (fires in 10s)</button></div>
+      <p class="description">Creates a real reminder due in the given number of minutes and schedules it — exercises the full pipeline (store → scheduler → fire → Gotify), not just the fire step.</p>
+      <div class="field-row">
+        <label for="reminderMinutes">Minutes:</label>
+        <input type="number" id="reminderMinutes" min="1" max="60" value="1" style="width: 4rem;">
+        <button type="button" id="reminderBtn" class="primary-btn">Create test reminder</button>
+      </div>
       <div class="save-status" id="reminderStatus"></div>
     </div>
 
@@ -124,7 +128,22 @@
       wireButton('vaultBtn', 'vaultStatus', '/debug/reconcile-vault', 'Reconciling...', 'Reconciled.');
       wireButton('notifyBtn', 'notifyStatus', '/debug/notify', 'Sending...', 'Sent.');
       wireButton('emailBtn', 'emailStatus', '/debug/email', 'Sending...', 'Sent.');
-      wireButton('reminderBtn', 'reminderStatus', '/debug/reminder', 'Scheduling...', 'Scheduled — check Gotify in ~10 seconds.');
+      document.getElementById('reminderBtn').addEventListener('click', async () => {
+        const button = document.getElementById('reminderBtn');
+        const status = document.getElementById('reminderStatus');
+        const minutes = Number(document.getElementById('reminderMinutes').value) || 1;
+        button.disabled = true;
+        showStatus(status, 'Scheduling...');
+        try {
+          await triggerDebug(`/debug/reminder?delay_seconds=${minutes * 60}`);
+          showStatus(status, `Scheduled — check Gotify in ~${minutes} minute(s).`);
+        } catch (error) {
+          console.error('Failed to trigger /debug/reminder:', error);
+          showStatus(status, 'Failed — check server logs.', false);
+        } finally {
+          button.disabled = false;
+        }
+      });
 
       const deviceStatusBtn = document.getElementById('deviceStatusBtn');
       const deviceStatusFields = document.getElementById('deviceStatusFields');

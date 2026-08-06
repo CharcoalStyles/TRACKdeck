@@ -38,14 +38,15 @@ async def fire_reminder(reminder_id: str) -> None:
         notify_error(f"Reminder failed to fire ({reminder_id})", e)
 
 
-async def create_test_reminder() -> str:
+async def create_test_reminder(delay_seconds: int | None = None) -> str:
     """Debug-only round-trip test (see main.py's POST /debug/reminder):
     creates a real pending row in reminders.db and schedules it on the
     shared scheduler, exercising the full store -> scheduler ->
     fire_reminder -> Gotify pipeline rather than faking any step.
     Returns the new reminder_id."""
+    delay = timedelta(seconds=delay_seconds) if delay_seconds is not None else TEST_REMINDER_DELAY
     reminder_id = str(uuid.uuid4())
-    due_at_utc = datetime.now(timezone.utc) + TEST_REMINDER_DELAY
+    due_at_utc = datetime.now(timezone.utc) + delay
     await asyncio.to_thread(
         reminders_store.create_reminder,
         reminder_id,
@@ -59,5 +60,5 @@ async def create_test_reminder() -> str:
         id=f"reminder:{reminder_id}",
         replace_existing=True,
     )
-    logger.info("Scheduled test reminder %s, due in %ds", reminder_id, TEST_REMINDER_DELAY.total_seconds())
+    logger.info("Scheduled test reminder %s, due in %ds", reminder_id, delay.total_seconds())
     return reminder_id

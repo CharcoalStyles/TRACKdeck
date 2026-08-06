@@ -13,7 +13,7 @@ from typing import Annotated
 import uvicorn
 from apscheduler.triggers.date import DateTrigger
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, model_validator
@@ -792,15 +792,18 @@ async def trigger_test_email(_: Annotated[None, Depends(auth.require_session_or_
 
 
 @app.post("/debug/reminder")
-async def trigger_test_reminder(_: Annotated[None, Depends(auth.require_session_or_token)]):
+async def trigger_test_reminder(
+    _: Annotated[None, Depends(auth.require_session_or_token)],
+    delay_seconds: Annotated[int, Query(ge=1, le=3600)] = 10,
+):
     """
-    Creates a real pending reminder due ~10 seconds from now and
-    schedules it on the shared scheduler — exercises the full ad-hoc
-    reminder pipeline (store -> scheduler -> fire_reminder -> Gotify)
-    end to end, unlike /debug/reminders/fire/{id} which needs an
+    Creates a real pending reminder due `delay_seconds` from now (default
+    10s) and schedules it on the shared scheduler — exercises the full
+    ad-hoc reminder pipeline (store -> scheduler -> fire_reminder ->
+    Gotify) end to end, unlike /debug/reminders/fire/{id} which needs an
     existing reminder id.
     """
-    reminder_id = await create_test_reminder()
+    reminder_id = await create_test_reminder(delay_seconds)
     return {"status": "scheduled", "reminder_id": reminder_id}
 
 
