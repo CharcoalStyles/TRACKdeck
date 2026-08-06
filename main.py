@@ -64,6 +64,7 @@ from agent.runtime import (
     get_thread_messages,
     list_checkpoint_thread_ids,
     list_threads,
+    rehydrate_threads_from_checkpoints,
     run_agent,
 )
 from agent.scheduler import (
@@ -166,6 +167,14 @@ async def lifespan(app: FastAPI):
 
     async with AsyncSqliteSaver.from_conn_string("memory.db") as checkpointer:
         app_state.graph = build_graph(checkpointer, app_state.memory, mcp_tools=mcp_tools)
+
+        # Dashboard sidebar (GET /threads) is sourced from app_state.threads/
+        # keywords, which are in-process dicts wiped by every restart even
+        # though memory.db itself is untouched — restore same-day threads
+        # so the chat page doesn't appear empty after a docker cycle.
+        restored = await rehydrate_threads_from_checkpoints()
+        if restored:
+            logger.info("Rehydrated %d thread(s) from memory.db after restart.", restored)
 
         scheduler.add_job(
             send_daily_digest,

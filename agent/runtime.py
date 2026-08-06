@@ -29,11 +29,13 @@ import sqlite3
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 from fastapi import HTTPException
 
 from agent.keywords import generate_keyword, match_keyword_prefix
 from agent.memory import MemoryStore
+from agent.settings import settings
 
 from utils.notify import send_gotify, notify_error
 from utils.recall_log_store import get_recall_for_thread
@@ -133,6 +135,62 @@ def create_background_thread() -> ThreadInfo:
 def list_threads() -> list[ThreadInfo]:
     """All currently addressable threads, most recently active first."""
     return sorted(app_state.threads.values(), key=lambda t: t.last_activity, reverse=True)
+
+
+def _last_digest_boundary(now: float) -> float:
+    """The most recent moment jobs/digest.py's nightly sweep would have
+    fired (today's settings.digest_time, or yesterday's if that hasn't
+    happened yet today) — mirrors CronTrigger's own daily-firing logic."""
+    tz = settings.zoneinfo()
+    now_local = datetime.fromtimestamp(now, tz)
+    hour, minute = (int(p) for p in settings.digest_time.split(":"))
+    boundary = now_local.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if boundary > now_local:
+        boundary -= timedelta(days=1)
+    return boundary.timestamp()
+
+
+async def rehydrate_threads_from_checkpoints() -> int:
+    """
+    Rebuilds app_state.threads/keywords from memory.db on startup — without
+    this, the dashboard sidebar (GET /threads, sourced purely from those
+    in-process dicts) shows no conversations after every restart even
+    though memory.db itself is untouched (see CLAUDE.md's known
+    limitations note). Only restores threads created after the most recent
+    digest sweep boundary, since that sweep unconditionally clears
+    app_state.threads/keywords once a day (jobs/digest.py) and memory.db's
+    checkpoint rows are never deleted — this reproduces exactly what the
+    in-memory dict would still hold had the process never restarted,
+    rather than resurrecting the entire history every restart.
+
+    Keywords aren't recoverable (never persisted anywhere), so each
+    restored thread gets a freshly generated one via the same
+    generate_keyword() normal thread creation uses.
+    """
+    boundary = _last_digest_boundary(time.time())
+    checkpoints = await list_checkpoint_thread_ids()
+
+    restored = []
+    for row in checkpoints:
+        thread_id = row["thread_id"]
+        parts = thread_id.split("_")
+        if len(parts) != 3 or parts[0] != "session" or not parts[1].isdigit():
+            continue  # not a normal addressable thread (e.g. "onboarding", "profile_chat")
+        created_at = float(parts[1])
+        if created_at < boundary:
+            continue
+        keyword = generate_keyword(app_state.keywords)
+        info = ThreadInfo(thread_id=thread_id, keyword=keyword, last_activity=created_at)
+        app_state.threads[thread_id] = info
+        app_state.keywords[keyword] = thread_id
+        restored.append(info)
+
+    if restored:
+        latest = max(restored, key=lambda t: t.last_activity)
+        app_state.default_thread_id = latest.thread_id
+        app_state.default_last_activity = latest.last_activity
+
+    return len(restored)
 
 
 async def get_thread_messages(thread_id: str) -> list[dict]:
