@@ -34,6 +34,7 @@ every time, so there's nothing to remember and nothing to get wrong.
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import Literal, Optional
 
 from langchain_core.tools import tool
@@ -41,6 +42,20 @@ from langchain_core.tools import tool
 from agent.memory import MemoryStore
 from agent.vault_watcher import index_note_file
 from utils import vault
+
+
+def _derive_title(content: str) -> str:
+    """Best-effort title from a note's content, for when the model omits
+    title — observed in practice (project-scoped save_note calls) as
+    exactly the kind of extra required field a smaller local model doesn't
+    reliably keep supplying once a tool result nudges it toward a shorter
+    call shape. Cheaper and more reliable than continuing to prompt-engineer
+    around it."""
+    first_line = next((line.strip() for line in content.splitlines() if line.strip()), "")
+    first_line = re.sub(r"^[#>*\-\s]+", "", first_line).strip()
+    if not first_line:
+        return "Untitled Note"
+    return first_line[:60] + ("…" if len(first_line) > 60 else "")
 
 
 def make_note_tools(memory: MemoryStore):
@@ -60,7 +75,10 @@ def make_note_tools(memory: MemoryStore):
 
     @tool
     async def save_note(
-        title: str, content: str, tags: Optional[list[str]] = None, project: Optional[str] = None
+        content: str,
+        title: Optional[str] = None,
+        tags: Optional[list[str]] = None,
+        project: Optional[str] = None,
     ) -> str:
         """Create a brand new note in the vault. Use this when the user wants
         to jot something down or remember something new. If it might relate
@@ -68,8 +86,10 @@ def make_note_tools(memory: MemoryStore):
         update_note_section over creating a near-duplicate note.
 
         Args:
-            title: A short, specific title for the note.
             content: The body of the note.
+            title: A short, specific title for the note. Optional — if
+                omitted, one is derived from the note's content, but a
+                real title is preferred when you have one.
             tags: Optional list of lowercase category tags.
             project: If this note belongs to an ongoing project, its name
                 (as returned by get_or_create_project) — files the note
@@ -78,6 +98,7 @@ def make_note_tools(memory: MemoryStore):
                 inside the same project — don't link out to the rest of
                 the vault.
         """
+        title = (title or "").strip() or _derive_title(content)
         now = vault.now_iso()
         note = vault.Note(
             id=vault.generate_id(),
