@@ -177,6 +177,30 @@ export async function getVaultNote(id) {
   return response.json();
 }
 
+/** @returns {Promise<{attachments: Array<{filename: string, url: string}>}>} */
+export async function listProjectAttachments(project) {
+  const response = await fetch(`/vault/projects/${encodeURIComponent(project)}/attachments`);
+  if (!response.ok) throw new Error(`Server returned ${response.status}`);
+  return response.json();
+}
+
+/** @param {File} file @returns {Promise<{filename: string, url: string}>} */
+export async function uploadProjectAttachment(project, file) {
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+
+  const response = await fetch(`/vault/projects/${encodeURIComponent(project)}/attachments`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    body: formData,
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.detail || `Server returned ${response.status}`);
+  }
+  return response.json();
+}
+
 /** @returns {Promise<{reminders: Array<{id: string, message: string, due_at: number, status: string, created_at: number, event_uid: string|null}>}>} */
 export async function listReminders() {
   const response = await fetch('/reminders');

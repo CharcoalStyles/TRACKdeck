@@ -19,9 +19,17 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from agent.memory import MemoryStore
 from agent.settings import settings
 from agent.tools.all_tools import get_tools
+from utils import vault
 from utils.recall_log_store import log_recall
 
 logger = logging.getLogger(__name__)
+
+# Fixed-thread-id prefix for per-project chats (agent/runtime.py's run_agent
+# skips normal keyword/recency resolution whenever an explicit thread_id is
+# passed, so "project_<slug>" threads are automatically un-addressable by
+# voice keyword and never swept by jobs/digest.py — same trick as the
+# "onboarding"/"profile_chat" fixed threads below).
+PROJECT_THREAD_PREFIX = "project_"
 
 
 SYSTEM_PROMPT = """You are a personal assistant agent with access to tools including get_current_datetime and
@@ -218,11 +226,24 @@ to it conversationally. Use read_about_me to check current content before answer
 questions about what's known, and remember_about_me to record corrections or additions 
 the user gives you directly in this conversation.
 
-If a correction is about a specific person, project, or other distinct sub-topic, use 
-get_or_create_linked_note to get that topic's own note and edit it directly, rather than 
-touching the shared About Me section it's indexed under. This matters especially for 
-corrections: editing a section that holds multiple entries (e.g. "People") risks losing 
+If a correction is about a specific person, project, or other distinct sub-topic, use
+get_or_create_linked_note to get that topic's own note and edit it directly, rather than
+touching the shared About Me section it's indexed under. This matters especially for
+corrections: editing a section that holds multiple entries (e.g. "People") risks losing
 every other entry in it, not just the one being fixed."""
+
+PROJECT_CHAT_ADDENDUM = """
+
+## Mode: Project Chat — {project}
+This conversation is focused specifically on the "{project}" project. A PROJECT NOTES
+block below lists every note currently in that project's folder — treat it as your
+primary source, and use read_note (with the id shown) to pull a note's full content
+when the excerpt isn't enough. Use search_notes/save_note with project="{project}" for
+deeper search or new notes, so anything you add stays filed with the rest of this
+project's notes.
+
+Stay scoped to this project. If the user asks about something unrelated to it, say so
+rather than answering from general knowledge or unrelated vault content."""
 
 def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None):
     llm = ChatOpenAI(
@@ -256,38 +277,60 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
         one_shot = (config or {}).get("configurable", {}).get("one_shot", False)
         mode = (config or {}).get("configurable", {}).get("mode")
 
-        # Never recall from onboarding/profile_chat (dense, deliberately
-        # elicited personal/health disclosures — the root cause of the
-        # cross-thread leak this filtering fixes) or from the thread
-        # currently running (its own history is already in state["messages"],
-        # so recalling it here would just be a redundant duplicate).
-        exclude_thread_ids = {t for t in (thread_id, "onboarding", "profile_chat") if t}
-        min_timestamp = int(time.time()) - settings.recall_recency_days * 86400
+        # Project name isn't a separate request field — it's derived from the
+        # thread id itself, same "always resolves the same way" pattern as
+        # every other fixed-path lookup in this codebase (About Me, linked
+        # notes). See PROJECT_THREAD_PREFIX above.
+        project_slug = None
+        if mode == "project_chat" and thread_id and thread_id.startswith(PROJECT_THREAD_PREFIX):
+            project_slug = thread_id[len(PROJECT_THREAD_PREFIX):]
 
-        # MemoryStore/Chroma has no async client, so this still blocks — but
-        # to_thread keeps it off the event loop instead of freezing every
-        # other concurrent request for the duration of the search.
-        recalled = await asyncio.to_thread(
-            memory.search_conversations,
-            last_user_msg,
-            n_results=3,
-            exclude_thread_ids=exclude_thread_ids,
-            max_distance=settings.recall_max_distance,
-            min_timestamp=min_timestamp,
-        )
         memory_block = ""
-        if recalled:
-            memory_block = "\n\nRELEVANT PAST CONTEXT:\n" + "\n---\n".join(
-                r["document"] for r in recalled
+        if project_slug:
+            # Deterministic, code-filtered retrieval instead of cross-thread
+            # semantic recall — a different project's chat leaking in here
+            # would defeat the point of a project-scoped chat, and this is
+            # the actual scoping guarantee, not just a prompt instruction.
+            project_notes = await asyncio.to_thread(vault.list_notes_summary)
+            project_notes = [n for n in project_notes if n["project"] == project_slug]
+            if project_notes:
+                memory_block = "\n\nPROJECT NOTES:\n" + "\n".join(
+                    f"[id: {n['id']}] {n['title']} — {n['excerpt']}" for n in project_notes
+                )
+        else:
+            # Never recall from onboarding/profile_chat (dense, deliberately
+            # elicited personal/health disclosures — the root cause of the
+            # cross-thread leak this filtering fixes) or from the thread
+            # currently running (its own history is already in state["messages"],
+            # so recalling it here would just be a redundant duplicate).
+            exclude_thread_ids = {t for t in (thread_id, "onboarding", "profile_chat") if t}
+            min_timestamp = int(time.time()) - settings.recall_recency_days * 86400
+
+            # MemoryStore/Chroma has no async client, so this still blocks — but
+            # to_thread keeps it off the event loop instead of freezing every
+            # other concurrent request for the duration of the search.
+            recalled = await asyncio.to_thread(
+                memory.search_conversations,
+                last_user_msg,
+                n_results=3,
+                exclude_thread_ids=exclude_thread_ids,
+                max_distance=settings.recall_max_distance,
+                min_timestamp=min_timestamp,
             )
-        if thread_id:
-            await asyncio.to_thread(log_recall, thread_id, last_user_msg, recalled)
+            if recalled:
+                memory_block = "\n\nRELEVANT PAST CONTEXT:\n" + "\n---\n".join(
+                    r["document"] for r in recalled
+                )
+            if thread_id:
+                await asyncio.to_thread(log_recall, thread_id, last_user_msg, recalled)
 
         addendum = ONE_SHOT_ADDENDUM if one_shot else ""
         if mode == "onboarding":
             addendum += ONBOARDING_ADDENDUM
         elif mode == "profile_chat":
             addendum += PROFILE_CHAT_ADDENDUM
+        elif project_slug:
+            addendum += PROJECT_CHAT_ADDENDUM.format(project=project_slug)
         elif settings.learning_mode:
             addendum += LEARNING_ADDENDUM
 

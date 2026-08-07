@@ -74,6 +74,9 @@ def make_note_tools(memory: MemoryStore):
             project: If this note belongs to an ongoing project, its name
                 (as returned by get_or_create_project) — files the note
                 inside that project's folder instead of the vault root.
+                If linking to other notes via [[wikilinks]], keep links
+                inside the same project — don't link out to the rest of
+                the vault.
         """
         now = vault.now_iso()
         note = vault.Note(

@@ -5,18 +5,20 @@ Personal Assistant — FastAPI + LangGraph
 import os
 import asyncio
 import logging
+import mimetypes
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, time as dtime, timedelta, timezone
+from pathlib import Path
 from typing import Annotated
 
 import uvicorn
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.triggers.date import DateTrigger
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from pydantic import BaseModel, model_validator
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -519,6 +521,69 @@ async def get_vault_note_route(
         "updated": note.updated,
         "body": note.body,
     }
+
+
+def _resolve_project_or_404(project: str) -> Path:
+    project_dir = vault.match_project_dir(project)
+    if project_dir is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project_dir
+
+
+@app.get("/vault/projects/{project}/attachments")
+async def list_project_attachments_route(
+    project: str, _: Annotated[None, Depends(auth.require_session_or_token)]
+):
+    """Image attachments for one project — backs the Projects page's image
+    gallery. Attachments can arrive either via the upload route below or by
+    being dropped directly into <project>/attachments/ via Obsidian/Syncthing."""
+    project_dir = await asyncio.to_thread(_resolve_project_or_404, project)
+    paths = await asyncio.to_thread(vault.list_project_attachments, project_dir)
+    return {
+        "attachments": [
+            {
+                "filename": p.name,
+                "url": f"/vault/projects/{project_dir.name}/attachments/{p.name}",
+            }
+            for p in paths
+        ]
+    }
+
+
+@app.post("/vault/projects/{project}/attachments")
+async def upload_project_attachment_route(
+    project: str,
+    file: Annotated[UploadFile, File()],
+    _: Annotated[None, Depends(auth.require_session_or_token)],
+):
+    if not (file.content_type or "").startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image uploads are accepted")
+    project_dir = await asyncio.to_thread(_resolve_project_or_404, project)
+    data = await file.read()
+    saved_path = await asyncio.to_thread(
+        vault.save_project_attachment, project_dir, file.filename or "upload", data
+    )
+    return {
+        "filename": saved_path.name,
+        "url": f"/vault/projects/{project_dir.name}/attachments/{saved_path.name}",
+    }
+
+
+@app.get("/vault/projects/{project}/attachments/{filename}")
+async def get_project_attachment_route(
+    project: str, filename: str, _: Annotated[None, Depends(auth.require_session_or_token)]
+):
+    project_dir = await asyncio.to_thread(_resolve_project_or_404, project)
+    # Reject anything that isn't a bare filename (e.g. "../../etc/passwd")
+    # before it ever touches the filesystem.
+    if Path(filename).name != filename:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    attachments_dir = vault.project_attachments_dir(project_dir)
+    path = attachments_dir / filename
+    if not path.resolve().is_relative_to(attachments_dir.resolve()) or not path.is_file():
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    return FileResponse(path, media_type=media_type)
 
 
 @app.get("/health")

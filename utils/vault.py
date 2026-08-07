@@ -329,6 +329,53 @@ def get_or_create_project_dir(name: str) -> tuple[Path, bool]:
 
 
 # ---------------------------------------------------------------------------
+# Project image attachments
+# ---------------------------------------------------------------------------
+
+ATTACHMENTS_DIRNAME = "attachments"
+ALLOWED_ATTACHMENT_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
+
+def project_attachments_dir(project_dir: Path) -> Path:
+    return project_dir / ATTACHMENTS_DIRNAME
+
+
+def save_project_attachment(project_dir: Path, filename: str, data: bytes) -> Path:
+    """Save an uploaded/dropped-in image under a project's attachments folder.
+    Sanitizes the filename the same way unique_note_path sanitizes a title —
+    slugify the stem, keep the extension — and de-dupes a collision with a
+    short id suffix rather than overwriting."""
+    attachments_dir = project_attachments_dir(project_dir)
+    attachments_dir.mkdir(parents=True, exist_ok=True)
+
+    suffix = Path(filename).suffix.lower()
+    stem = slugify(Path(filename).stem)
+    candidate = attachments_dir / f"{stem}{suffix}"
+    if candidate.exists():
+        candidate = attachments_dir / f"{stem}-{generate_id()}{suffix}"
+
+    # Same defense-in-depth shape as get_or_create_project_dir: slugify
+    # already strips path-traversal characters, this just double-checks.
+    if not candidate.resolve().is_relative_to(attachments_dir.resolve()):
+        raise ValueError(f"Unsafe attachment filename: {filename!r}")
+
+    tmp_path = candidate.with_name(candidate.name + f".tmp{os.getpid()}")
+    tmp_path.write_bytes(data)
+    os.replace(tmp_path, candidate)
+    return candidate
+
+
+def list_project_attachments(project_dir: Path) -> list[Path]:
+    attachments_dir = project_attachments_dir(project_dir)
+    if not attachments_dir.exists():
+        return []
+    return sorted(
+        p for p in attachments_dir.iterdir()
+        if p.is_file() and p.suffix.lower() in ALLOWED_ATTACHMENT_EXTENSIONS
+    )
+
+
+# ---------------------------------------------------------------------------
 # Listing / lookup
 # ---------------------------------------------------------------------------
 
