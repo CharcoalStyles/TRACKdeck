@@ -59,6 +59,13 @@ def _derive_title(content: str) -> str:
     return first_line[:60] + ("…" if len(first_line) > 60 else "")
 
 
+def _normalize_tags(tags: Optional[list[str]]) -> list[str]:
+    """Tags are used as-is in frontmatter/search, so enforce the
+    space-free, hyphenated convention here rather than relying on the
+    model to always phrase them that way (see vault.slugify)."""
+    return [vault.slugify(t) for t in (tags or []) if t and t.strip()]
+
+
 def make_note_tools(memory: MemoryStore):
     # About Me is a single fixed-path note (utils.vault.get_or_create_about_me),
     # and LangGraph's ToolNode can run multiple tool calls from one LLM turn
@@ -91,7 +98,8 @@ def make_note_tools(memory: MemoryStore):
             title: A short, specific title for the note. Optional — if
                 omitted, one is derived from the note's content, but a
                 real title is preferred when you have one.
-            tags: Optional list of lowercase category tags.
+            tags: Optional list of lowercase category tags (spaces are
+                fine here — they're normalized to hyphens automatically).
             project: If this note belongs to an ongoing project, its name
                 (as returned by get_or_create_project) — files the note
                 inside that project's folder instead of the vault root.
@@ -106,7 +114,7 @@ def make_note_tools(memory: MemoryStore):
             title=title,
             created=now,
             updated=now,
-            tags=tags or [],
+            tags=_normalize_tags(tags),
             aliases=[],
             source="agent",
             body=content.strip() + "\n",
@@ -297,7 +305,7 @@ def make_note_tools(memory: MemoryStore):
                 title=topic,
                 created=now,
                 updated=now,
-                tags=[category.lower()],
+                tags=[vault.slugify(category)],
                 source="agent",
                 body="",
             )
