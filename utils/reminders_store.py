@@ -154,6 +154,17 @@ def find_pending_by_text(query: str) -> list[dict]:
         return [dict(row) for row in rows]
 
 
+def update_reminder(reminder_id: str, message: Optional[str] = None, due_at: Optional[int] = None) -> Optional[dict]:
+    """Partial update — only non-None fields are changed."""
+    with _connect() as conn:
+        if message is not None:
+            conn.execute("UPDATE reminders SET message = ? WHERE id = ?", (message, reminder_id))
+        if due_at is not None:
+            conn.execute("UPDATE reminders SET due_at = ? WHERE id = ?", (due_at, reminder_id))
+        row = conn.execute("SELECT * FROM reminders WHERE id = ?", (reminder_id,)).fetchone()
+        return dict(row) if row else None
+
+
 def mark_status(reminder_id: str, status: str) -> None:
     with _connect() as conn:
         conn.execute("UPDATE reminders SET status = ? WHERE id = ?", (status, reminder_id))

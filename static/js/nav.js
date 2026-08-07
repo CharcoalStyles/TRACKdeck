@@ -9,7 +9,7 @@
 // logout link still works even if the session check is about to
 // redirect):
 //   import { renderNav } from '/static/js/nav.js';
-//   renderNav('chat');  // 'chat' | 'activity-log' | 'profile' | 'settings' |
+//   renderNav('chat');  // 'chat' | 'activity-log' | 'reminders' | 'profile' | 'settings' |
 //                        // 'testing' | 'checkins' | 'alert-sounds' | 'errors' |
 //                        // 'thread-debug' | 'vault'
 
@@ -26,6 +26,7 @@ export function renderNav(activePage) {
     <nav>
       <a href="/static/index.html" class="${activePage === 'chat' ? 'active' : ''}">Chat</a>
       <a href="/static/activity-log.html" class="${activePage === 'activity-log' ? 'active' : ''}">Activity Log</a>
+      <a href="/static/reminders.html" class="${activePage === 'reminders' ? 'active' : ''}">To-Dos</a>
       <a href="/static/profile.html" class="${activePage === 'profile' ? 'active' : ''}">Profile</a>
       <details class="nav-admin${isAdminActive ? ' active' : ''}">
         <summary>Admin</summary>

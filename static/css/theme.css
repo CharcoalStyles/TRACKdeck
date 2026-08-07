@@ -269,6 +269,7 @@
 
     .field-row input[type="text"],
     .field-row input[type="time"],
+    .field-row input[type="datetime-local"],
     .field-row textarea {
       background: #252525;
       border: 1px solid #333;

@@ -11,6 +11,7 @@ from datetime import datetime, time as dtime, timedelta, timezone
 from typing import Annotated
 
 import uvicorn
+from apscheduler.jobstores.base import JobLookupError
 from apscheduler.triggers.date import DateTrigger
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -111,6 +112,7 @@ from utils import (
     vault,
 )
 from utils.caldav_client import ensure_collection_exists
+from utils.datetime import parse_local_datetime
 from utils.mailer import send_email
 from utils.notify import notify_device_error, send_gotify
 
@@ -851,6 +853,70 @@ async def trigger_test_reminder(
     """
     reminder_id = await create_test_reminder(delay_seconds)
     return {"status": "scheduled", "reminder_id": reminder_id}
+
+
+class ReminderUpdate(BaseModel):
+    message: str | None = None
+    due_at: str | None = None  # local datetime string, e.g. "2026-08-08T09:00"
+
+
+@app.get("/reminders")
+async def list_reminders_route(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """Pending reminders, soonest first — backs the dashboard's To-Dos page."""
+    return {"reminders": await asyncio.to_thread(reminders_store.list_pending)}
+
+
+@app.patch("/reminders/{reminder_id}")
+async def update_reminder_route(
+    reminder_id: str, update: ReminderUpdate, _: Annotated[None, Depends(auth.require_session_or_token)]
+):
+    """Partial update of a reminder's message/due time. Only fields present
+    in the request body are changed. Also reschedules the live APScheduler
+    job when due_at changes on a still-pending reminder — the DB row alone
+    doesn't control fire time, same as agent/tools/alerts.py's
+    _create_reminder."""
+    existing = await asyncio.to_thread(reminders_store.get_reminder, reminder_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Reminder not found")
+
+    due_epoch = None
+    if update.due_at is not None:
+        due_local = parse_local_datetime(update.due_at)
+        due_epoch = int(due_local.astimezone(timezone.utc).timestamp())
+
+    updated = await asyncio.to_thread(
+        reminders_store.update_reminder, reminder_id, update.message, due_epoch
+    )
+
+    if due_epoch is not None and existing["status"] == "pending":
+        due_local = datetime.fromtimestamp(due_epoch, tz=timezone.utc).astimezone(settings.zoneinfo())
+        scheduler.add_job(
+            fire_reminder,
+            trigger=DateTrigger(run_date=due_local),
+            args=[reminder_id],
+            id=f"reminder:{reminder_id}",
+            replace_existing=True,
+        )
+    return updated
+
+
+@app.delete("/reminders/{reminder_id}")
+async def delete_reminder_route(
+    reminder_id: str, _: Annotated[None, Depends(auth.require_session_or_token)]
+):
+    """Cancels a reminder (mark_status, not a hard delete — same convention
+    as agent/tools/alerts.py's cancel_reminder) and unschedules its
+    APScheduler job if still pending."""
+    existing = await asyncio.to_thread(reminders_store.get_reminder, reminder_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Reminder not found")
+
+    await asyncio.to_thread(reminders_store.mark_status, reminder_id, "cancelled")
+    try:
+        scheduler.remove_job(f"reminder:{reminder_id}")
+    except JobLookupError:
+        pass
+    return {"status": "cancelled"}
 
 
 @app.get("/debug/device-sync")

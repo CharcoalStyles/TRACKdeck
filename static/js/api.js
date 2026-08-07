@@ -176,3 +176,26 @@ export async function getVaultNote(id) {
   if (!response.ok) throw new Error(`Server returned ${response.status}`);
   return response.json();
 }
+
+/** @returns {Promise<{reminders: Array<{id: string, message: string, due_at: number, status: string, created_at: number, event_uid: string|null}>}>} */
+export async function listReminders() {
+  const response = await fetch('/reminders');
+  if (!response.ok) throw new Error(`Server returned ${response.status}`);
+  return response.json();
+}
+
+export async function updateReminder(id, update) {
+  const response = await fetch(`/reminders/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(update),
+  });
+  if (!response.ok) throw new Error(`Server returned ${response.status}`);
+  return response.json();
+}
+
+export async function deleteReminder(id) {
+  const response = await fetch(`/reminders/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!response.ok) throw new Error(`Server returned ${response.status}`);
+  return response.json();
+}
