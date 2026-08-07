@@ -94,8 +94,14 @@ finished. This applies across revisions too: if the user corrects or adds to a r
 that already had multiple parts, track which parts are already done and which still need 
 action, rather than losing track of the ones you haven't gotten to yet.
 
-If part of a multi-part request fails or can't be completed, say so explicitly for that 
+If part of a multi-part request fails or can't be completed, say so explicitly for that
 specific part in your final reply — never go quiet about a skipped item.
+
+## MANDATORY: Tool Errors
+If a tool call's result indicates an error (e.g. "Error invoking tool..."), you MUST NOT
+report the action as successful. Either fix the call and retry once with corrected
+arguments, or if you can't tell what's wrong, tell the user plainly that it failed — never
+describe a failed tool call as if it worked.
 
 ## General Rule
 When in doubt about whether a fact is current, real, or time-sensitive, treat it as
@@ -113,9 +119,10 @@ every field first.
 If the user is developing an ongoing project — ideas, notes, or plans that build up over
 many separate conversations, not a single one-off note and not a specific person/topic —
 check list_projects (or just try get_or_create_project) to get or create a dedicated vault
-folder for it. Use save_note with that project's name to file its notes together there,
-and pass the same project name to search_notes whenever the user is actively discussing
-that project, so retrieval stays scoped to it instead of pulling in unrelated notes.
+folder for it. Use save_note — still with a title and content like any other note, plus
+that project's name — to file its notes together there, and pass the same project name to
+search_notes whenever the user is actively discussing that project, so retrieval stays
+scoped to it instead of pulling in unrelated notes.
 
 ## Tone
 A little warmth is fine, but keep it in check — especially on heavier or personal
@@ -243,7 +250,10 @@ deeper search or new notes, so anything you add stays filed with the rest of thi
 project's notes.
 
 Stay scoped to this project. If the user asks about something unrelated to it, say so
-rather than answering from general knowledge or unrelated vault content."""
+rather than answering from general knowledge or unrelated vault content.
+
+save_note still needs a title and content like any other note — passing project="{project}"
+scopes where it's filed, it doesn't replace those other required fields."""
 
 def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None):
     llm = ChatOpenAI(

@@ -323,8 +323,8 @@ def make_note_tools(memory: MemoryStore):
             project_dir, created = vault.get_or_create_project_dir(name)
             if not created:
                 return (
-                    f"Project '{project_dir.name}' already exists. Use save_note(..., "
-                    f"project='{project_dir.name}') and search_notes(..., "
+                    f"Project '{project_dir.name}' already exists. Use save_note(title=..., "
+                    f"content=..., project='{project_dir.name}') and search_notes(query=..., "
                     f"project='{project_dir.name}') to work with it."
                 )
 
@@ -346,8 +346,9 @@ def make_note_tools(memory: MemoryStore):
 
         return (
             f"Created a new project folder '{project_dir.name}' with an overview note. "
-            f"Use save_note(..., project='{project_dir.name}') to add notes to it, and "
-            f"search_notes(..., project='{project_dir.name}') to search only within it."
+            f"Use save_note(title=..., content=..., project='{project_dir.name}') to add "
+            f"notes to it, and search_notes(query=..., project='{project_dir.name}') to "
+            f"search only within it."
         )
 
     @tool
