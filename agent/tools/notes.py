@@ -52,7 +52,8 @@ def _derive_title(content: str) -> str:
     call shape. Cheaper and more reliable than continuing to prompt-engineer
     around it."""
     first_line = next((line.strip() for line in content.splitlines() if line.strip()), "")
-    first_line = re.sub(r"^[#>*\-\s]+", "", first_line).strip()
+    first_line = re.sub(r"^[#>\-\s]+", "", first_line)  # leading heading/quote/bullet markers
+    first_line = re.sub(r"[*_`]+", "", first_line).strip()  # emphasis/code markers anywhere
     if not first_line:
         return "Untitled Note"
     return first_line[:60] + ("…" if len(first_line) > 60 else "")
