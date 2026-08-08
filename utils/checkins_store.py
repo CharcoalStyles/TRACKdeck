@@ -16,7 +16,7 @@ import sqlite3
 import time
 from typing import Optional
 
-DB_PATH = "checkins.db"
+DB_PATH = "data/checkins.db"
 
 
 def _connect() -> sqlite3.Connection:

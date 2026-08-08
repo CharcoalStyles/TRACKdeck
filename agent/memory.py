@@ -4,7 +4,7 @@ agent/memory.py
 Long-term semantic memory backed by Chroma (embedded mode).
 
 Chroma runs inside the FastAPI process — no separate service needed.
-Data is persisted to ./chroma_db/ on disk.
+Data is persisted to ./data/chroma_db/ on disk.
 
 Two collections:
   - "conversations"  : summaries of past exchanges, for contextual recall
@@ -41,7 +41,7 @@ def make_embedding_function():
 
 def make_chroma_client() -> chromadb.ClientAPI:
     return chromadb.PersistentClient(
-        path="./chroma_db",
+        path="./data/chroma_db",
         settings=Settings(anonymized_telemetry=False),
     )
 

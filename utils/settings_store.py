@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import sqlite3
 
-DB_PATH = "settings.db"
+DB_PATH = "data/settings.db"
 
 
 def _connect() -> sqlite3.Connection:

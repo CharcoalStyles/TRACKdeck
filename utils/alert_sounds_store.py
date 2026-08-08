@@ -16,8 +16,8 @@ from __future__ import annotations
 import os
 import sqlite3
 
-DB_PATH = "alert_sounds.db"
-ALERT_SOUNDS_DIR = "./alert_sounds"
+DB_PATH = "data/alert_sounds.db"
+ALERT_SOUNDS_DIR = "./data/alert_sounds"
 
 os.makedirs(ALERT_SOUNDS_DIR, exist_ok=True)
 

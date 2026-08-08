@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import os
 
-FLAG_PATH = "./onboarding_complete.flag"
+FLAG_PATH = "./data/onboarding_complete.flag"
 
 
 def is_onboarding_complete() -> bool:

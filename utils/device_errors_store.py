@@ -17,7 +17,7 @@ import sqlite3
 import uuid
 from typing import Optional
 
-DB_PATH = "device_errors.db"
+DB_PATH = "data/device_errors.db"
 
 
 def _connect() -> sqlite3.Connection:

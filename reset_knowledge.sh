@@ -5,12 +5,10 @@
 # notes search index, and short-term thread checkpoints. Run from the
 # project root.
 #
-# Handles both deployment modes, since the code uses relative paths that
-# resolve differently depending on where the process runs from:
-#   - Local (`uv run uvicorn ...`)  -> ./chroma_db, ./memory.db
-#   - Docker (`docker compose up`)  -> ./data/chroma_db, ./data/memory.db
-# Whichever of these actually exist on disk get wiped; the other is just
-# skipped.
+# Every store (settings.db, memory.db, chroma_db, ...) resolves its path
+# as "data/<name>" relative to cwd, so local (`uv run uvicorn ...`) and
+# Docker (`docker compose up`) both always land on the same ./data/
+# location — nothing candidate/deployment-mode-specific to search for.
 #
 # onboarding_complete.flag (see utils/onboarding_state.py) is wiped
 # alongside memory.db, not treated as durable state — it reflects whether
@@ -67,9 +65,9 @@ done
 
 # --- Locate whichever paths actually exist -----------------------------
 
-CHROMA_CANDIDATES=("./chroma_db" "./data/chroma_db")
-MEMORY_DB_CANDIDATES=("./memory.db" "./data/memory.db")
-ONBOARDING_FLAG_CANDIDATES=("./onboarding_complete.flag" "./data/onboarding_complete.flag")
+CHROMA_DIR="./data/chroma_db"
+MEMORY_DB="./data/memory.db"
+ONBOARDING_FLAG="./data/onboarding_complete.flag"
 RECEIVED_NOTES_DIR="./received_notes"
 
 # Vault path: respect VAULT_PATH from .env if present, else the coded
@@ -80,19 +78,13 @@ if [[ -f .env ]] && grep -q '^VAULT_PATH=' .env; then
 fi
 
 found_chroma=()
-for c in "${CHROMA_CANDIDATES[@]}"; do
-    [[ -d "$c" ]] && found_chroma+=("$c")
-done
+[[ -d "$CHROMA_DIR" ]] && found_chroma+=("$CHROMA_DIR")
 
 found_memory_db=()
-for m in "${MEMORY_DB_CANDIDATES[@]}"; do
-    [[ -f "$m" ]] && found_memory_db+=("$m")
-done
+[[ -f "$MEMORY_DB" ]] && found_memory_db+=("$MEMORY_DB")
 
 found_onboarding_flag=()
-for o in "${ONBOARDING_FLAG_CANDIDATES[@]}"; do
-    [[ -f "$o" ]] && found_onboarding_flag+=("$o")
-done
+[[ -f "$ONBOARDING_FLAG" ]] && found_onboarding_flag+=("$ONBOARDING_FLAG")
 
 # --- Report what will happen -------------------------------------------
 

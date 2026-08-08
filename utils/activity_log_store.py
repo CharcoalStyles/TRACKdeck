@@ -17,7 +17,7 @@ import sqlite3
 import time
 from typing import Optional
 
-DB_PATH = "activity_log.db"
+DB_PATH = "data/activity_log.db"
 
 
 def _connect() -> sqlite3.Connection:

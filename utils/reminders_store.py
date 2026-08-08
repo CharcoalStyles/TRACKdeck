@@ -19,7 +19,7 @@ import time
 import uuid
 from typing import Optional
 
-DB_PATH = "reminders.db"
+DB_PATH = "data/reminders.db"
 
 
 def _connect() -> sqlite3.Connection:

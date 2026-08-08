@@ -213,22 +213,8 @@ pyrightconfig.json
 
 # Custom rules (everything added below won't be overriden by 'Generate .gitignore File' if you use 'Update' option)
 
-chroma_db/
 received_notes/
-memory.db
-memory.db-shm
-memory.db-wal
-reminders.db
-reminders.db-shm
-reminders.db-wal
-checkins.db
-checkins.db-shm
-checkins.db-wal
-device_state.db
-device_state.db-shm
-device_state.db-wal
-activity_log.db
-activity_log.db-shm
-activity_log.db-wal
 .models/
+# Every store resolves its path under here ("data/<name>") for both
+# local dev and Docker — see main.py's lifespan and docker-compose.yml.
 data/

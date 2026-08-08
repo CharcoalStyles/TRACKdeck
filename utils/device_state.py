@@ -15,7 +15,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Optional
 
-DB_PATH = "device_state.db"
+DB_PATH = "data/device_state.db"
 
 
 def _connect() -> sqlite3.Connection:

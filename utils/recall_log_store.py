@@ -17,7 +17,7 @@ import json
 import sqlite3
 import time
 
-DB_PATH = "recall_log.db"
+DB_PATH = "data/recall_log.db"
 
 
 def _connect() -> sqlite3.Connection:
