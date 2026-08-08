@@ -22,17 +22,11 @@
       </p>
     </div>
 
-    <div id="detailContainer"></div>
     <div id="listContainer"></div>
   </main>
 
   <script type="module">
-    import { renderMarkdown } from '/static/js/markdown.js';
-    import { ChatWidget } from '/static/js/chat.js';
-    import {
-      listVaultNotes, getVaultNote, listProjectAttachments, uploadProjectAttachment,
-      getThreadMessages,
-    } from '/static/js/api.js';
+    import { listVaultNotes } from '/static/js/api.js';
     import { requireSession } from '/static/js/auth.js';
     import { renderNav } from '/static/js/nav.js';
 
@@ -40,10 +34,8 @@
 
     if (await requireSession()) {
       const listContainer = document.getElementById('listContainer');
-      const detailContainer = document.getElementById('detailContainer');
 
       let allNotes = [];
-      let chatWidget = null;
 
       function projectSummaries() {
         const byProject = new Map();
@@ -74,7 +66,9 @@
         meta.textContent = `${project.noteCount} note${project.noteCount === 1 ? '' : 's'}`;
         card.appendChild(meta);
 
-        card.addEventListener('click', () => openProject(project.name));
+        card.addEventListener('click', () => {
+          window.location.href = '/project/' + encodeURIComponent(project.name);
+        });
         return card;
       }
 
@@ -90,153 +84,6 @@
         }
         for (const project of projects) {
           listContainer.appendChild(renderProjectCard(project));
-        }
-      }
-
-      async function openProject(projectName) {
-        listContainer.replaceChildren();
-        detailContainer.replaceChildren();
-        const card = document.createElement('div');
-        card.className = 'card';
-        card.textContent = 'Loading...';
-        detailContainer.appendChild(card);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-
-        try {
-          const projectNotes = allNotes.filter((n) => n.project === projectName);
-          const fullNotes = await Promise.all(projectNotes.map((n) => getVaultNote(n.id)));
-          // Notes are wikilinked by title — build a case-insensitive lookup
-          // scoped to just this project, matching the "no linking out of
-          // the project" convention the notes themselves follow.
-          const titleToId = new Map(fullNotes.map((n) => [n.title.trim().toLowerCase(), n.id]));
-          const resolveWikilink = (title) => titleToId.get(title.trim().toLowerCase()) || null;
-
-          let attachments = [];
-          try {
-            attachments = (await listProjectAttachments(projectName)).attachments;
-          } catch (err) {
-            console.error('Failed to load attachments:', err);
-          }
-          const filenameToUrl = new Map(attachments.map((a) => [a.filename, a.url]));
-          const resolveImage = (name) => filenameToUrl.get(name) || null;
-
-          card.replaceChildren();
-
-          const closeBtn = document.createElement('button');
-          closeBtn.type = 'button';
-          closeBtn.className = 'secondary-btn';
-          closeBtn.textContent = 'Close';
-          closeBtn.style.float = 'right';
-          closeBtn.addEventListener('click', () => {
-            detailContainer.replaceChildren();
-            chatWidget = null;
-            renderList();
-          });
-          card.appendChild(closeBtn);
-
-          const heading = document.createElement('h2');
-          heading.textContent = projectName;
-          card.appendChild(heading);
-
-          // Overview note (same title as the project) first, then the rest.
-          const overview = fullNotes.find((n) => n.title.trim().toLowerCase() === projectName.trim().toLowerCase());
-          const rest = fullNotes.filter((n) => n !== overview).sort((a, b) => b.updated.localeCompare(a.updated));
-          for (const note of [overview, ...rest].filter(Boolean)) {
-            const noteHeading = document.createElement('h3');
-            noteHeading.textContent = note.title;
-            noteHeading.dataset.noteAnchor = note.id;
-            card.appendChild(noteHeading);
-
-            const noteBody = document.createElement('div');
-            noteBody.className = 'note-body';
-            noteBody.innerHTML = renderMarkdown(note.body, { resolveImage, resolveWikilink });
-            card.appendChild(noteBody);
-          }
-          card.querySelectorAll('.wikilink').forEach((link) => {
-            link.addEventListener('click', (e) => {
-              e.preventDefault();
-              const target = card.querySelector(`[data-note-anchor="${link.dataset.noteId}"]`);
-              if (target) target.scrollIntoView({ behavior: 'smooth' });
-            });
-          });
-
-          // Image gallery + upload
-          const galleryHeading = document.createElement('h3');
-          galleryHeading.textContent = 'Images';
-          card.appendChild(galleryHeading);
-
-          const gallery = document.createElement('div');
-          gallery.style.cssText = 'display: flex; flex-wrap: wrap; gap: 0.5rem;';
-          for (const attachment of attachments) {
-            const link = document.createElement('a');
-            link.href = attachment.url;
-            link.target = '_blank';
-            link.rel = 'noopener';
-            const img = document.createElement('img');
-            img.src = attachment.url;
-            img.alt = attachment.filename;
-            img.loading = 'lazy';
-            img.style.cssText = 'width: 120px; height: 120px; object-fit: cover; border-radius: 8px; border: 1px solid #2a2a2a;';
-            link.appendChild(img);
-            gallery.appendChild(link);
-          }
-          if (attachments.length === 0) {
-            const none = document.createElement('p');
-            none.className = 'description';
-            none.textContent = 'No images yet.';
-            gallery.appendChild(none);
-          }
-          card.appendChild(gallery);
-
-          const uploadRow = document.createElement('div');
-          uploadRow.className = 'field-row';
-          const uploadInput = document.createElement('input');
-          uploadInput.type = 'file';
-          uploadInput.accept = 'image/*';
-          uploadRow.appendChild(uploadInput);
-          card.appendChild(uploadRow);
-
-          uploadInput.addEventListener('change', async () => {
-            const file = uploadInput.files[0];
-            if (!file) return;
-            try {
-              await uploadProjectAttachment(projectName, file);
-              openProject(projectName);
-            } catch (err) {
-              console.error('Failed to upload image:', err);
-              alert('Failed to upload image.');
-            }
-          });
-
-          // Project chat — a fixed thread separate from the main Chat
-          // page's threads, scoped (server-side) to just this project's
-          // notes. See agent/graph.py's project_chat mode.
-          const chatHeading = document.createElement('h3');
-          chatHeading.textContent = 'Chat about this project';
-          card.appendChild(chatHeading);
-
-          const chatRoot = document.createElement('div');
-          chatRoot.className = 'chat-widget';
-          card.appendChild(chatRoot);
-
-          const threadId = `project_${projectName}`;
-          let messages = [];
-          try {
-            messages = await getThreadMessages(threadId);
-          } catch (err) {
-            console.error('Failed to load project chat history:', err);
-          }
-          chatWidget = new ChatWidget(chatRoot, {
-            threadId,
-            mode: 'project_chat',
-            greeting: messages.length === 0 ? `Ask anything about the "${projectName}" project.` : null,
-          });
-          if (messages.length > 0) {
-            chatWidget.loadHistory(messages);
-          }
-        } catch (error) {
-          console.error('Failed to load project:', error);
-          card.textContent = 'Failed to load project.';
         }
       }
 

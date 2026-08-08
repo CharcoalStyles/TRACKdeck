@@ -23,11 +23,16 @@ import { sendText } from './api.js';
 import { attachVoiceButton } from './voiceInput.js';
 
 export class ChatWidget {
-  constructor(rootEl, { threadId = null, mode = null, oneShot = false, greeting = null, onReply = null } = {}) {
+  constructor(rootEl, {
+    threadId = null, mode = null, oneShot = false, greeting = null, onReply = null,
+    onSendStart = null, agentRun = false,
+  } = {}) {
     this.threadId = threadId;
     this.mode = mode;
     this.oneShot = oneShot;
     this.onReply = onReply;
+    this.onSendStart = onSendStart;
+    this.agentRun = agentRun;
 
     rootEl.innerHTML = `
       <div class="chat-log"></div>
@@ -73,6 +78,13 @@ export class ChatWidget {
     }
   }
 
+  /** Toggled by a page-owned checkbox (e.g. projects' "Run as agent")
+   * between sends — read live in _handleSend() rather than fixed at
+   * construction time. */
+  setAgentRun(value) {
+    this.agentRun = value;
+  }
+
   /** Switch this widget to a different thread — used by the sidebar when
    * a different conversation is clicked, or a new one is started. */
   setThread(threadId, messages = []) {
@@ -110,12 +122,14 @@ export class ChatWidget {
     this.micBtn.disabled = true;
     this._appendMessage('user', text);
     const loadingBubble = this._appendLoading();
+    if (this.onSendStart) this.onSendStart();
 
     try {
       const data = await sendText(text, {
         threadId: this.threadId,
         oneShot: this.oneShot,
         mode: this.mode,
+        agentRun: this.agentRun,
       });
       loadingBubble.remove();
       this._appendMessage('assistant', data.reply);

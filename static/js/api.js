@@ -14,7 +14,7 @@
  * Send one turn to the agent.
  * @returns {Promise<{reply: string, thread_id: string, keyword: string}>}
  */
-export async function sendText(text, { threadId = null, oneShot = false, mode = null } = {}) {
+export async function sendText(text, { threadId = null, oneShot = false, mode = null, agentRun = false } = {}) {
   const response = await fetch('/text', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -23,8 +23,19 @@ export async function sendText(text, { threadId = null, oneShot = false, mode = 
       thread_id: threadId,
       one_shot: oneShot,
       mode,
+      agent_run: agentRun,
     }),
   });
+  if (!response.ok) throw new Error(`Server returned ${response.status}`);
+  return response.json();
+}
+
+/**
+ * Polled by a project page while a "Run as agent" send is in flight.
+ * @returns {Promise<{steps: Array<{type: string, tool: string|null, args?: object, content?: string}>, done: boolean}>}
+ */
+export async function getAgentActivity(threadId) {
+  const response = await fetch(`/agent-activity/${encodeURIComponent(threadId)}`);
   if (!response.ok) throw new Error(`Server returned ${response.status}`);
   return response.json();
 }

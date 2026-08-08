@@ -61,6 +61,12 @@ class AppState:
     default_last_activity: float = 0.0
     threads: dict[str, ThreadInfo] = {}
     keywords: dict[str, str] = {}  # keyword -> thread_id
+    # thread_id -> {"steps": [...], "done": bool} — populated live by a
+    # run_agent(agent_run=True) call so a project page can poll progress
+    # while it's still in flight. In-memory only: this is ephemeral,
+    # in-flight-request data, not worth persisting (a restart mid-run
+    # loses the request itself anyway).
+    agent_activity: dict[str, dict] = {}
 
 
 app_state = AppState()
@@ -224,7 +230,7 @@ async def get_thread_messages(thread_id: str) -> list[dict]:
 
 
 def _list_checkpoint_thread_ids_sync() -> list[dict]:
-    conn = sqlite3.connect("memory.db")
+    conn = sqlite3.connect("data/memory.db")
     try:
         rows = conn.execute(
             "SELECT thread_id, MAX(checkpoint_id) AS latest_checkpoint_id "
@@ -381,11 +387,62 @@ class AgentResult:
     keyword: str
 
 
+async def _run_graph_streamed(thread_id: str, cleaned_text: str, config: dict) -> dict:
+    """
+    Same graph execution as app_state.graph.ainvoke(), but consumed via
+    astream(stream_mode="updates") so each node's output (an LLM step's
+    tool calls, a tools step's results) can be recorded into
+    app_state.agent_activity as it happens rather than only once the
+    whole turn finishes — the polled feed behind a project page's "Run as
+    agent" Activity panel. Checkpointing/tool binding/loop behavior is
+    identical either way; astream just exposes it incrementally.
+    """
+    activity = {"steps": [], "done": False}
+    app_state.agent_activity[thread_id] = activity
+    try:
+        async for step in app_state.graph.astream(
+            {"messages": [{"role": "user", "content": cleaned_text}]},
+            config=config,
+            stream_mode="updates",
+        ):
+            for node_output in step.values():
+                for msg in node_output.get("messages", []):
+                    if getattr(msg, "tool_calls", None):
+                        for tool_call in msg.tool_calls:
+                            activity["steps"].append({
+                                "type": "calling",
+                                "tool": tool_call["name"],
+                                "args": tool_call["args"],
+                            })
+                    elif getattr(msg, "type", None) == "tool":
+                        content = _stringify_message_content(msg.content) or ""
+                        activity["steps"].append({
+                            "type": "result",
+                            "tool": getattr(msg, "name", None),
+                            "content": content[:300],
+                        })
+    finally:
+        # Guarantees a polling client sees done=True even if the graph
+        # raises, so the frontend poll loop can't spin forever — the
+        # exception itself still propagates normally after this.
+        activity["done"] = True
+
+    snapshot = await app_state.graph.aget_state(config)
+    return {"messages": snapshot.values.get("messages", [])}
+
+
+def get_agent_activity(thread_id: str) -> dict:
+    """Current (or last) agent_run progress for thread_id — always safe
+    to poll, even for a thread that never ran one."""
+    return app_state.agent_activity.get(thread_id, {"steps": [], "done": True})
+
+
 async def run_agent(
     text: str,
     thread_id: str | None = None,
     one_shot: bool = False,
     mode: str | None = None,
+    agent_run: bool = False,
 ) -> AgentResult:
     """
     Runs one turn through the agent graph and returns the reply, along
@@ -401,6 +458,11 @@ async def run_agent(
     "onboarding" (driving a getting-to-know-you interview) or
     "profile_chat" (answering/updating questions about the profile) —
     mutually exclusive with passive learning mode.
+
+    agent_run (only valid with mode="project_chat") reframes `text` as a
+    goal to complete autonomously (PROJECT_AGENT_ADDENDUM) and records
+    progress into app_state.agent_activity as it runs, pollable via
+    get_agent_activity — see _run_graph_streamed.
     """
     if app_state.graph is None:
         raise HTTPException(status_code=503, detail="Agent not initialised")
@@ -425,20 +487,26 @@ async def run_agent(
             keyword=keyword,
         )
 
-    config = {"configurable": {"thread_id": thread_id, "one_shot": one_shot, "mode": mode}}
+    config = {
+        "configurable": {
+            "thread_id": thread_id, "one_shot": one_shot, "mode": mode, "agent_run": agent_run,
+        }
+    }
 
     async with get_thread_lock(thread_id):
-        result = await app_state.graph.ainvoke(
-            {"messages": [{"role": "user", "content": cleaned_text}]},
-            config=config,
-        )
-
-    for msg in result["messages"]:
-        if hasattr(msg, "tool_calls") and msg.tool_calls:
-            for tool_call in msg.tool_calls:
-                logger.info("Tool called: %s(%s)", tool_call["name"], tool_call["args"])
-        elif msg.type == "tool":
-            logger.debug("Tool output: %s", msg.content)
+        if agent_run:
+            result = await _run_graph_streamed(thread_id, cleaned_text, config)
+        else:
+            result = await app_state.graph.ainvoke(
+                {"messages": [{"role": "user", "content": cleaned_text}]},
+                config=config,
+            )
+            for msg in result["messages"]:
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    for tool_call in msg.tool_calls:
+                        logger.info("Tool called: %s(%s)", tool_call["name"], tool_call["args"])
+                elif msg.type == "tool":
+                    logger.debug("Tool output: %s", msg.content)
 
     reply = next(
         (m.content for m in reversed(result["messages"]) if m.content),

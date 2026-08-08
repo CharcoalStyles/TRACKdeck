@@ -255,6 +255,34 @@ rather than answering from general knowledge or unrelated vault content.
 save_note still needs a title and content like any other note — passing project="{project}"
 scopes where it's filed, it doesn't replace those other required fields."""
 
+PROJECT_AGENT_ADDENDUM = """
+
+## Mode: Project Agent — {project}
+The user's message below is not a conversational question — it is a goal to complete
+autonomously for the "{project}" project, in this turn, with no back-and-forth. Do not
+ask a clarifying question and do not just describe what you would do: actually do the
+work with your tools (search_web, fetch_webpage, search_notes, read_note, save_note,
+and anything else available) and produce the real result the goal asks for.
+
+A PROJECT NOTES block below lists every note already in this project's folder — check
+it first so you build on what's there instead of duplicating it. Use search_notes /
+read_note (with project="{project}") for anything the excerpts don't cover, and
+search_web / fetch_webpage for anything not already in the vault.
+
+When the goal calls for documentation, write it: call save_note with a real title and
+complete content and project="{project}" so it's filed with this project's other notes.
+A reply that only summarizes what a note *would* say has not completed the goal — the
+note has to actually exist afterward.
+
+Stay scoped to "{project}". If part of the goal genuinely requires something outside
+it, say so in your final reply and do the rest anyway, rather than leaving it all
+undone over one unclear piece.
+
+This is the only turn you get for this goal, so keep working through every part of it
+before ending — don't stop partway and describe what's left. Once it's actually done,
+reply with a short summary of what you did and where to find it (e.g. the note
+title(s)), not the full note content again."""
+
 def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None):
     llm = ChatOpenAI(
         base_url=os.environ["LM_STUDIO_URL"],
@@ -286,6 +314,7 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
         thread_id = (config or {}).get("configurable", {}).get("thread_id")
         one_shot = (config or {}).get("configurable", {}).get("one_shot", False)
         mode = (config or {}).get("configurable", {}).get("mode")
+        agent_run = (config or {}).get("configurable", {}).get("agent_run", False)
 
         # Project name isn't a separate request field — it's derived from the
         # thread id itself, same "always resolves the same way" pattern as
@@ -339,6 +368,8 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
             addendum += ONBOARDING_ADDENDUM
         elif mode == "profile_chat":
             addendum += PROFILE_CHAT_ADDENDUM
+        elif project_slug and agent_run:
+            addendum += PROJECT_AGENT_ADDENDUM.format(project=project_slug)
         elif project_slug:
             addendum += PROJECT_CHAT_ADDENDUM.format(project=project_slug)
         elif settings.learning_mode:

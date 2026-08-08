@@ -63,6 +63,7 @@ from agent.memory import MemoryStore, make_chroma_client, make_embedding_functio
 from agent.runtime import (
     app_state,
     create_new_thread,
+    get_agent_activity,
     get_thread_debug,
     get_thread_messages,
     list_checkpoint_thread_ids,
@@ -130,6 +131,12 @@ from routes.alert_sounds import router as alert_sounds_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Every store below (settings.db, memory.db, chroma_db, ...) resolves
+    # its path as "data/<name>" relative to cwd — local dev and Docker
+    # alike (see docker-compose.yml's matching bind-mount targets) — so
+    # this has to exist before the very first one connects.
+    Path("data").mkdir(exist_ok=True)
+
     # Load settings.db before anything below reads a setting — in
     # particular before the daily_digest/bedtime_reminder jobs are
     # registered further down, since digest_trigger()/bedtime_trigger()
@@ -169,7 +176,7 @@ async def lifespan(app: FastAPI):
     if mcp_tools:
         logger.info("Loaded %d tool(s) from MCP servers: %s", len(mcp_tools), [t.name for t in mcp_tools])
 
-    async with AsyncSqliteSaver.from_conn_string("memory.db") as checkpointer:
+    async with AsyncSqliteSaver.from_conn_string("data/memory.db") as checkpointer:
         app_state.graph = build_graph(checkpointer, app_state.memory, mcp_tools=mcp_tools)
 
         # Dashboard sidebar (GET /threads) is sourced from app_state.threads/
@@ -328,6 +335,11 @@ class TextRequest(BaseModel):
     # which also pass a fixed thread_id ("onboarding"/"profile_chat") so
     # those conversations stay continuous across visits.
     mode: str | None = None
+    # Explicit per-message opt-in from the project page's "Run as agent"
+    # checkbox — reframes `text` as a goal to complete autonomously rather
+    # than a conversational reply. See PROJECT_AGENT_ADDENDUM in
+    # agent/graph.py and run_agent's agent_run param.
+    agent_run: bool = False
 
     @model_validator(mode="after")
     def _check_mode_one_shot_compatible(self):
@@ -336,6 +348,8 @@ class TextRequest(BaseModel):
         # in the system prompt if both are active for the same request.
         if self.mode == "onboarding" and self.one_shot:
             raise ValueError("one_shot cannot be combined with mode='onboarding'")
+        if self.agent_run and self.mode != "project_chat":
+            raise ValueError("agent_run can only be combined with mode='project_chat'")
         return self
 
 
@@ -358,6 +372,21 @@ async def serve_frontend(request: Request):
         with open(static_file_path, "r", encoding="utf-8") as f:
             return f.read()
     return HTMLResponse(content="<h1>static/index.html not found</h1>", status_code=404)
+
+
+@app.get("/project/{name}", response_class=HTMLResponse)
+async def serve_project_page(name: str, request: Request):
+    # Same idiom as GET / above — a path-parametrized page can't be served
+    # by the flat StaticFiles mount below, since that only maps literal
+    # file paths. `name` isn't used here; static/project.html's own JS
+    # reads it back out of window.location.pathname.
+    if not request.session.get("authenticated"):
+        return RedirectResponse(url="/static/login.html", status_code=302)
+    static_file_path = os.path.join("static", "project.html")
+    if os.path.exists(static_file_path):
+        with open(static_file_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return HTMLResponse(content="<h1>static/project.html not found</h1>", status_code=404)
 
 
 # Mount the rest of the static folder for any assets/css/js if you add them later
@@ -394,6 +423,7 @@ async def handle_text(
         thread_id=request.thread_id,
         one_shot=request.one_shot,
         mode=request.mode,
+        agent_run=request.agent_run,
     )
     return AssistantResponse(reply=result.reply, thread_id=result.thread_id, keyword=result.keyword)
 
@@ -1034,6 +1064,21 @@ async def debug_thread(
     isn't satisfiable without a reasoning-capable model swap.
     """
     return await get_thread_debug(thread_id)
+
+
+@app.get("/agent-activity/{thread_id}")
+async def agent_activity(
+    thread_id: str, _: Annotated[None, Depends(auth.require_session_or_token)]
+):
+    """
+    Polled by a project page while a "Run as agent" turn is in flight —
+    {"steps": [...], "done": bool}, populated live by run_agent's
+    agent_run path (agent/runtime.py's _run_graph_streamed). Returns
+    done=True with no steps for any thread that isn't currently running
+    one, so polling a thread that already finished (or never started) is
+    always a safe no-op rather than an error.
+    """
+    return get_agent_activity(thread_id)
 
 
 class DeviceTelemetry(BaseModel):
