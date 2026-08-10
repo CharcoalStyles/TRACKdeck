@@ -22,6 +22,9 @@
 #      write to them
 #   5. Sets PUID/PGID in .env.docker to this user, so the assistant and
 #      syncthing containers run as (and write files as) you instead of root
+#   6. Warns if anything under ./data or ./received_notes is owned by
+#      someone else — expected if this project ran the assistant
+#      container as root before it switched to PUID/PGID (see step 5)
 #
 # Usage:
 #   ./setup.sh
@@ -191,6 +194,19 @@ else
     echo "  who owns the directories just created above)..."
     grep -q '^PUID=' "$ENV_DOCKER" || printf 'PUID=%s\n' "$HOST_UID" >> "$ENV_DOCKER"
     grep -q '^PGID=' "$ENV_DOCKER" || printf 'PGID=%s\n' "$HOST_GID" >> "$ENV_DOCKER"
+fi
+
+echo
+echo "== 6. Ownership check (./data, ./received_notes) =="
+MISMATCHED="$(find "$DATA_DIR" ./received_notes ! -user "$HOST_UID" 2>/dev/null | head -1)"
+if [[ -n "$MISMATCHED" ]]; then
+    echo "  WARNING: found files not owned by you, e.g.: $MISMATCHED"
+    echo "  Likely left behind by a container that ran as root before this project"
+    echo "  switched to PUID:PGID. The assistant container can't write to these as"
+    echo "  the non-root user it runs as now. Fix with:"
+    echo "    sudo chown -R \$(id -u):\$(id -g) ./data ./received_notes"
+else
+    echo "  OK: everything under ./data and ./received_notes is already owned by you."
 fi
 
 echo
