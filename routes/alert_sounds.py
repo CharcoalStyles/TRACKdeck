@@ -31,6 +31,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 import auth
 from utils import alert_sounds_store
@@ -38,6 +39,19 @@ from utils import alert_sounds_store
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+class AlertSound(BaseModel):
+    id: str
+    display_name: str
+    duration_seconds: float
+    size_bytes: int
+    sha256: str
+    created_at: int
+
+
+class AlertSoundsResponse(BaseModel):
+    alert_sounds: list[AlertSound]
 
 # Sanity guard against an accidentally-huge upload (e.g. a whole song)
 # creating an outsized one-off WiFi window on the device — not a storage
@@ -79,7 +93,7 @@ def _sha256_of(path: str) -> str:
     return digest.hexdigest()
 
 
-@router.post("/alert-sounds")
+@router.post("/alert-sounds", response_model=AlertSound)
 async def upload_alert_sound(
     _: Annotated[None, Depends(auth.require_session_or_token)],
     file: UploadFile = File(...),
@@ -126,7 +140,7 @@ async def upload_alert_sound(
                 os.remove(path)
 
 
-@router.get("/alert-sounds")
+@router.get("/alert-sounds", response_model=AlertSoundsResponse)
 async def list_alert_sounds(_: Annotated[None, Depends(auth.require_session_or_token)]):
     return {"alert_sounds": alert_sounds_store.list_sounds()}
 

@@ -2,8 +2,11 @@
 # reset_knowledge.sh
 #
 # Wipes the assistant's accumulated memory: conversation recall, the
-# notes search index, and short-term thread checkpoints. Run from the
-# project root.
+# notes search index, and short-term thread checkpoints — then re-runs
+# setup.sh to recreate empty placeholders in their place (same file/
+# directory TYPE Docker's bind mounts expect — see setup.sh's own
+# comments). setup.sh never overwrites .env/.env.docker/.env.example, so
+# this never touches those either. Run from the project root.
 #
 # Every store (settings.db, memory.db, chroma_db, ...) resolves its path
 # as "data/<name>" relative to cwd, so local (`uv run uvicorn ...`) and
@@ -147,21 +150,16 @@ echo
 for c in "${found_chroma[@]}"; do
     echo "Wiping $c ..."
     rm -rf "${c:?}"
-    mkdir -p "$c"
 done
 
 for m in "${found_memory_db[@]}"; do
     echo "Wiping $m ..."
     rm -f "${m:?}"
-    touch "$m"   # keep it a FILE — a missing file can get bind-mounted as a directory instead
 done
 
 for o in "${found_onboarding_flag[@]}"; do
     echo "Clearing $o ..."
     rm -f "${o:?}"
-    touch "$o"   # empty = not complete (utils/onboarding_state.py checks content, not just
-                 # existence) — keep it a FILE, same reasoning as memory.db above, since it's
-                 # a docker-compose bind mount too
 done
 
 if [[ -d "$RECEIVED_NOTES_DIR" ]]; then
@@ -172,8 +170,14 @@ fi
 if $WIPE_VAULT; then
     echo "Wiping vault at $VAULT_DIR ..."
     rm -rf "${VAULT_DIR:?}"/*
-    mkdir -p "${VAULT_DIR}/Inbox"
 fi
+
+echo
+echo "Re-running setup.sh to recreate empty placeholders (chroma_db, memory.db,"
+echo "onboarding_complete.flag, vault/Inbox, ...) as this user — it never touches"
+echo ".env/.env.docker/.env.example, so nothing configured is affected."
+echo
+./setup.sh
 
 echo
 echo "Done. Start the app (or docker compose up) — everything reinitializes on startup."

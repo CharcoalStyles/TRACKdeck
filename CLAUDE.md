@@ -40,8 +40,15 @@ no lint tooling (ruff etc.) is configured, and most feature/integration code is 
 untested.
 
 ```bash
-# Local dev, full hot-reload
+# Local dev, full hot-reload — two processes: backend (terminal 1) +
+# frontend dev server (terminal 2). Browse http://localhost:5173, not
+# :8000 — Vite proxies API calls to the backend (frontend/vite.config.ts).
 uv run uvicorn main:app --reload
+cd frontend && npm run dev
+
+# Regenerate the frontend's typed API client from the backend's live
+# OpenAPI schema whenever a route/model changes (needs uvicorn running):
+cd frontend && npm run gen:types
 
 # Syncthing and the bundled CalDAV server (Radicale) need to run somewhere
 # stable even during dev (separate process from the app)
@@ -50,11 +57,11 @@ VAULT_PATH=./data/vault CALDAV_URL=http://localhost:5232/myuser/personal/ uv run
 
 # Full stack — CALDAV_USERNAME/PASSWORD/URL need to be set in .env.docker
 # first (see .env.example), same as any other secret; the caldav service
-# is otherwise fully self-provisioning, no setup_check.sh step needed for it.
+# is otherwise fully self-provisioning, no setup.sh step needed for it.
 # --env-file is required: it's how ASSISTANT_PORT/CALDAV_PORT/SYNCTHING_GUI_*
 # in .env.docker reach docker-compose.yml's port mappings (see that file's
 # header comment for why env_file: alone isn't enough).
-./setup_check.sh          # once, before first run — Piper model + SQLite DBs/chroma_db setup
+./setup.sh                # once, before first run — .env files, Piper model, SQLite DBs/chroma_db, PUID/PGID
 docker compose --env-file .env.docker up --build
 
 # Wipe accumulated memory (Chroma + thread checkpoints), vault preserved unless --vault passed
@@ -89,7 +96,7 @@ Easy to conflate, genuinely separate, each solving a different problem:
    exclusion of the `onboarding`/`profile_chat` threads plus the current thread itself as
    sources. What actually got recalled on each turn is logged (`recall_log.db`,
    `utils/recall_log_store.py`) and viewable per-thread on the dashboard's Thread Debug page
-   (`static/thread-debug.html`, `GET /debug/thread/{thread_id}`) — use it to tune the two
+   (`/admin/thread-debug`, `GET /debug/thread/{thread_id}`) — use it to tune the two
    settings from real distances rather than guessing.
 3. **Chroma `notes` collection** — a search index *over* the Obsidian vault, not a store of
    its own. The vault (markdown files on disk) is the source of truth; Chroma is
@@ -205,10 +212,17 @@ Learning mode and the two active modes are mutually exclusive per turn.
   (`"bedtime_reminder"`) at `settings.bedtime` (default 21:20) — a fixed, simple Gotify
   push, deliberately separate from the digest (different trigger, different purpose: the
   digest recaps the day, this just says it's time to wind down).
-- **Dashboard** (`static/`) — plain HTML/CSS/JS, no build step, no framework, native ES
-  modules (`static/js/api.js`, `static/js/chat.js`). Deliberate choice over a React/Vue app
-  given the added complexity for a single-user tool. `chat.js`'s `ChatWidget` is the shared
-  send/receive/loading/error logic plus `setThread()`.
+- **Dashboard** (`frontend/`) — a React + TypeScript SPA (Vite, Tailwind, TanStack Query,
+  react-router), served by FastAPI from its built `dist/` output (`main.py`'s `serve_spa`
+  catch-all, registered last). Replaced an earlier plain-HTML/vanilla-JS dashboard once the
+  Projects page's markdown/gallery/chat/polling composition outgrew hand-rolled DOM
+  manipulation. `frontend/src/api/schema.ts` is generated from the backend's live OpenAPI
+  schema (`npm run gen:types`), typing every API call via `openapi-fetch`
+  (`frontend/src/api/client.ts`). `frontend/src/hooks/useChat.ts` + `components/chat/
+  ChatWidget.tsx` are the shared send/receive/optimistic-bubble logic every chat-bearing
+  page reuses. `static/checkin.html` is the one page deliberately kept outside the SPA
+  (magic-link, zero-session, reached from a bare push notification) — still served via a
+  narrow `StaticFiles` mount at its original URL so already-delivered links never break.
 - **Device sync** — `POST /device/sync` (`jobs/device_sync.py`'s `build_sync_payload`) is
   what the ESP32-S3 calls on every deep-sleep wake, on a flat interval
   (`settings.device_poll_interval_seconds`, dashboard-editable). Returns a full 24h
@@ -265,14 +279,19 @@ routes/
   calendar_proxy.py            Reverse-proxies the bundled Radicale UI at /calendar
   alert_sounds.py                Upload/transcode/serve the alert-sound library
   transcribe.py                   Dashboard-only speech-to-text for chat input (no agent turn)
-static/                       Dashboard (index/voice/onboarding/profile/settings/
-                                thread-debug/activity-log/alert-sounds/checkin(s)/errors
-                                .html); login.html public, js/auth.js is the client-side
-                                session gate
+frontend/                     React SPA dashboard (see above) — src/routes/ one file per page,
+                                src/components/ shared pieces (ChatWidget, ObsidianMarkdown,
+                                RequireAuth, activity-log charts), src/api/ generated OpenAPI
+                                types + typed client
+static/                       checkin.html only — magic-link check-in page, deliberately
+                                outside the SPA, plus the two assets it depends on
+                                (css/theme.css, js/voiceInput.js)
 tests/                        pytest suite — thread resolution, keywords, datetime, vault sections
 docker-compose.yml            assistant + syncthing + caldav (Radicale) services, shared vault volume
-setup_check.sh                 Verifies/downloads Piper models, fixes DB bind-mount gotchas
-reset_knowledge.sh              Wipes memory/index/checkpoints; vault wipe gated behind --vault
+setup.sh                        Bootstrap + prerequisite checks: .env files, Piper model, DB
+                                  bind-mount gotchas, PUID/PGID — idempotent, safe to re-run
+reset_knowledge.sh              Wipes memory/index/checkpoints, then re-runs setup.sh; vault
+                                  wipe gated behind --vault
 ```
 
 ## Configuration
@@ -296,18 +315,23 @@ See `.env.example` for the full list. Notable ones:
   route, so `curl -H "auth: $API_TOKEN"` scripting keeps working alongside a logged-in
   browser.
 - **`DASHBOARD_PASSWORD`, `SESSION_SECRET_KEY`, `SESSION_COOKIE_SECURE`,
-  `SESSION_MAX_AGE_DAYS`** — the browser dashboard's real login system. `POST /login` checks
-  `DASHBOARD_PASSWORD` and sets a signed session cookie (Starlette's `SessionMiddleware`,
-  `SESSION_SECRET_KEY`); `auth.py`'s `require_session_or_token` gates every dashboard-facing
-  route on either that cookie or `API_TOKEN`. Kept as a separate secret from `API_TOKEN` on
-  purpose — rotating the ESP32's device token shouldn't force a dashboard relogin, and vice
-  versa. `static/login.html` is the login page (same no-nav, no-`api.js`/`chat.js`-import
-  pattern as `static/checkin.html`); `static/js/auth.js`'s `requireSession()` is the
-  client-side gate the other dashboard pages use, since they're served by the plain
-  `StaticFiles` mount and can't get a server-side redirect the way `GET /` can.
-  `SESSION_COOKIE_SECURE` should only flip to `true` once this app sits behind an
-  HTTPS-terminating reverse proxy/tunnel — see `.env.example`'s comment for why doing it
-  earlier silently breaks login (a `Secure` cookie is never sent over plain HTTP).
+  `SESSION_MAX_AGE_DAYS`, `SESSION_IDLE_TIMEOUT_DAYS`** — the browser dashboard's real login
+  system. `POST /login` checks `DASHBOARD_PASSWORD` and sets a signed session cookie
+  (Starlette's `SessionMiddleware`, `SESSION_SECRET_KEY`, `same_site="strict"`); `auth.py`'s
+  `require_session_or_token` gates every dashboard-facing route on either that cookie or
+  `API_TOKEN`. Kept as a separate secret from `API_TOKEN` on purpose — rotating the ESP32's
+  device token shouldn't force a dashboard relogin, and vice versa. `SESSION_MAX_AGE_DAYS`
+  is the cookie's absolute expiry from login; `SESSION_IDLE_TIMEOUT_DAYS` (default 7) is a
+  sliding idle expiry layered on top — `require_session_or_token` re-stamps a `last_seen`
+  timestamp in the session on every authenticated request, so a session in regular use never
+  hits it even though it's much shorter than the absolute max age. The frontend's
+  `RequireAuth` (`frontend/src/components/RequireAuth.tsx`) is the single client-side gate
+  every route uses, probing `GET /settings` the same way the old dashboard's per-page
+  `requireSession()` did. `static/checkin.html` is the one page with no session dependency
+  at all (magic-link, UUID-gated only). `SESSION_COOKIE_SECURE` should only flip to `true`
+  once this app sits behind an HTTPS-terminating reverse proxy/tunnel — see
+  `.env.example`'s comment for why doing it earlier silently breaks login (a `Secure` cookie
+  is never sent over plain HTTP).
 - **`LEARNING_MODE_DEFAULT`** — startup default for `agent/settings.py`'s `learning_mode`;
   live-changeable via `/settings`.
 - **Standing settings in `agent/settings.py`** — all live-editable via GET/POST `/settings`
@@ -333,7 +357,7 @@ See `.env.example` for the full list. Notable ones:
 
 - `routes/synth.py` raises at import time if Piper model files are missing, taking down the
   whole app since it's imported at module load (mitigated operationally by
-  `setup_check.sh`, not fixed in code).
+  `setup.sh`, not fixed in code).
 - Threads (and keyword addressability) are swept nightly regardless of origin — dashboard
   conversations have the same one-day lifespan as voice-command keywords. Deliberate
   ("threads are threads"), not an oversight.

@@ -27,6 +27,76 @@ from langchain_openai import OpenAIEmbeddings
 
 logger = logging.getLogger(__name__)
 
+# ponytail: char-based estimate, not a real token count (tiktoken_enabled=False means
+# we don't have the local embedder's actual tokenizer) — recalibrate if EMBEDDING_MODEL
+# changes context length or tokenizer.
+CHUNK_MAX_CHARS = 1000
+CHUNK_OVERLAP_CHARS = 120
+
+
+def chunk_text(text: str, max_chars: int = CHUNK_MAX_CHARS, overlap_chars: int = CHUNK_OVERLAP_CHARS) -> list[tuple[str, str]]:
+    """
+    Split text into chunks small enough for the embedder's context window.
+
+    Returns (embed_text, stored_text) pairs: stored_text is the clean, non-overlapping
+    slice (so joining every stored_text back together reproduces the original text
+    exactly); embed_text has the previous chunk's tail prepended, so the *vector* still
+    captures context across the boundary without duplicating stored text.
+    """
+    paragraphs = [p for p in text.split("\n\n") if p.strip()]
+    if not paragraphs:
+        return [(text, text)]
+
+    stored: list[str] = []
+    current = ""
+    for para in paragraphs:
+        candidate = f"{current}\n\n{para}" if current else para
+        if len(candidate) <= max_chars:
+            current = candidate
+            continue
+        if current:
+            stored.append(current)
+        if len(para) <= max_chars:
+            current = para
+        else:
+            for i in range(0, len(para), max_chars):
+                stored.append(para[i : i + max_chars])
+            current = ""
+    if current:
+        stored.append(current)
+    if not stored:
+        stored = [text]
+
+    pairs = [(stored[0], stored[0])]
+    for prev, cur in zip(stored, stored[1:]):
+        tail = prev[-overlap_chars:]
+        pairs.append((f"{tail}\n\n{cur}" if tail else cur, cur))
+    return pairs
+
+
+def _group_chunks(ids: list[str], documents: list[str], metadatas: list[dict], group_key: str) -> dict[str, dict]:
+    """
+    Group parallel (id, document, metadata) rows by metadata[group_key], sorted within
+    each group by "chunk_index". Falls back to a row's own id as the group key when
+    that metadata field is absent — pre-chunking legacy rows are each their own group
+    of one, so old data keeps working with no migration step.
+
+    Returns {group_key: {"metadata": first row's metadata, "text": joined stored_text}}.
+    """
+    groups: dict[str, list[tuple[int, str, dict]]] = {}
+    for doc_id, doc, meta in zip(ids, documents, metadatas):
+        key = meta.get(group_key) or doc_id
+        groups.setdefault(key, []).append((meta.get("chunk_index", 0), doc, meta))
+
+    result = {}
+    for key, rows in groups.items():
+        rows.sort(key=lambda r: r[0])
+        result[key] = {
+            "metadata": rows[0][2],
+            "text": "\n\n".join(doc for _, doc, _ in rows),
+        }
+    return result
+
 
 def make_embedding_function():
     """Returns a LangChain embedding wrapper pointed at LM Studio."""
@@ -70,22 +140,25 @@ class MemoryStore:
     # ------------------------------------------------------------------
 
     def save_conversation_summary(self, summary: str, thread_id: str = "main") -> None:
-        """Store a short summary of a completed conversation turn."""
+        """Store a short summary of a completed conversation turn, chunked so no
+        single embed call exceeds the embedder's context window."""
         # Clean the string and check if it's empty
         if not summary or not str(summary).strip():
             logger.warning("Attempted to save an empty summary for thread %s. Skipping embedding.", thread_id)
             return
 
-        doc_id = f"conv_{thread_id}_{int(time.time())}"
-        logger.debug("Saving conversation summary %s: %s", doc_id, summary)
+        summary_id = f"{thread_id}_{int(time.time())}"
+        logger.debug("Saving conversation summary %s: %s", summary_id, summary)
 
-        embedding = self._embed(summary)
-        self.conversations.add(
-            ids=[doc_id],
-            embeddings=[embedding],
-            documents=[summary],
-            metadatas=[{"thread_id": thread_id, "timestamp": int(time.time())}],
-        )
+        pairs = chunk_text(summary)
+        ids = [f"conv_{summary_id}::{i}" for i in range(len(pairs))]
+        embeddings = [self._embed(embed_text) for embed_text, _ in pairs]
+        documents = [stored_text for _, stored_text in pairs]
+        metadatas = [
+            {"thread_id": thread_id, "timestamp": int(time.time()), "summary_id": summary_id, "chunk_index": i}
+            for i in range(len(pairs))
+        ]
+        self.conversations.add(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)
 
     def search_conversations(
         self,
@@ -121,20 +194,27 @@ class MemoryStore:
             return []
 
         matches = []
-        for doc, meta, distance in zip(
-            results["documents"][0], results["metadatas"][0], results["distances"][0]
+        seen_summary_ids = set()
+        for doc_id, doc, meta, distance in zip(
+            results["ids"][0], results["documents"][0], results["metadatas"][0], results["distances"][0]
         ):
             if exclude_thread_ids and meta.get("thread_id") in exclude_thread_ids:
                 continue
             if max_distance is not None and distance > max_distance:
                 continue
+            summary_id = meta.get("summary_id") or doc_id
+            if summary_id in seen_summary_ids:
+                continue  # a later, worse-scoring chunk of a summary already matched
+            seen_summary_ids.add(summary_id)
             matches.append({
                 "document": doc,
                 "thread_id": meta.get("thread_id"),
                 "timestamp": meta.get("timestamp"),
                 "distance": distance,
             })
-        return matches[:n_results]
+            if len(matches) >= n_results:
+                break
+        return matches
 
     def get_conversations_between(
         self, start_ts: int, end_ts: int, exclude_thread_ids: set[str] | None = None
@@ -162,11 +242,14 @@ class MemoryStore:
                 ]
             },
         )
-        pairs = list(zip(results.get("documents", []), results.get("metadatas", [])))
+        groups = _group_chunks(
+            results.get("ids", []), results.get("documents", []), results.get("metadatas", []), "summary_id"
+        )
+        summaries = list(groups.values())
         if exclude_thread_ids:
-            pairs = [p for p in pairs if p[1].get("thread_id") not in exclude_thread_ids]
-        pairs.sort(key=lambda p: p[1].get("timestamp", 0))
-        return [doc for doc, _ in pairs]
+            summaries = [s for s in summaries if s["metadata"].get("thread_id") not in exclude_thread_ids]
+        summaries.sort(key=lambda s: s["metadata"].get("timestamp", 0))
+        return [s["text"] for s in summaries]
 
     def get_conversation_by_thread(self, thread_id: str) -> Optional[str]:
         """Most recent conversation summary for one specific thread. Used
@@ -177,11 +260,13 @@ class MemoryStore:
             return None
 
         results = self.conversations.get(where={"thread_id": thread_id})
-        pairs = list(zip(results.get("documents", []), results.get("metadatas", [])))
-        if not pairs:
+        groups = _group_chunks(
+            results.get("ids", []), results.get("documents", []), results.get("metadatas", []), "summary_id"
+        )
+        if not groups:
             return None
-        pairs.sort(key=lambda p: p[1].get("timestamp", 0))
-        return pairs[-1][0]
+        latest = max(groups.values(), key=lambda s: s["metadata"].get("timestamp", 0))
+        return latest["text"]
 
     # ------------------------------------------------------------------
     # Notes
@@ -203,22 +288,31 @@ class MemoryStore:
         """
         if not content or not str(content).strip():
             content = title or "Untitled"
-        # Embed the title together with the body, not just the body — a
+        self.delete_note(note_id)  # clear any existing chunks before re-adding
+        pairs = chunk_text(content)
+        ids = [f"{note_id}::{i}" for i in range(len(pairs))]
+        # Embed the title together with each chunk's body, not just the body — a
         # query that's really just the note's name (e.g. searching for a
         # note by something close to its title) should match reliably,
         # not only queries that happen to resemble the body's content.
-        embedding_text = f"{title}\n\n{content}" if title else content
-        embedding = self._embed(embedding_text)
-        self.notes.upsert(
-            ids=[note_id],
-            embeddings=[embedding],
-            documents=[content],
-            metadatas=[{"title": title, "path": path, "mtime": mtime, "project": project}],
-        )
+        embeddings = [
+            self._embed(f"{title}\n\n{embed_text}" if title else embed_text) for embed_text, _ in pairs
+        ]
+        documents = [stored_text for _, stored_text in pairs]
+        metadatas = [
+            {"note_id": note_id, "title": title, "path": path, "mtime": mtime, "project": project, "chunk_index": i}
+            for i in range(len(pairs))
+        ]
+        self.notes.add(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)
 
     def delete_note(self, note_id: str) -> None:
         try:
-            self.notes.delete(ids=[note_id])
+            results = self.notes.get(where={"note_id": note_id})
+            ids = results.get("ids", [])
+            if ids:
+                self.notes.delete(ids=ids)
+            else:
+                self.notes.delete(ids=[note_id])  # legacy pre-chunking entry, no note_id metadata
         except Exception:
             pass  # already gone / never indexed — fine either way
 
@@ -231,16 +325,16 @@ class MemoryStore:
             self.notes.delete(ids=ids)
 
     def list_indexed_notes(self) -> dict:
-        """id -> metadata for every indexed note. Used by reconciliation to
-        find orphaned entries (file deleted) and stale ones (file changed
-        since last indexed)."""
+        """note_id -> metadata for every indexed note (one entry per note, not
+        per chunk). Used by reconciliation to find orphaned entries (file
+        deleted) and stale ones (file changed since last indexed)."""
         if self.notes.count() == 0:
             return {}
         results = self.notes.get()
-        return {
-            note_id: meta
-            for note_id, meta in zip(results.get("ids", []), results.get("metadatas", []))
-        }
+        groups = _group_chunks(
+            results.get("ids", []), results.get("documents", []), results.get("metadatas", []), "note_id"
+        )
+        return {note_id: g["metadata"] for note_id, g in groups.items()}
 
     def search_notes(self, query: str, n_results: int = 5, project: str | None = None) -> list[dict]:
         """
@@ -250,25 +344,34 @@ class MemoryStore:
 
         `project`, if given, scopes the search to that project's notes only
         (via a Chroma metadata `where` filter) instead of the whole vault.
+
+        A note may be indexed as several chunks; over-fetches past n_results
+        (same trick as search_conversations) so the results can be deduped
+        back down to distinct notes, keeping each note's best-matching chunk.
         """
         if self.notes.count() == 0:
             return []
         embedding = self._embed(query)
-        query_kwargs = {
-            "query_embeddings": [embedding],
-            "n_results": min(n_results, self.notes.count()),
-        }
+        fetch_n = min(n_results * 4, self.notes.count())
+        query_kwargs = {"query_embeddings": [embedding], "n_results": fetch_n}
         if project:
             query_kwargs["where"] = {"project": project}
         results = self.notes.query(**query_kwargs)
         output = []
-        for note_id, doc, meta in zip(
+        seen_note_ids = set()
+        for chunk_id, doc, meta in zip(
             results["ids"][0], results["documents"][0], results["metadatas"][0]
         ):
+            note_id = meta.get("note_id") or chunk_id
+            if note_id in seen_note_ids:
+                continue
+            seen_note_ids.add(note_id)
             excerpt = doc.strip().replace("\n", " ")
             if len(excerpt) > 400:
                 excerpt = excerpt[:400].rsplit(" ", 1)[0] + "…"
             output.append({"id": note_id, "title": meta.get("title", "Untitled"), "excerpt": excerpt})
+            if len(output) >= n_results:
+                break
         return output
 
     # ------------------------------------------------------------------

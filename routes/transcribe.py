@@ -3,6 +3,7 @@ import time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from pydantic import BaseModel
 
 import auth
 from voice import UPLOAD_DIR
@@ -11,7 +12,11 @@ from utils.transcription import transcribe_audio
 router = APIRouter()
 
 
-@router.post("/transcribe")
+class TranscribeResponse(BaseModel):
+    transcription: str
+
+
+@router.post("/transcribe", response_model=TranscribeResponse)
 async def transcribe(
     _: Annotated[None, Depends(auth.require_session_or_token)],
     file: UploadFile = File(...),

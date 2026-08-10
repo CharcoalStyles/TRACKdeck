@@ -217,9 +217,13 @@ async def get_thread_messages(thread_id: str) -> list[dict]:
 
     history = []
     for m in messages:
+        if getattr(m, "tool_calls", None):
+            continue  # AI requested a tool call, not a reply to show
         content = getattr(m, "content", None)
+        if isinstance(content, str):
+            content = content.strip()
         if not content:
-            continue  # tool-call-only AI messages, empty messages
+            continue  # empty/whitespace-only messages
         msg_type = getattr(m, "type", None)
         if msg_type == "human":
             history.append({"role": "user", "content": content})

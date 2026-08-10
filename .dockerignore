@@ -21,6 +21,13 @@ __pycache__/
 **/__pycache__/
 *.py[cod]
 
+# Same reasoning as .venv/ above: the frontend-build stage runs its own
+# `npm ci` for the container, so the host's own node_modules (and any
+# locally-built dist/) shouldn't ride along in `COPY . .` — dist/ gets
+# repopulated correctly by the final stage's COPY --from=frontend-build.
+frontend/node_modules/
+frontend/dist/
+
 .env
 .env.docker
 

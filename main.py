@@ -18,7 +18,7 @@ from apscheduler.triggers.date import DateTrigger
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, model_validator
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -306,9 +306,44 @@ app.add_middleware(
     secret_key=os.environ["SESSION_SECRET_KEY"],
     session_cookie="TRACKdeck_session",
     max_age=int(os.environ.get("SESSION_MAX_AGE_DAYS", "30")) * 24 * 60 * 60,
-    same_site="lax",
+    # "strict" (not "lax") since this is a single-user dashboard with no
+    # legitimate cross-site-linking-in use case — the cookie mechanism's
+    # strongest built-in CSRF mitigation, at the cost of one click's worth
+    # of re-auth flash if you follow a link to the dashboard from another
+    # origin while already logged in (the session cookie doesn't ride
+    # along on that first cross-site navigation; a same-origin request
+    # right after re-attaches it normally).
+    same_site="strict",
     https_only=os.environ.get("SESSION_COOKIE_SECURE", "false").strip().lower() in ("1", "true", "yes", "on"),
 )
+
+
+# A handful of SPA client routes happen to share an exact path with an
+# existing JSON API route — GET /settings, /reminders, /projects,
+# /activity-log all serve data at that path *and* are top-level React
+# Router routes. A plain top-level browser navigation to one of these
+# (typed in the address bar, a bookmark, a page refresh) needs the SPA
+# shell, not the JSON the same path returns to a fetch() call — and
+# since both are plain GETs, method alone can't disambiguate them.
+# Browsers reliably mark a real navigation via `Accept: text/html`,
+# which fetch() doesn't send (it defaults to `*/*`), so branch on that
+# instead of renaming either side's routes — this runs as middleware
+# (before routing) rather than per-route, since it needs to win against
+# routes that would otherwise match first by registration order.
+_SPA_PASSTHROUGH_PREFIXES = ("/static", "/assets", "/docs", "/redoc", "/openapi.json")
+
+
+@app.middleware("http")
+async def prefer_spa_for_html_navigation(request: Request, call_next):
+    if (
+        request.method == "GET"
+        and "text/html" in request.headers.get("accept", "")
+        and not request.url.path.startswith(_SPA_PASSTHROUGH_PREFIXES)
+    ):
+        return FileResponse("frontend/dist/index.html")
+    return await call_next(request)
+
+
 app.include_router(voice_router)  # /voice
 app.include_router(synth_router)  # /synthesize
 app.include_router(transcribe_router)  # /transcribe
@@ -359,37 +394,177 @@ class AssistantResponse(BaseModel):
     keyword: str
 
 
+class ThreadSummary(BaseModel):
+    thread_id: str
+    keyword: str
+    last_activity: float
+
+
+class NewThreadResponse(BaseModel):
+    thread_id: str
+    keyword: str
+
+
+class ThreadMessage(BaseModel):
+    role: str
+    content: str
+
+
+class ThreadMessagesResponse(BaseModel):
+    messages: list[ThreadMessage]
+
+
+class NoteSummary(BaseModel):
+    id: str
+    title: str
+    tags: list[str]
+    project: str | None
+    source: str
+    created: str
+    updated: str
+    excerpt: str
+
+
+class VaultNotesResponse(BaseModel):
+    notes: list[NoteSummary]
+
+
+class NoteDetail(BaseModel):
+    id: str
+    title: str
+    tags: list[str]
+    aliases: list[str]
+    project: str | None
+    source: str
+    created: str
+    updated: str
+    body: str
+
+
+class ProjectAttachment(BaseModel):
+    filename: str
+    url: str
+
+
+class ProjectAttachmentsResponse(BaseModel):
+    attachments: list[ProjectAttachment]
+
+
+class ProjectsResponse(BaseModel):
+    projects: list[str]
+
+
+class AgentActivityStep(BaseModel):
+    type: str
+    tool: str | None = None
+    args: dict | None = None
+    content: str | None = None
+
+
+class AgentActivityResponse(BaseModel):
+    steps: list[AgentActivityStep]
+    done: bool
+
+
+class CheckinRecord(BaseModel):
+    id: str
+    category: str
+    prompt_text: str
+    status: str
+    scheduled_at: int
+    fired_at: int | None
+    resolved_at: int | None
+    reply: str | None
+
+
+class CheckinsTodayResponse(BaseModel):
+    checkins: list[CheckinRecord]
+
+
+class ActivityLogEntry(BaseModel):
+    id: str
+    occurred_at: int
+    activity_type: str
+    subject: str
+    duration: str | None
+    mood_energy: int | None
+    reflection: str | None
+    created_at: int
+
+
+class ActivityLogResponse(BaseModel):
+    entries: list[ActivityLogEntry]
+
+
+class MoodByDay(BaseModel):
+    date: str
+    avg_mood: float
+    count: int
+
+
+class DurationByType(BaseModel):
+    activity_type: str
+    total_minutes: float
+    entry_count: int
+
+
+class ActivityLogSummaryResponse(BaseModel):
+    mood_by_day: list[MoodByDay]
+    duration_by_type: list[DurationByType]
+
+
+class Reminder(BaseModel):
+    id: str
+    message: str
+    due_at: int
+    status: str
+    created_at: int
+    event_uid: str | None
+
+
+class RemindersResponse(BaseModel):
+    reminders: list[Reminder]
+
+
+class DeviceError(BaseModel):
+    id: str
+    error_type: str
+    message: str | None
+    firmware_version: str | None
+    reset_reason: str | None
+    wake_reason: str | None
+    battery_mv: int | None
+    battery_pct: int | None
+    rssi_dbm: int | None
+    free_internal_heap_bytes: int | None
+    alerted: bool
+    created_at: int
+
+
+class DeviceErrorsResponse(BaseModel):
+    errors: list[DeviceError]
+
+
+class DebugThreadEntry(BaseModel):
+    thread_id: str
+    latest_checkpoint_id: str
+
+
+class DebugThreadsResponse(BaseModel):
+    threads: list[DebugThreadEntry]
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
-@app.get("/", response_class=HTMLResponse)
-async def serve_frontend(request: Request):
-    if not request.session.get("authenticated"):
-        return RedirectResponse(url="/static/login.html", status_code=302)
-    static_file_path = os.path.join("static", "index.html")
-    if os.path.exists(static_file_path):
-        with open(static_file_path, "r", encoding="utf-8") as f:
-            return f.read()
-    return HTMLResponse(content="<h1>static/index.html not found</h1>", status_code=404)
-
-
-@app.get("/project/{name}", response_class=HTMLResponse)
-async def serve_project_page(name: str, request: Request):
-    # Same idiom as GET / above — a path-parametrized page can't be served
-    # by the flat StaticFiles mount below, since that only maps literal
-    # file paths. `name` isn't used here; static/project.html's own JS
-    # reads it back out of window.location.pathname.
-    if not request.session.get("authenticated"):
-        return RedirectResponse(url="/static/login.html", status_code=302)
-    static_file_path = os.path.join("static", "project.html")
-    if os.path.exists(static_file_path):
-        with open(static_file_path, "r", encoding="utf-8") as f:
-            return f.read()
-    return HTMLResponse(content="<h1>static/project.html not found</h1>", status_code=404)
-
-
-# Mount the rest of the static folder for any assets/css/js if you add them later
+# static/ now holds only checkin.html and the two assets it depends on
+# (css/theme.css, js/voiceInput.js) — the magic-link check-in page is
+# deliberately excluded from the React SPA (see frontend/ and the plan's
+# §4/§7: it's reached from a bare Gotify push link, possibly in a bad
+# moment, so it stays minimal/dependency-free rather than pulling in
+# React/Query/Router). Keeping its exact URL means already-delivered
+# push notifications never break.
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
@@ -405,6 +580,7 @@ async def login(body: LoginRequest, request: Request):
         auth.record_failed_login(client_ip)
         raise HTTPException(status_code=401, detail="Incorrect password")
     request.session["authenticated"] = True
+    request.session["last_seen"] = time.time()
     return {"status": "ok"}
 
 
@@ -428,7 +604,7 @@ async def handle_text(
     return AssistantResponse(reply=result.reply, thread_id=result.thread_id, keyword=result.keyword)
 
 
-@app.get("/threads")
+@app.get("/threads", response_model=list[ThreadSummary])
 async def get_threads(_: Annotated[None, Depends(auth.require_session_or_token)]):
     """Sidebar thread list, most recently active first. Threads are
     threads regardless of whether they started from a voice command or
@@ -439,7 +615,7 @@ async def get_threads(_: Annotated[None, Depends(auth.require_session_or_token)]
     ]
 
 
-@app.post("/threads/new")
+@app.post("/threads/new", response_model=NewThreadResponse)
 async def new_thread(_: Annotated[None, Depends(auth.require_session_or_token)]):
     """Explicitly mint a new thread before any message is sent, so a
     fresh 'New Chat' shows up in the sidebar immediately."""
@@ -447,14 +623,14 @@ async def new_thread(_: Annotated[None, Depends(auth.require_session_or_token)])
     return {"thread_id": info.thread_id, "keyword": info.keyword}
 
 
-@app.get("/threads/{thread_id}/messages")
+@app.get("/threads/{thread_id}/messages", response_model=ThreadMessagesResponse)
 async def thread_messages(
     thread_id: str, _: Annotated[None, Depends(auth.require_session_or_token)]
 ):
     return {"messages": await get_thread_messages(thread_id)}
 
 
-@app.get("/checkins/today")
+@app.get("/checkins/today", response_model=CheckinsTodayResponse)
 async def todays_checkins(_: Annotated[None, Depends(auth.require_session_or_token)]):
     """Today's check-in activity — answered, skipped, and expired — for
     the dashboard's Check-Ins page. 'Today' is the user's local calendar
@@ -483,7 +659,7 @@ def _activity_log_range(days: int) -> tuple[int, int]:
     return start_ts, end_ts
 
 
-@app.get("/activity-log")
+@app.get("/activity-log", response_model=ActivityLogResponse)
 async def list_activity_log(
     _: Annotated[None, Depends(auth.require_session_or_token)],
     days: int = 30,
@@ -500,7 +676,7 @@ async def list_activity_log(
     return {"entries": entries}
 
 
-@app.get("/activity-log/summary")
+@app.get("/activity-log/summary", response_model=ActivityLogSummaryResponse)
 async def activity_log_summary(
     _: Annotated[None, Depends(auth.require_session_or_token)],
     days: int = 30,
@@ -516,7 +692,7 @@ async def activity_log_summary(
     return activity_log_jobs.summarize(entries)
 
 
-@app.get("/vault/notes")
+@app.get("/vault/notes", response_model=VaultNotesResponse)
 async def list_vault_notes_route(_: Annotated[None, Depends(auth.require_session_or_token)]):
     """Every processed note in the vault (excludes Inbox — unprocessed
     scratch, not "what's accumulated"), most recently updated first.
@@ -528,7 +704,16 @@ async def list_vault_notes_route(_: Annotated[None, Depends(auth.require_session
     return {"notes": notes}
 
 
-@app.get("/vault/notes/{note_id}")
+@app.get("/projects", response_model=ProjectsResponse)
+async def list_projects_route(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """Project names, derived from vault-root subfolders (see
+    utils.vault.list_project_dirs) — used by the Projects page instead of
+    fetching every note and grouping by its project field client-side."""
+    project_dirs = await asyncio.to_thread(vault.list_project_dirs)
+    return {"projects": [p.name for p in project_dirs]}
+
+
+@app.get("/vault/notes/{note_id}", response_model=NoteDetail)
 async def get_vault_note_route(
     note_id: str, _: Annotated[None, Depends(auth.require_session_or_token)]
 ):
@@ -560,7 +745,7 @@ def _resolve_project_or_404(project: str) -> Path:
     return project_dir
 
 
-@app.get("/vault/projects/{project}/attachments")
+@app.get("/vault/projects/{project}/attachments", response_model=ProjectAttachmentsResponse)
 async def list_project_attachments_route(
     project: str, _: Annotated[None, Depends(auth.require_session_or_token)]
 ):
@@ -580,7 +765,7 @@ async def list_project_attachments_route(
     }
 
 
-@app.post("/vault/projects/{project}/attachments")
+@app.post("/vault/projects/{project}/attachments", response_model=ProjectAttachment)
 async def upload_project_attachment_route(
     project: str,
     file: Annotated[UploadFile, File()],
@@ -716,6 +901,26 @@ class SettingsUpdate(BaseModel):
         return self
 
 
+class SettingsResponse(BaseModel):
+    learning_mode: bool
+    default_location: str
+    timezone: str
+    digest_time: str
+    calendar_sync_interval_minutes: int
+    wake_time: str
+    latest_checkin_time: str
+    device_poll_interval_seconds: int
+    digest_email_to: str
+    public_base_url: str
+    gotify_url: str
+    # Never the raw token — see _current_settings()'s comment.
+    gotify_token_set: bool
+    mcp_servers: str
+    recall_max_distance: float
+    recall_recency_days: int
+    onboarding_complete: bool
+
+
 def _current_settings() -> dict:
     return {
         "learning_mode": settings.learning_mode,
@@ -743,14 +948,14 @@ def _current_settings() -> dict:
     }
 
 
-@app.get("/settings")
+@app.get("/settings", response_model=SettingsResponse)
 async def get_settings(_: Annotated[None, Depends(auth.require_session_or_token)]):
     """Current standing app-level toggles (as opposed to per-request
     options like one_shot)."""
     return _current_settings()
 
 
-@app.post("/settings")
+@app.post("/settings", response_model=SettingsResponse)
 async def update_settings(
     update: SettingsUpdate, _: Annotated[None, Depends(auth.require_session_or_token)]
 ):
@@ -955,13 +1160,13 @@ class ReminderUpdate(BaseModel):
     due_at: str | None = None  # local datetime string, e.g. "2026-08-08T09:00"
 
 
-@app.get("/reminders")
+@app.get("/reminders", response_model=RemindersResponse)
 async def list_reminders_route(_: Annotated[None, Depends(auth.require_session_or_token)]):
     """Pending reminders, soonest first — backs the dashboard's To-Dos page."""
     return {"reminders": await asyncio.to_thread(reminders_store.list_pending)}
 
 
-@app.patch("/reminders/{reminder_id}")
+@app.patch("/reminders/{reminder_id}", response_model=Reminder)
 async def update_reminder_route(
     reminder_id: str, update: ReminderUpdate, _: Annotated[None, Depends(auth.require_session_or_token)]
 ):
@@ -1035,7 +1240,7 @@ async def get_device_state(_: Annotated[None, Depends(auth.require_session_or_to
     return state or {}
 
 
-@app.get("/debug/threads")
+@app.get("/debug/threads", response_model=DebugThreadsResponse)
 async def debug_list_threads(_: Annotated[None, Depends(auth.require_session_or_token)]):
     """
     Every thread_id that has ever run a turn through the graph, straight
@@ -1066,7 +1271,7 @@ async def debug_thread(
     return await get_thread_debug(thread_id)
 
 
-@app.get("/agent-activity/{thread_id}")
+@app.get("/agent-activity/{thread_id}", response_model=AgentActivityResponse)
 async def agent_activity(
     thread_id: str, _: Annotated[None, Depends(auth.require_session_or_token)]
 ):
@@ -1199,7 +1404,7 @@ async def device_error(
     return {"status": "sent" if sent else "suppressed"}
 
 
-@app.get("/device/errors")
+@app.get("/device/errors", response_model=DeviceErrorsResponse)
 async def list_device_errors(_: Annotated[None, Depends(auth.require_session_or_token)]):
     """
     History of device-reported errors (POST /device/error above), most
@@ -1286,6 +1491,26 @@ async def reply_checkin(checkin_id: str, request: CheckinReplyRequest):
     if result is None:
         raise HTTPException(status_code=409, detail="Check-in is no longer awaiting a reply")
     return {"reply": result.reply}
+
+
+# ---------------------------------------------------------------------------
+# React SPA (frontend/) — registered last so Starlette's registration-order
+# route matching never lets this shadow a real API route above. Vite emits
+# hashed assets under dist/assets/, which can't collide with an API path;
+# every other unmatched GET (client-side routes like /vault, /settings,
+# /projects/foo) falls through to index.html and React Router takes over
+# from there. This replaces the old GET "/" / GET "/project/{name}"
+# routes' server-side session-gated HTML serving — the SPA's RequireAuth
+# guard (frontend/src/components/RequireAuth.tsx) does that client-side
+# now, uniformly with every other route instead of just these two.
+# ---------------------------------------------------------------------------
+
+app.mount("/assets", StaticFiles(directory="frontend/dist/assets"), name="spa-assets")
+
+
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    return FileResponse("frontend/dist/index.html")
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens ported from static/css/theme.css — same dark/teal look,
+ * expressed as Tailwind v4 theme variables instead of repeated hex
+ * literals. One-off shades from the original stylesheet that don't
+ * recur enough to deserve a token can still be reached via Tailwind's
+ * arbitrary-value syntax, e.g. bg-[#1a1a1a].
+ */
+@theme {
+  --color-base: #121212;
+  --color-header: #171717;
+  --color-card: #1e1e1e;
+  --color-card-alt: #252525;
+  --color-border: #333333;
+  --color-border-strong: #444444;
+
+  --color-accent: #00adb5;
+  --color-accent-hover: #00c9d4;
+  --color-accent-bright: #00f5ff;
+
+  --color-text-primary: #e0e0e0;
+  --color-text-muted: #888888;
+  --color-text-faint: #666666;
+
+  --color-danger: #ff6b6b;
+  --color-danger-hover: #ff4141;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-base);
+  color: var(--color-text-primary);
+}

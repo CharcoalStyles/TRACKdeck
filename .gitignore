@@ -218,3 +218,7 @@ received_notes/
 # Every store resolves its path under here ("data/<name>") for both
 # local dev and Docker — see main.py's lifespan and docker-compose.yml.
 data/
+
+# Python patch's blanket "lib/" rule above also matches frontend/src/lib —
+# carve it back out.
+!frontend/src/lib/

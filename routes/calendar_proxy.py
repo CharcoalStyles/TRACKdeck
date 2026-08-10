@@ -79,7 +79,6 @@ async def calendar_redirect(_: Annotated[None, Depends(auth.require_session_or_t
     return RedirectResponse(url=f"{_MOUNT_PREFIX}/")
 
 
-@router.api_route("/calendar/{path:path}", methods=_METHODS)
 async def proxy_calendar(
     path: str,
     request: Request,
@@ -117,4 +116,18 @@ async def proxy_calendar(
         content=upstream_response.content,
         status_code=upstream_response.status_code,
         headers=response_headers,
+    )
+
+
+# Registered per-method (rather than one api_route(methods=_METHODS) call)
+# so each gets a distinct operation_id — FastAPI's default id generation is
+# name+path only, not method, so a single multi-method decorator produced
+# the same operation_id 16 times over, which broke OpenAPI-derived tooling
+# (e.g. openapi-typescript) even though the routes themselves worked fine.
+for _method in _METHODS:
+    router.add_api_route(
+        "/calendar/{path:path}",
+        proxy_calendar,
+        methods=[_method],
+        operation_id=f"proxy_calendar_{_method.lower()}",
     )

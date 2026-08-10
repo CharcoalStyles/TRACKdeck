@@ -350,32 +350,31 @@ demand for testing.
 
 ### Dashboard
 
-`static/`, plain HTML/CSS/JS — no build step, no bundler, no framework. Shared code via
-native ES modules (`static/js/api.js`, `static/js/chat.js`, `static/js/nav.js`) imported
-directly by `<script type="module">`. This was a deliberate choice over a React/Vue app in
-its own container: the actual problem was one HTML file getting unwieldy, not a need for
-component state management, for a tool with exactly one user.
+`frontend/` — a React + TypeScript SPA (Vite, Tailwind CSS, TanStack Query, react-router),
+served by FastAPI from its built `dist/` output (`main.py`'s `serve_spa` catch-all route,
+registered last so it never shadows a real API route). Replaced an earlier plain
+HTML/CSS/vanilla-JS dashboard once the Projects page's markdown/gallery/chat/polling
+composition outgrew what hand-rolled DOM manipulation could comfortably carry.
 
-The header/nav is rendered by `nav.js`'s `renderNav(activePage)` rather than duplicated in
-each page's HTML — `Chat` and `Profile` (the agent-facing pages) sit as direct top-level
-links; `Settings`/`Testing`/`Check-Ins`/`Alert Sounds`/`Errors`/`Calendar` (config/debug
-surfaces with no LLM involvement) collapse into an `Admin` dropdown via a native
-`<details>/<summary>` element, no JS click-handling needed since every item is a full page
-navigation.
+- **Typed API client** — `frontend/src/api/schema.ts` is generated from the backend's own
+  live OpenAPI schema (`npm run gen:types` in `frontend/`, needs a local backend running);
+  `frontend/src/api/client.ts` wraps it with `openapi-fetch` so every call is typed against
+  the real request/response models, not hand-transcribed.
+- **Auth** — one `RequireAuth` route guard (`frontend/src/components/RequireAuth.tsx`)
+  wraps every authenticated route, probing `GET /settings` the same way the old dashboard's
+  `requireSession()` did — no dedicated "am I logged in" endpoint.
+- **`static/checkin.html`** — the one page deliberately *not* part of the SPA. Reached from
+  a bare Gotify push link, possibly in a bad moment, so it stays dependency-free (no
+  React/Query/Router) rather than pulling in the app shell; `main.py` still serves it via a
+  narrow `StaticFiles` mount at its original URL so already-delivered push links never break.
+- **Reused pieces** — `ChatWidget`/`useChat` (send/receive/optimistic-bubble logic, thread
+  switching) and `ObsidianMarkdown` (wikilinks/embeds — hand-rolled, not CommonMark, ported
+  from the old vanilla parser) back every page that needs them, same idiom as the old
+  dashboard's `chat.js`/`markdown.js`.
 
-| Page | Purpose |
-|---|---|
-| `index.html` | Chat — sidebar of addressable threads + main window, default mode |
-| `profile.html` | Merged guided-interview/Q&A profile page — defaults to the interview until `mark_onboarding_complete` fires, then to Q&A; a manual toggle switches either direction |
-| `settings.html` | Standing toggles — learning mode, default location/timezone, digest/bedtime/check-in times, calendar sync interval, device poll interval |
-| `testing.html` | Manually fire background jobs (digest, bedtime, check-in, calendar sync, vault reconcile, test notification/email/reminder) and preview device state/sync payload |
-| `checkins.html` | Today's mental-health check-in history — answered/skipped/missed |
-| `alert-sounds.html` | Upload/convert/manage the ESP32-S3's WAV alert-sound library |
-| `errors.html` | History of device-reported errors (`POST /device/error`), including suppressed repeats |
-
-`chat.js`'s `ChatWidget` is the one piece of real shared logic — send/receive/loading
-state/error handling, plus `setThread()` for the sidebar to switch between conversations
-and reload history from `GET /threads/{id}/messages`.
+Local dev runs two processes — see Commands below. Docker builds the SPA in its own stage
+(`node:20`, discarded after `npm run build`) so the runtime image stays Node-free; see the
+`dockerfile`'s `frontend-build` stage.
 
 ## Project structure
 
@@ -406,10 +405,13 @@ utils/
 routes/
   synth.py                    Piper TTS (built, not wired into the production voice flow)
   calendar_proxy.py            Reverse-proxies the bundled Radicale UI at /calendar
-static/                       Dashboard (see above)
+frontend/                     React SPA dashboard (see above) — src/routes/ one file per page
+static/                       checkin.html only (magic-link page, deliberately outside the SPA)
 docker-compose.yml            assistant + syncthing + caldav (Radicale) services, shared vault volume
-setup_check.sh                 Verifies/downloads Piper models, fixes DB bind-mount gotchas
-reset_knowledge.sh              Wipes memory/index/checkpoints; vault wipe gated behind --vault
+setup.sh                        Bootstrap + prerequisite checks: .env files, Piper model, DB
+                                  bind-mount gotchas, PUID/PGID — idempotent, safe to re-run
+reset_knowledge.sh              Wipes memory/index/checkpoints, then re-runs setup.sh; vault
+                                  wipe gated behind --vault
 ```
 
 ## Configuration
@@ -504,10 +506,15 @@ container secrets, via each service's `env_file:` — but that directive only in
 in the compose file itself. Every command below needs `--env-file .env.docker` for those
 to resolve — without it they silently fall back to the hardcoded defaults.
 
-Local dev, full hot-reload:
+Local dev, full hot-reload — two processes, backend and frontend separately:
 ```bash
-uv run uvicorn main:app --reload
+uv run uvicorn main:app --reload      # terminal 1
+cd frontend && npm run dev             # terminal 2 — Vite dev server, proxies API calls to :8000
 ```
+Browse `http://localhost:5173` (not `:8000`) during dev. The production build (`npm run
+build` in `frontend/`, or the Docker image's `frontend-build` stage) is what `main.py`'s
+catch-all route actually serves — a bare `uv run uvicorn main:app --reload` alone only gets
+you the API, not the dashboard, unless `frontend/dist/` already exists from a prior build.
 
 Syncthing and the bundled CalDAV server (Radicale) need to run somewhere stable even during
 dev — they don't need to be the same process as the app:
@@ -518,7 +525,7 @@ VAULT_PATH=./data/vault CALDAV_URL=http://localhost:5232/myuser/personal/ uv run
 
 Full stack:
 ```bash
-./setup_check.sh          # once, before first run — Piper model, DB bind-mount files
+./setup.sh                # once, before first run — .env files, Piper model, DB bind-mount files, PUID/PGID
 docker compose --env-file .env.docker up --build
 ```
 
@@ -587,7 +594,7 @@ Things that are true about the current code, not proposals:
 
 - **`routes/synth.py` raises at import time if the Piper model files are missing**, which
   takes down the whole app, not just TTS, since it's imported at module load. Mitigated
-  operationally by `setup_check.sh` downloading the model first, but not fixed at the code
+  operationally by `setup.sh` downloading the model first, but not fixed at the code
   level.
 - **Threads (and their keyword addressability) are swept nightly regardless of origin** —
   a conversation started from the dashboard has the same one-day lifespan as a voice

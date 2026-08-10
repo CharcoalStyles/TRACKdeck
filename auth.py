@@ -38,6 +38,15 @@ from fastapi import Header, HTTPException, Request
 _LOGIN_WINDOW_SECONDS = 900  # 15 min
 _LOGIN_MAX_ATTEMPTS = 5
 
+# Sliding idle expiry layered on top of SessionMiddleware's own absolute
+# max_age (SESSION_MAX_AGE_DAYS, default 30 — main.py). A signed cookie
+# alone is only ever absolute: a stolen/leaked one stays valid for the
+# full 30 days regardless of activity. This makes an inactive session
+# expire much sooner than that without needing separate refresh-token
+# infrastructure — every authenticated request just re-stamps last_seen,
+# so an actively-used session never hits this even though it's short.
+_SESSION_IDLE_TIMEOUT_SECONDS = int(os.environ.get("SESSION_IDLE_TIMEOUT_DAYS", "7")) * 24 * 60 * 60
+
 # Process-memory only — resets on restart, which is fine for a
 # single-instance personal deployment; not worth a DB table or a new
 # dependency for this.
@@ -63,6 +72,12 @@ def require_session_or_token(
     if _token_matches(auth):
         return
     if request.session.get("authenticated") is True:
+        now = time.time()
+        last_seen = request.session.get("last_seen")
+        if last_seen is not None and now - last_seen > _SESSION_IDLE_TIMEOUT_SECONDS:
+            request.session.clear()
+            raise HTTPException(status_code=401, detail="Session expired from inactivity")
+        request.session["last_seen"] = now
         return
     raise HTTPException(status_code=401, detail="Unauthorized request source")
 
