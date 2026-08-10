@@ -120,7 +120,16 @@ def _default_mcp_servers() -> str:
             # env subset (HOME/LOGNAME/PATH/SHELL/TERM/USER) — passing it
             # here merges it in (mcp.client.stdio.stdio_client unions
             # server.env over those safe defaults, doesn't replace them).
-            "env": {"SEARXNG_URL": os.environ.get("SEARXNG_URL", "")},
+            # UV_CACHE_DIR is the same story: the dockerfile sets it so uv
+            # has a writable cache under the container's non-root UID (which
+            # has no HOME), but that env var isn't in the safe-inherited
+            # subset either, so uvx here would still fall back to the
+            # unwritable default cache and die instantly ("Connection
+            # closed") without also passing it through explicitly.
+            "env": {
+                "SEARXNG_URL": os.environ.get("SEARXNG_URL", ""),
+                "UV_CACHE_DIR": os.environ.get("UV_CACHE_DIR", ""),
+            },
         }
     })
 
