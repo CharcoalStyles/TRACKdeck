@@ -51,6 +51,14 @@ COPY pyproject.toml uv.lock ./
 # --no-dev skips any dev dependencies if you add them later
 RUN uv sync --frozen --no-dev
 
+# This build step runs as root, so it just populated UV_CACHE_DIR with
+# root-owned files at root's default (non-world-writable) permissions —
+# /tmp being 1777 itself didn't make what's already inside it writable.
+# Open it up recursively so the non-root runtime UID can still use the
+# cache (e.g. to revalidate the lockfile) without hitting the same
+# permission error this whole cache dir was added to avoid.
+RUN chmod -R 1777 /tmp/uv-cache
+
 # .dockerignore excludes .venv (among other things) so this doesn't
 # overwrite the venv uv sync just built for the container's platform.
 COPY . .
