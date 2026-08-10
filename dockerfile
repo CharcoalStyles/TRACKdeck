@@ -30,6 +30,12 @@ WORKDIR /app
 ENV HF_HOME=/root/.cache/huggingface
 RUN chmod 755 /root
 
+# uv also needs a cache dir, and (like HF_HOME above) the non-root UID
+# docker-compose.yml runs this container as has no $HOME, so uv would
+# otherwise fall back to the unwritable /.cache/uv. /tmp is world-writable
+# regardless of UID, so point it there instead of chmod'ing another dir.
+ENV UV_CACHE_DIR=/tmp/uv-cache
+
 # huggingface_hub's Xet chunked-download backend (hf-xet, pulled in
 # transitively) can hang retrying forever on networks that can reach
 # huggingface.co but not Xet's separate CAS storage endpoints. Force the
