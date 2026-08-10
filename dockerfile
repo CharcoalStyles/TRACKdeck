@@ -20,6 +20,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# docker-compose.yml bind-mounts many individual files/dirs under
+# /app/data/ (memory.db, chroma_db/, ...) but never /app/data itself —
+# and .dockerignore excludes data/ from the build context entirely, so
+# without this the directory doesn't exist in the image. Docker would
+# then auto-create it as root the moment the bind mounts are set up, at
+# container-start, before the app (running as an arbitrary non-root UID
+# via docker-compose.yml's `user:`) ever runs — and sqlite can't create
+# its -journal/-wal files in a directory it can't write to ("attempt to
+# write a readonly database"), even though memory.db itself is writable.
+RUN mkdir -p /app/data && chmod 777 /app/data
+
 # faster-whisper pulls its model from Hugging Face on first use (see
 # utils/transcription.py) and caches it here. Left at the default location
 # under /root so docker-compose.yml can bind-mount it to a host path and
