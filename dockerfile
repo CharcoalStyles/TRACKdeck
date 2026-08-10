@@ -20,6 +20,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# uv (and anything else following XDG/Unix convention) resolves several
+# of its own directories — cache, tool installs, etc. — relative to
+# $HOME by default. The non-root UID docker-compose.yml runs this
+# container as (`user:`) has no /etc/passwd entry, so $HOME is unset,
+# and each of those falls back to an unwritable path under `/` one at a
+# time as it's hit (first the cache dir, then uv's tool-install dir for
+# `uvx`, ...). Fix the actual cause once instead of chasing each path:
+# HOME is also one of the few vars mcp.client.stdio forwards to
+# subprocesses by default, so this covers `uvx` (spawned for the
+# searxng MCP server) automatically too, no per-var passthrough needed.
+ENV HOME=/tmp
+
 # docker-compose.yml bind-mounts many individual files/dirs under
 # /app/data/ (memory.db, chroma_db/, ...) but never /app/data itself —
 # and .dockerignore excludes data/ from the build context entirely, so
