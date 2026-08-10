@@ -67,5 +67,10 @@ COPY . .
 # frontend/node_modules and frontend/src never touch this image.
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
-# Run uvicorn via uv so it uses the project's installed packages
-CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run uvicorn via uv so it uses the project's installed packages.
+# --no-sync: the venv above was already built exactly per the lockfile
+# (--frozen --no-dev); without this, `uv run` re-syncs on every startup
+# and — lacking --no-dev this time — tries to add dev deps (pytest etc)
+# into .venv, which is root-owned from the build step and unwritable by
+# the non-root runtime UID (docker-compose.yml's `user:`).
+CMD ["uv", "run", "--no-sync", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
