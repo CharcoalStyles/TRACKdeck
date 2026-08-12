@@ -6,12 +6,15 @@ LLM connection is configured via environment variables.
 """
 
 import asyncio
+import json
 import logging
 import os
 import time
 
 from langchain_core.messages import SystemMessage, trim_messages
+from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.runnables import RunnableConfig
+from langchain_core.utils.function_calling import convert_to_openai_tool
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -153,9 +156,25 @@ Be selective, not exhaustive. Most requests won't contain anything worth recordi
 one-off task like "turn off the kitchen light" has nothing to learn from it, and checking 
 should not become a habit that runs on every single message. Only act on this when 
 something genuinely stands out as durable and useful to know later, not routine details of 
-the current request itself. Never let this delay or distract from actually completing 
-what the user asked for — it's a secondary, occasional side effect, not the point of the 
+the current request itself. Never let this delay or distract from actually completing
+what the user asked for — it's a secondary, occasional side effect, not the point of the
 response."""
+
+# Fixed per-turn overhead that call_llm's history budget must reserve room for —
+# see get_fixed_overhead_tokens below. Base prompt cost is static (computed once at
+# import time); the tools estimate is set by build_graph once the tool list is known.
+_BASE_SYSTEM_PROMPT_TOKENS = count_tokens_approximately([SystemMessage(content=SYSTEM_PROMPT)])
+_tools_token_estimate: int = 0
+
+
+def get_fixed_overhead_tokens() -> int:
+    """Base system prompt + bound tool schemas, no mode addendum/memory block
+    (those vary per turn and aren't known outside call_llm) — a lower-bound
+    estimate of the fixed cost every turn pays, for readouts like
+    agent/runtime.py's get_thread_size that need a number before any request
+    is actually being built."""
+    return _BASE_SYSTEM_PROMPT_TOKENS + _tools_token_estimate
+
 
 ONE_SHOT_ADDENDUM = """
 
@@ -307,6 +326,16 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
         tools = tools + mcp_tools
     llm_with_tools = llm.bind_tools(tools)
 
+    # Tool list is fixed for the process lifetime, so this is computed once here
+    # rather than every call_llm turn. ponytail: reuses the same chars/4 approximate
+    # counter as trim_messages below (count_tokens_approximately) instead of a
+    # second ad-hoc heuristic — precision doesn't matter, it's a reservation, not
+    # an exact bill.
+    global _tools_token_estimate
+    _tools_token_estimate = count_tokens_approximately(
+        [SystemMessage(content=json.dumps([convert_to_openai_tool(t) for t in tools]))]
+    )
+
     # LM Studio's Unified KV Cache (on by default for concurrent
     # predictions) is a single pool shared across every in-flight request
     # to this model, not partitioned per caller — and LM Studio crashes
@@ -401,10 +430,25 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
         # budget itself is LM Studio's live loaded_context_length when
         # LMSTUDIO_MANAGEMENT_URL is configured (utils/lmstudio_client.py),
         # else the dashboard-editable max_history_tokens fallback.
+        #
+        # That budget is the model's *total* context, not history's — the system
+        # message and every bound tool schema are sent alongside history on every
+        # call but never trimmed themselves, so their cost has to be reserved out
+        # of the budget before history gets whatever's left. Without this, history
+        # alone could grow to fill the full budget and the actual request (system +
+        # tools + history) would still overflow the model's real context.
         budget = await get_history_budget_tokens()
+        reserved = count_tokens_approximately([system]) + _tools_token_estimate
+        history_budget = max(budget - reserved, 0)
+        if history_budget == 0:
+            logger.warning(
+                "System prompt + tools alone (~%d tok) meet or exceed the model's "
+                "context budget (%d tok) — no room left for conversation history.",
+                reserved, budget,
+            )
         history = trim_messages(
             state["messages"],
-            max_tokens=budget,
+            max_tokens=history_budget,
             token_counter="approximate",  # ponytail: chars/4 heuristic (langchain's count_tokens_approximately) — no real tokenizer available for whatever model LM Studio has loaded; swap in a real one if trimming precision ever matters
             strategy="last",
             start_on="human",

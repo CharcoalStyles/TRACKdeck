@@ -35,6 +35,7 @@ from fastapi import HTTPException
 
 from langchain_core.messages.utils import count_tokens_approximately
 
+from agent.graph import get_fixed_overhead_tokens
 from agent.keywords import generate_keyword, match_keyword_prefix
 from agent.memory import MemoryStore
 from agent.settings import settings
@@ -355,7 +356,12 @@ async def get_thread_size(thread_id: str) -> dict:
     (count_tokens_approximately, and LM Studio's live loaded_context_length
     or the max_history_tokens fallback — see utils/lmstudio_client.py), so
     this reports what trimming will actually act on rather than a
-    separately-drifting estimate."""
+    separately-drifting estimate. budget_tokens has the same fixed system
+    prompt + tool schema overhead subtracted that call_llm reserves (see
+    agent/graph.py's get_fixed_overhead_tokens) — mode addendum/memory block
+    aren't known here, so this slightly underestimates the real headroom for
+    onboarding/profile_chat, erring toward this reading going low too early
+    rather than too late."""
     if app_state.graph is None:
         raise HTTPException(status_code=503, detail="Agent not initialised")
 
@@ -363,10 +369,11 @@ async def get_thread_size(thread_id: str) -> dict:
     snapshot = await app_state.graph.aget_state(config)
     messages = snapshot.values.get("messages", []) if snapshot else []
 
+    budget = await get_history_budget_tokens()
     return {
         "message_count": len(messages),
         "estimated_tokens": count_tokens_approximately(messages),
-        "budget_tokens": await get_history_budget_tokens(),
+        "budget_tokens": max(budget - get_fixed_overhead_tokens(), 0),
     }
 
 
