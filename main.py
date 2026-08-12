@@ -16,7 +16,16 @@ import uvicorn
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.triggers.date import DateTrigger
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi import (
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ValidationError, model_validator
@@ -121,7 +130,7 @@ from utils import (
 from utils.caldav_client import ensure_collection_exists
 from utils.datetime import parse_local_datetime
 from utils.mailer import send_email
-from utils.notify import notify_device_error, send_gotify
+from utils.notify import notify_device_error, notify_error, send_gotify
 
 from voice import router as voice_router
 from routes.synth import router as synth_router
@@ -1124,21 +1133,112 @@ class OnboardingBasicsResponse(SettingsResponse):
     location_resolved: bool
 
 
+# Field groups for the onboarding recap, kept small enough per turn to fit a local
+# model's context (a single message with every field, plus the system prompt and ~30
+# bound tool schemas, was overflowing LM Studio's loaded context length — see
+# _process_onboarding_recap below).
+_ONBOARDING_RECAP_GROUPS: list[list[str]] = [
+    ["name", "birthday", "occupation", "current_job", "important_dates"],
+    ["people"],
+    ["preferences", "routine"],
+    ["interests", "health_goals"],
+]
+
+
+def _build_onboarding_recap_chunks(request: "OnboardingBasicsRequest") -> list[str]:
+    field_lines = {
+        "name": f"Name: {request.name}" if request.name else None,
+        "birthday": f"Birthday: {request.birthday}" if request.birthday else None,
+        "occupation": f"Occupation: {request.occupation}" if request.occupation else None,
+        "current_job": f"Current job: {request.current_job}" if request.current_job else None,
+        "important_dates": (
+            f"Important Dates: {request.important_dates}" if request.important_dates else None
+        ),
+        "people": (
+            "People: " + ", ".join(
+                f"{p.name} ({p.relation})" if p.relation else p.name for p in request.people
+            )
+            if request.people
+            else None
+        ),
+        "preferences": f"Preferences: {request.preferences}" if request.preferences else None,
+        "routine": f"Routine: {request.routine}" if request.routine else None,
+        "interests": f"Interests: {request.interests}" if request.interests else None,
+        "health_goals": (
+            f"Health & Goals: {request.health_goals}" if request.health_goals else None
+        ),
+    }
+
+    groups = [
+        [field_lines[key] for key in group if field_lines[key]]
+        for group in _ONBOARDING_RECAP_GROUPS
+    ]
+    groups = [g for g in groups if g]
+
+    chunks = []
+    for i, lines in enumerate(groups):
+        header = (
+            "I just filled out the basics form:"
+            if len(groups) == 1
+            else f"I'm continuing to fill out my basics form (part {i + 1} of {len(groups)}):"
+        )
+        chunk = header + "\n" + "\n".join(lines)
+        if i == len(groups) - 1:
+            chunk += (
+                "\n\nPlease record this properly (a separate note for each person listed), "
+                "and ask me about anything here you'd like more detail on."
+            )
+        chunks.append(chunk)
+    return chunks
+
+
+async def _process_onboarding_recap(chunks: list[str]) -> None:
+    """Runs each recap chunk as its own turn in the "onboarding" thread,
+    sequentially (they share one LangGraph-checkpointed thread, so concurrent
+    calls would race the checkpoint). Fire-and-forget background task, same
+    pattern as voice.py's _process_voice_note — failures/success surface via
+    Gotify, never over HTTP, since the request has already returned."""
+    failures = 0
+    last_error: Exception | None = None
+    for chunk in chunks:
+        try:
+            await run_agent(chunk, thread_id="onboarding", mode="onboarding")
+        except Exception as e:
+            logger.exception("Onboarding recap chunk failed")
+            failures += 1
+            last_error = e
+
+    if failures:
+        await asyncio.to_thread(
+            notify_error,
+            f"Onboarding basics: {failures}/{len(chunks)} parts failed to record",
+            last_error,
+        )
+    else:
+        await asyncio.to_thread(
+            send_gotify, "Onboarding", "All basics form details recorded.", priority=3
+        )
+
+
 @app.post("/onboarding/basics", response_model=OnboardingBasicsResponse)
 async def submit_onboarding_basics(
-    request: OnboardingBasicsRequest, _: Annotated[None, Depends(auth.require_session_or_token)]
+    request: OnboardingBasicsRequest,
+    background_tasks: BackgroundTasks,
+    _: Annotated[None, Depends(auth.require_session_or_token)],
 ):
     """One-time submission from the onboarding basics form (the first step
     of /profile, before the guided chat interview takes over). Every field
     is optional. Location/wake_time/bedtime go through the same settings
     write path as POST /settings (not About Me — that separation is
     deliberate, see agent/tools/general.py's set_home_location). Everything
-    else is handed to the agent as a real turn in the "onboarding" thread —
-    its own tools (remember_about_me, get_or_create_linked_note) do the
-    actual About Me writing, so the content gets written up properly (with
-    a dedicated note per person) instead of dumped in verbatim, and its
-    reply — likely a follow-up question — lands in the thread for the chat
-    view to pick up on next load."""
+    else is handed to the agent as a handful of real turns in the
+    "onboarding" thread, run in the background after this responds (see
+    _process_onboarding_recap) — its own tools (remember_about_me,
+    get_or_create_linked_note) do the actual About Me writing, so the
+    content gets written up properly (with a dedicated note per person)
+    instead of dumped in verbatim, and its replies — likely follow-up
+    questions — land in the thread for the chat view to pick up on next
+    load."""
     location_resolved = False
     try:
         if request.location:
@@ -1156,36 +1256,11 @@ async def submit_onboarding_basics(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    recap_lines = [
-        line
-        for line in [
-            f"Name: {request.name}" if request.name else None,
-            f"Birthday: {request.birthday}" if request.birthday else None,
-            f"Occupation: {request.occupation}" if request.occupation else None,
-            f"Current job: {request.current_job}" if request.current_job else None,
-            (
-                "People: " + ", ".join(
-                    f"{p.name} ({p.relation})" if p.relation else p.name for p in request.people
-                )
-                if request.people
-                else None
-            ),
-            f"Preferences: {request.preferences}" if request.preferences else None,
-            f"Routine: {request.routine}" if request.routine else None,
-            f"Interests: {request.interests}" if request.interests else None,
-            f"Health & Goals: {request.health_goals}" if request.health_goals else None,
-            f"Important Dates: {request.important_dates}" if request.important_dates else None,
-        ]
-        if line
-    ]
-    if recap_lines:
-        recap = "I just filled out the basics form:\n" + "\n".join(recap_lines) + (
-            "\n\nPlease record this properly (a separate note for each person listed), "
-            "and ask me about anything here you'd like more detail on."
-        )
-        await run_agent(recap, thread_id="onboarding", mode="onboarding")
-
+    chunks = _build_onboarding_recap_chunks(request)
     onboarding_state.mark_basics_complete()
+    if chunks:
+        background_tasks.add_task(_process_onboarding_recap, chunks)
+
     return {**_current_settings(), "location_resolved": location_resolved}
 
 
