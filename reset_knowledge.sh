@@ -71,6 +71,7 @@ done
 CHROMA_DIR="./data/chroma_db"
 MEMORY_DB="./data/memory.db"
 ONBOARDING_FLAG="./data/onboarding_complete.flag"
+ONBOARDING_BASICS_FLAG="./data/onboarding_basics.flag"
 RECEIVED_NOTES_DIR="./received_notes"
 
 # Vault path: respect VAULT_PATH from .env if present, else the coded
@@ -88,6 +89,7 @@ found_memory_db=()
 
 found_onboarding_flag=()
 [[ -f "$ONBOARDING_FLAG" ]] && found_onboarding_flag+=("$ONBOARDING_FLAG")
+[[ -f "$ONBOARDING_BASICS_FLAG" ]] && found_onboarding_flag+=("$ONBOARDING_BASICS_FLAG")
 
 # --- Report what will happen -------------------------------------------
 

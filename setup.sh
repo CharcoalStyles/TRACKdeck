@@ -130,7 +130,7 @@ ensure_db_file() {
 
 for db in memory.db reminders.db checkins.db settings.db alert_sounds.db \
           device_errors.db recall_log.db device_state.db activity_log.db \
-          onboarding_complete.flag; do
+          onboarding_complete.flag onboarding_basics.flag; do
     ensure_db_file "${DATA_DIR}/${db}"
 done
 

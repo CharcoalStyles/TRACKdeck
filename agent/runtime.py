@@ -33,9 +33,12 @@ from datetime import datetime, timedelta
 
 from fastapi import HTTPException
 
+from langchain_core.messages.utils import count_tokens_approximately
+
 from agent.keywords import generate_keyword, match_keyword_prefix
 from agent.memory import MemoryStore
 from agent.settings import settings
+from utils.lmstudio_client import get_history_budget_tokens
 
 from utils.notify import send_gotify, notify_error
 from utils.recall_log_store import get_recall_for_thread
@@ -344,6 +347,37 @@ async def get_thread_debug(thread_id: str) -> dict:
         "opening_message": opening_message,
         "turns": turns,
     }
+
+
+async def get_thread_size(thread_id: str) -> dict:
+    """Rough context-load readout for a thread — same approximate counter
+    and budget source agent/graph.py's call_llm trims against
+    (count_tokens_approximately, and LM Studio's live loaded_context_length
+    or the max_history_tokens fallback — see utils/lmstudio_client.py), so
+    this reports what trimming will actually act on rather than a
+    separately-drifting estimate."""
+    if app_state.graph is None:
+        raise HTTPException(status_code=503, detail="Agent not initialised")
+
+    config = {"configurable": {"thread_id": thread_id}}
+    snapshot = await app_state.graph.aget_state(config)
+    messages = snapshot.values.get("messages", []) if snapshot else []
+
+    return {
+        "message_count": len(messages),
+        "estimated_tokens": count_tokens_approximately(messages),
+        "budget_tokens": await get_history_budget_tokens(),
+    }
+
+
+async def clear_thread(thread_id: str) -> None:
+    """Wipes a thread's LangGraph checkpoint history so its next turn
+    starts fresh — the manual counterpart to call_llm's automatic trimming,
+    for when the user wants a deliberate reset rather than gradual
+    truncation of old context."""
+    if app_state.graph is None:
+        raise HTTPException(status_code=503, detail="Agent not initialised")
+    await app_state.graph.checkpointer.adelete_thread(thread_id)
 
 
 def resolve_thread(text: str) -> tuple[str, str, str]:

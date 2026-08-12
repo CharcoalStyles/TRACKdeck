@@ -31,6 +31,11 @@ import os
 
 FLAG_PATH = "./data/onboarding_complete.flag"
 
+# Same treatment, one step earlier: whether the basics form (name, location,
+# people, etc.) has been submitted at least once. Distinct from FLAG_PATH
+# above, which marks the full guided-interview conversation as done.
+BASICS_FLAG_PATH = "./data/onboarding_basics.flag"
+
 
 def is_onboarding_complete() -> bool:
     return os.path.exists(FLAG_PATH) and os.path.getsize(FLAG_PATH) > 0
@@ -39,3 +44,22 @@ def is_onboarding_complete() -> bool:
 def mark_onboarding_complete() -> None:
     with open(FLAG_PATH, "w") as f:
         f.write("1")
+
+
+def is_basics_complete() -> bool:
+    return os.path.exists(BASICS_FLAG_PATH) and os.path.getsize(BASICS_FLAG_PATH) > 0
+
+
+def mark_basics_complete() -> None:
+    with open(BASICS_FLAG_PATH, "w") as f:
+        f.write("1")
+
+
+def clear_onboarding_complete() -> None:
+    with open(FLAG_PATH, "w"):
+        pass
+
+
+def clear_basics_complete() -> None:
+    with open(BASICS_FLAG_PATH, "w"):
+        pass

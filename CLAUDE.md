@@ -298,7 +298,13 @@ reset_knowledge.sh              Wipes memory/index/checkpoints, then re-runs set
 
 See `.env.example` for the full list. Notable ones:
 
-- **LM Studio** — `LM_STUDIO_URL`, `CHAT_MODEL`, `EMBEDDING_MODEL`.
+- **LM Studio** — `LMSTUDIO_OPENAI_URL` (OpenAI-compatible endpoint, used for chat/embeddings),
+  `CHAT_MODEL`, `EMBEDDING_MODEL`. `LMSTUDIO_MANAGEMENT_URL` is a separate, optional endpoint
+  (LM Studio's own REST API, not OpenAI-compatible) — when set, `utils/lmstudio_client.py`
+  live-fetches `CHAT_MODEL`'s actual loaded context length from it, so history trimming
+  (`agent/graph.py`'s `call_llm`) always matches what's configured in LM Studio's model loader
+  instead of a guessed setting; unset, it falls back to the dashboard-editable
+  `max_history_tokens` setting.
 - **CalDAV** — `CALDAV_URL`, `CALDAV_USERNAME`, `CALDAV_PASSWORD`. Points at the bundled
   Radicale service (`docker-compose.yml`'s `caldav`) by default, or any external CalDAV
   server.

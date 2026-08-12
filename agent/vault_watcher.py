@@ -78,7 +78,7 @@ async def index_note_file(memory: MemoryStore, path: Path) -> None:
 def _generate_inbox_frontmatter(content: str) -> dict:
     """Blocking LLM call — run via asyncio.to_thread from async code."""
     llm = ChatOpenAI(
-        base_url=os.environ["LM_STUDIO_URL"],
+        base_url=os.environ["LMSTUDIO_OPENAI_URL"],
         api_key="lm-studio",
         model=os.environ["CHAT_MODEL"],
         temperature=0.3,

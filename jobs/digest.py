@@ -78,7 +78,7 @@ def _todays_utc_bounds(now_local: datetime | None = None) -> tuple[int, int]:
 def _write_recap(entries: list[str], reflections: list[str]) -> str:
     """Blocking LLM call — run via asyncio.to_thread from async code."""
     llm = ChatOpenAI(
-        base_url=os.environ["LM_STUDIO_URL"],
+        base_url=os.environ["LMSTUDIO_OPENAI_URL"],
         api_key="lm-studio",
         model=os.environ["CHAT_MODEL"],
         temperature=0.7,

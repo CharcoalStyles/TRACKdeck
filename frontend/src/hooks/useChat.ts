@@ -14,6 +14,12 @@ interface SendTextResult {
   keyword: string
 }
 
+export interface ThreadSize {
+  message_count: number
+  estimated_tokens: number
+  budget_tokens: number
+}
+
 interface UseChatOptions {
   threadId: string | null
   mode?: 'onboarding' | 'profile_chat' | 'project_chat' | null
@@ -48,6 +54,7 @@ export function useChat({
 }: UseChatOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const [size, setSize] = useState<ThreadSize | null>(null)
   // The thread a send actually targets — starts as the threadId prop but
   // gets pinned to the real minted id after a null-threadId send's first
   // reply, same as the original class mutating `this.threadId` in place.
@@ -60,6 +67,7 @@ export function useChat({
     async function load() {
       if (!threadId) {
         setMessages(greeting ? [{ role: 'assistant', content: greeting }] : [])
+        setSize(null)
         return
       }
       setIsLoadingHistory(true)
@@ -82,6 +90,10 @@ export function useChat({
       } finally {
         if (!cancelled) setIsLoadingHistory(false)
       }
+      const { data: sizeData } = await api.GET('/threads/{thread_id}/size', {
+        params: { path: { thread_id: threadId } },
+      })
+      if (!cancelled) setSize(sizeData ?? null)
     }
     load()
     return () => {
@@ -126,6 +138,10 @@ export function useChat({
         next[next.length - 1] = { role: 'assistant', content: data.reply }
         return next
       })
+      const { data: sizeData } = await api.GET('/threads/{thread_id}/size', {
+        params: { path: { thread_id: data.thread_id } },
+      })
+      setSize(sizeData ?? null)
       onReply?.(data)
     } catch {
       setMessages((prev) => {
@@ -139,5 +155,23 @@ export function useChat({
     }
   }
 
-  return { messages, isLoadingHistory, send, isSending: sendMutation.isPending }
+  async function clearConversation() {
+    const id = effectiveThreadId.current
+    if (!id) return
+    await api.DELETE('/threads/{thread_id}/messages', { params: { path: { thread_id: id } } })
+    setMessages(greeting ? [{ role: 'assistant', content: greeting }] : [])
+    const { data: sizeData } = await api.GET('/threads/{thread_id}/size', {
+      params: { path: { thread_id: id } },
+    })
+    setSize(sizeData ?? null)
+  }
+
+  return {
+    messages,
+    isLoadingHistory,
+    send,
+    isSending: sendMutation.isPending,
+    size,
+    clearConversation,
+  }
 }

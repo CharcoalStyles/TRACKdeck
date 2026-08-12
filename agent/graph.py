@@ -10,7 +10,7 @@ import logging
 import os
 import time
 
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import SystemMessage, trim_messages
 from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, MessagesState, START, END
@@ -20,6 +20,7 @@ from agent.memory import MemoryStore
 from agent.settings import settings
 from agent.tools.all_tools import get_tools
 from utils import vault
+from utils.lmstudio_client import get_history_budget_tokens
 from utils.recall_log_store import log_recall
 
 logger = logging.getLogger(__name__)
@@ -184,25 +185,27 @@ You are actively interviewing the user to help build out their About Me profile.
 different from passive learning mode — you are driving this conversation, not waiting for
 facts to come up naturally.
 
-## MANDATORY: Home Location
-Early in this conversation — right after the opening question — ask where the user lives.
-This is handled differently from everything else in this interview: it's used directly by
-tools (weather, calendar day boundaries, the daily digest/bedtime schedule) rather than
-recorded as a profile fact, so as soon as they answer, call set_home_location with their
-answer before moving on to anything else. Do not also record it via remember_about_me —
-set_home_location is the only tool for this. It can always be corrected later from the
-dashboard's Settings page, so don't dwell on getting it perfectly precise.
+The user already filled out a basics form before this conversation started — name,
+birthday, location, occupation, current job, a list of people, and short notes on
+preferences, routine, interests, health & goals, and important dates may already be
+recorded. Call read_about_me first, at the start of this conversation, to see what's
+already there. Do not re-ask for anything it already answered (location in particular —
+that's set separately via set_home_location, only call it if the user brings up moving or
+correcting where they live, not as an opening question). Instead, go deeper: ask natural
+follow-ups on whatever they gave short answers to, and if they listed several people, offer
+to say more about one of them.
 
-Use this checklist as a guide for what's still missing, not a script to read verbatim:
+Use this checklist as a guide for what's still thin or missing, not a script to read verbatim:
   - Preferences (likes/dislikes, food, habits)
   - People (family, close friends, colleagues worth remembering)
   - Routine (daily/weekly patterns, work schedule, commitments)
   - Interests (hobbies, ongoing projects, things they care about)
+  - Health & Goals, Important Dates — whatever's there already
 
-Follow the user's actual answers rather than marching down this list mechanically — if 
-something they say is worth digging into further, ask a natural follow-up before moving 
-on, and if a topic comes up that isn't on this list at all but seems worth capturing, 
-follow it instead of steering back to the checklist. Ask one thing at a time, not several 
+Follow the user's actual answers rather than marching down this list mechanically — if
+something they say is worth digging into further, ask a natural follow-up before moving
+on, and if a topic comes up that isn't on this list at all but seems worth capturing,
+follow it instead of steering back to the checklist. Ask one thing at a time, not several
 questions at once.
 
 ## MANDATORY: Recording as you go
@@ -285,7 +288,7 @@ title(s)), not the full note content again."""
 
 def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None):
     llm = ChatOpenAI(
-        base_url=os.environ["LM_STUDIO_URL"],
+        base_url=os.environ["LMSTUDIO_OPENAI_URL"],
         api_key="lm-studio",
         model=os.environ["CHAT_MODEL"],
         temperature=0.7,
@@ -303,6 +306,19 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
                 )
         tools = tools + mcp_tools
     llm_with_tools = llm.bind_tools(tools)
+
+    # LM Studio's Unified KV Cache (on by default for concurrent
+    # predictions) is a single pool shared across every in-flight request
+    # to this model, not partitioned per caller — and LM Studio crashes
+    # rather than queues when it's exhausted by simultaneous requests. This
+    # app has no way to see what else is in flight on the LM Studio side,
+    # so instead it guarantees there's never more than one: every call_llm
+    # invocation, across every concurrent thread/turn/background job, waits
+    # its turn here before actually hitting the chat model. Scoped to just
+    # the completion call below — recall/embedding lookups and parallel
+    # tool execution aren't gated by this, since those don't touch the
+    # chat model's shared cache.
+    llm_semaphore = asyncio.Semaphore(1)
 
     async def call_llm(state: MessagesState, config: RunnableConfig):
         last_user_msg = next(
@@ -376,7 +392,25 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
             addendum += LEARNING_ADDENDUM
 
         system = SystemMessage(content=SYSTEM_PROMPT + addendum + memory_block)
-        response = await llm_with_tools.ainvoke([system] + state["messages"])
+        # "onboarding"/"profile_chat"/"project_<slug>" threads reuse the same
+        # thread_id forever and are never swept (see PROJECT_THREAD_PREFIX
+        # comment above), so unlike normal threads their history can grow
+        # until it exceeds whatever context length LM Studio's model was
+        # loaded with. Trim to a budget every turn regardless of thread type,
+        # since this node is the one place all of them route through. The
+        # budget itself is LM Studio's live loaded_context_length when
+        # LMSTUDIO_MANAGEMENT_URL is configured (utils/lmstudio_client.py),
+        # else the dashboard-editable max_history_tokens fallback.
+        budget = await get_history_budget_tokens()
+        history = trim_messages(
+            state["messages"],
+            max_tokens=budget,
+            token_counter="approximate",  # ponytail: chars/4 heuristic (langchain's count_tokens_approximately) — no real tokenizer available for whatever model LM Studio has loaded; swap in a real one if trimming precision ever matters
+            strategy="last",
+            start_on="human",
+        )
+        async with llm_semaphore:
+            response = await llm_with_tools.ainvoke([system] + history)
         return {"messages": [response]}
 
     tool_node = ToolNode(tools)

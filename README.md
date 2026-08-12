@@ -418,7 +418,10 @@ reset_knowledge.sh              Wipes memory/index/checkpoints, then re-runs set
 
 See `.env.example` for the full list. Grouped by what needs external setup:
 
-- **LM Studio** — `LM_STUDIO_URL`, `CHAT_MODEL`, `EMBEDDING_MODEL`. Local, on the Mac Mini.
+- **LM Studio** — `LMSTUDIO_OPENAI_URL`, `CHAT_MODEL`, `EMBEDDING_MODEL`. Local, on the Mac
+  Mini. `LMSTUDIO_MANAGEMENT_URL` is separate and optional — LM Studio's own REST API
+  (not OpenAI-compatible), used to live-fetch the loaded model's actual context length so
+  history trimming matches what you set in LM Studio's model loader rather than a guess.
 - **CalDAV** — `CALDAV_URL`, `CALDAV_USERNAME`, `CALDAV_PASSWORD`. Points at the bundled
   Radicale service by default (see "First-run calendar setup" below), or any external
   CalDAV server (Nextcloud, Baikal, Fastmail, etc.).

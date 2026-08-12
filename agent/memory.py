@@ -101,7 +101,7 @@ def _group_chunks(ids: list[str], documents: list[str], metadatas: list[dict], g
 def make_embedding_function():
     """Returns a LangChain embedding wrapper pointed at LM Studio."""
     return OpenAIEmbeddings(
-        base_url=os.environ["LM_STUDIO_URL"],
+        base_url=os.environ["LMSTUDIO_OPENAI_URL"],
         api_key="lm-studio",
         model=os.environ["EMBEDDING_MODEL"],
         tiktoken_enabled=False,

@@ -63,6 +63,13 @@ def is_valid_recall_recency_days(value: int) -> bool:
     return 1 <= value <= 3650
 
 
+def is_valid_max_history_tokens(value: int) -> bool:
+    # Sanity bounds, not hard technical limits — the right value depends on
+    # whatever context length the user's model was loaded with in LM Studio,
+    # which this app has no way to know.
+    return 500 <= value <= 200_000
+
+
 def parse_mcp_servers(value: str) -> dict:
     """Parses/validates the mcp_servers JSON setting into
     {server_name: {enabled, transport, ...}}. Raises ValueError with a
@@ -212,6 +219,22 @@ class Settings:
     # same reasoning as default_location above.
     recall_recency_days: int = 30
 
+    # Fallback token budget for the message history sent to the LLM every
+    # turn (agent/graph.py's call_llm, via trim_messages) — the oldest
+    # messages are dropped once the thread's history exceeds the budget.
+    # Exists because "onboarding"/"profile_chat"/"project_<slug>" threads
+    # reuse the same thread_id forever and are never swept, so their
+    # history otherwise grows until it exceeds whatever context length the
+    # model was loaded with in LM Studio. Only used when
+    # LMSTUDIO_MANAGEMENT_URL isn't set or LM Studio's live
+    # loaded_context_length can't be fetched (utils/lmstudio_client.py's
+    # get_history_budget_tokens prefers the live value whenever it's
+    # available) — otherwise this is a guess this app has no way to
+    # verify, so the live number is trusted first. 6000 is a conservative
+    # default for a small local model. No env var, same reasoning as
+    # default_location above.
+    max_history_tokens: int = 6000
+
     # Recipient address for the daily digest email (jobs/digest.py,
     # utils/mailer.py). Seeded from DIGEST_EMAIL_TO at startup so an
     # existing deployment keeps working unchanged, but editable live from
@@ -298,6 +321,8 @@ def apply_persisted(values: dict[str, str]) -> None:
         settings.recall_max_distance = float(values["recall_max_distance"])
     if "recall_recency_days" in values:
         settings.recall_recency_days = int(values["recall_recency_days"])
+    if "max_history_tokens" in values:
+        settings.max_history_tokens = int(values["max_history_tokens"])
     if "digest_email_to" in values:
         settings.digest_email_to = values["digest_email_to"]
     if "public_base_url" in values:

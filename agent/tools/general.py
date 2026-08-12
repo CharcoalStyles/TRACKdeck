@@ -31,6 +31,32 @@ def get_current_datetime() -> str:
 # Onboarding
 # ---------------------------------------------------------------------------
 
+def resolve_location(location: str) -> tuple[str, str] | None:
+    """Geocode a free-text place name to a canonical name + IANA timezone via
+    Open-Meteo. Returns None if it couldn't be resolved. Shared by the
+    set_home_location tool and the onboarding basics form endpoint so both
+    go through the same geocoding logic."""
+    try:
+        data = call_open_meteo_search(location)
+    except requests.exceptions.RequestException as e:
+        logger.error("Error connecting to Open-Meteo geocoding: %s", e)
+        return None
+
+    results = data.get("results") or []
+    if not results:
+        return None
+
+    match = results[0]
+    resolved_name = ", ".join(
+        part for part in [match.get("name"), match.get("admin1"), match.get("country")] if part
+    )
+    tz_name = match.get("timezone")
+    if not tz_name or not is_valid_timezone(tz_name):
+        return None
+
+    return resolved_name, tz_name
+
+
 @tool
 def mark_onboarding_complete() -> str:
     """Call this once the guided onboarding interview's main areas (preferences, people,
@@ -63,23 +89,10 @@ def set_home_location(location: str) -> str:
         Confirmation of what was set, or an explanation if the location couldn't be
         resolved.
     """
-    try:
-        data = call_open_meteo_search(location)
-    except requests.exceptions.RequestException as e:
-        logger.error("Error connecting to Open-Meteo geocoding: %s", e)
-        return f"Couldn't look up '{location}' right now — it can be set later from the Settings page."
-
-    results = data.get("results") or []
-    if not results:
+    resolved = resolve_location(location)
+    if resolved is None:
         return f"Couldn't resolve '{location}' to a place — ask them to be more specific, or it can be set directly from the Settings page."
-
-    match = results[0]
-    resolved_name = ", ".join(
-        part for part in [match.get("name"), match.get("admin1"), match.get("country")] if part
-    )
-    tz_name = match.get("timezone")
-    if not tz_name or not is_valid_timezone(tz_name):
-        return f"Found '{resolved_name}' but couldn't determine its timezone — ask them to set it manually from the Settings page."
+    resolved_name, tz_name = resolved
 
     settings.default_location = resolved_name
     settings.timezone = tz_name

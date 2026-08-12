@@ -199,40 +199,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Serve Frontend */
-        get: operations["serve_frontend__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/project/{name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Serve Project Page */
-        get: operations["serve_project_page_project__name__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/login": {
         parameters: {
             query?: never;
@@ -336,6 +302,32 @@ export interface paths {
         };
         /** Thread Messages */
         get: operations["thread_messages_threads__thread_id__messages_get"];
+        put?: never;
+        post?: never;
+        /**
+         * Clear Thread Route
+         * @description Wipes this thread's checkpoint history so its next turn starts fresh
+         *     — a deliberate reset, as opposed to call_llm's automatic gradual trim.
+         */
+        delete: operations["clear_thread_route_threads__thread_id__messages_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/threads/{thread_id}/size": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Thread Size
+         * @description Rough context-load readout so the dashboard can warn before a thread's
+         *     history grows past what agent/graph.py's call_llm will trim it to.
+         */
+        get: operations["thread_size_threads__thread_id__size_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -574,6 +566,83 @@ export interface paths {
          *     it.
          */
         post: operations["update_settings_settings_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/onboarding/basics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit Onboarding Basics
+         * @description One-time submission from the onboarding basics form (the first step
+         *     of /profile, before the guided chat interview takes over). Every field
+         *     is optional. Location/wake_time/bedtime go through the same settings
+         *     write path as POST /settings (not About Me — that separation is
+         *     deliberate, see agent/tools/general.py's set_home_location). Everything
+         *     else is handed to the agent as a real turn in the "onboarding" thread —
+         *     its own tools (remember_about_me, get_or_create_linked_note) do the
+         *     actual About Me writing, so the content gets written up properly (with
+         *     a dedicated note per person) instead of dumped in verbatim, and its
+         *     reply — likely a follow-up question — lands in the thread for the chat
+         *     view to pick up on next load.
+         */
+        post: operations["submit_onboarding_basics_onboarding_basics_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/onboarding/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete Onboarding
+         * @description Explicit "Finished" action from the onboarding chat step's UI — the
+         *     manual, user-triggered counterpart to the mark_onboarding_complete
+         *     agent tool (agent/tools/general.py), which sets the same flag when the
+         *     model itself decides the interview has covered enough.
+         */
+        post: operations["complete_onboarding_onboarding_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/onboarding/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Onboarding
+         * @description Deletes About Me and restarts the onboarding wizard from the basics
+         *     form. Also clears the onboarding/profile_chat conversation threads,
+         *     since their history is all about a profile that no longer exists.
+         *     Scoped to About Me only — notes linked from it (individual people) and
+         *     Settings (location/timezone/schedule) are left untouched.
+         */
+        post: operations["reset_onboarding_onboarding_reset_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1129,6 +1198,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/{full_path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Serve Spa */
+        get: operations["serve_spa__full_path__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1434,6 +1520,86 @@ export interface components {
             /** Excerpt */
             excerpt: string;
         };
+        /** OnboardingBasicsRequest */
+        OnboardingBasicsRequest: {
+            /** Name */
+            name?: string | null;
+            /** Birthday */
+            birthday?: string | null;
+            /** Location */
+            location?: string | null;
+            /** Occupation */
+            occupation?: string | null;
+            /** Current Job */
+            current_job?: string | null;
+            /**
+             * People
+             * @default []
+             */
+            people: components["schemas"]["OnboardingPerson"][];
+            /** Preferences */
+            preferences?: string | null;
+            /** Routine */
+            routine?: string | null;
+            /** Interests */
+            interests?: string | null;
+            /** Health Goals */
+            health_goals?: string | null;
+            /** Important Dates */
+            important_dates?: string | null;
+            /** Wake Time */
+            wake_time?: string | null;
+            /** Bedtime */
+            bedtime?: string | null;
+        };
+        /** OnboardingBasicsResponse */
+        OnboardingBasicsResponse: {
+            /** Learning Mode */
+            learning_mode: boolean;
+            /** Default Location */
+            default_location: string;
+            /** Timezone */
+            timezone: string;
+            /** Digest Time */
+            digest_time: string;
+            /** Calendar Sync Interval Minutes */
+            calendar_sync_interval_minutes: number;
+            /** Wake Time */
+            wake_time: string;
+            /** Latest Checkin Time */
+            latest_checkin_time: string;
+            /** Device Poll Interval Seconds */
+            device_poll_interval_seconds: number;
+            /** Digest Email To */
+            digest_email_to: string;
+            /** Public Base Url */
+            public_base_url: string;
+            /** Gotify Url */
+            gotify_url: string;
+            /** Gotify Token Set */
+            gotify_token_set: boolean;
+            /** Mcp Servers */
+            mcp_servers: string;
+            /** Recall Max Distance */
+            recall_max_distance: number;
+            /** Recall Recency Days */
+            recall_recency_days: number;
+            /** Max History Tokens */
+            max_history_tokens: number;
+            /** Onboarding Complete */
+            onboarding_complete: boolean;
+            /** Basics Complete */
+            basics_complete: boolean;
+            /** Location Resolved */
+            location_resolved: boolean;
+        };
+        /** OnboardingPerson */
+        OnboardingPerson: {
+            /** Name */
+            name: string;
+            /** Relation */
+            relation?: string | null;
+        };
         /** ProjectAttachment */
         ProjectAttachment: {
             /** Filename */
@@ -1510,8 +1676,12 @@ export interface components {
             recall_max_distance: number;
             /** Recall Recency Days */
             recall_recency_days: number;
+            /** Max History Tokens */
+            max_history_tokens: number;
             /** Onboarding Complete */
             onboarding_complete: boolean;
+            /** Basics Complete */
+            basics_complete: boolean;
         };
         /** SettingsUpdate */
         SettingsUpdate: {
@@ -1547,6 +1717,8 @@ export interface components {
             recall_max_distance?: number | null;
             /** Recall Recency Days */
             recall_recency_days?: number | null;
+            /** Max History Tokens */
+            max_history_tokens?: number | null;
         };
         /** TTSRequest */
         TTSRequest: {
@@ -1596,6 +1768,15 @@ export interface components {
         ThreadMessagesResponse: {
             /** Messages */
             messages: components["schemas"]["ThreadMessage"][];
+        };
+        /** ThreadSizeResponse */
+        ThreadSizeResponse: {
+            /** Message Count */
+            message_count: number;
+            /** Estimated Tokens */
+            estimated_tokens: number;
+            /** Budget Tokens */
+            budget_tokens: number;
         };
         /** ThreadSummary */
         ThreadSummary: {
@@ -2205,57 +2386,6 @@ export interface operations {
             };
         };
     };
-    serve_frontend__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
-                };
-            };
-        };
-    };
-    serve_project_page_project__name__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     login_login_post: {
         parameters: {
             query?: never;
@@ -2426,6 +2556,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ThreadMessagesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_thread_route_threads__thread_id__messages_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    thread_size_threads__thread_id__size_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadSizeResponse"];
                 };
             };
             /** @description Validation Error */
@@ -2801,6 +2997,103 @@ export interface operations {
                 "application/json": components["schemas"]["SettingsUpdate"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_onboarding_basics_onboarding_basics_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OnboardingBasicsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingBasicsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_onboarding_onboarding_complete_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_onboarding_onboarding_reset_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -3575,6 +3868,37 @@ export interface operations {
                 "application/json": components["schemas"]["CheckinReplyRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    serve_spa__full_path__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                full_path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

@@ -36,8 +36,59 @@ export default function SettingsPage() {
       <NotificationsCard data={data} onSaved={invalidate} />
       <DeviceSyncCard data={data} onSaved={invalidate} />
       <RecallCard data={data} onSaved={invalidate} />
+      <ContextBudgetCard data={data} onSaved={invalidate} />
       <McpServersCard data={data} onSaved={invalidate} />
+      <ResetAboutMeCard />
     </div>
+  )
+}
+
+function ResetAboutMeCard() {
+  const queryClient = useQueryClient()
+  const status = useSaveStatus()
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await api.POST('/onboarding/reset')
+      if (error) throw new Error()
+    },
+    onMutate: () => status.setState('saving'),
+    onSuccess: () => {
+      status.setState('saved')
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+      queryClient.invalidateQueries({ queryKey: ['settings-probe'] })
+    },
+    onError: () => status.setState('error'),
+  })
+
+  function handleReset() {
+    if (
+      !window.confirm(
+        'Reset About Me? This deletes your profile note and restarts onboarding from the basics form. This cannot be undone.'
+      )
+    ) {
+      return
+    }
+    mutation.mutate()
+  }
+
+  return (
+    <Card>
+      <h2 className="mb-1 text-lg font-semibold">Reset Profile</h2>
+      <p className="mb-3 text-sm text-text-muted">
+        Deletes your About Me note and clears the onboarding conversation, so the basics form
+        and guided interview start fresh next time you visit Profile. Notes linked from About
+        Me (individual people) and other settings are left untouched.
+      </p>
+      <button
+        type="button"
+        onClick={handleReset}
+        className="rounded-lg border border-danger px-4 py-2 text-sm font-semibold text-danger hover:bg-danger/10"
+      >
+        Reset About Me
+      </button>
+      <SaveStatus state={status.state} savedMessage="Reset." />
+    </Card>
   )
 }
 
@@ -55,6 +106,7 @@ type Settings = NonNullable<ReturnType<typeof useQuery<{
   device_poll_interval_seconds: number
   recall_max_distance: number
   recall_recency_days: number
+  max_history_tokens: number
   mcp_servers: string
 }>>['data']>
 
@@ -470,6 +522,62 @@ function RecallCard({ data, onSaved }: { data?: Settings; onSaved: () => void })
           step={1}
           value={recencyDays}
           onChange={(e) => setRecencyDays(e.target.value)}
+          className={inputClass}
+        />
+      </FieldRow>
+      <button type="button" onClick={() => mutation.mutate()} className={primaryBtnClass}>
+        Save
+      </button>
+      <SaveStatus state={status.state} errorMessage={status.errorMessage} />
+    </Card>
+  )
+}
+
+function ContextBudgetCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
+  const status = useSaveStatus()
+  const [maxHistoryTokens, setMaxHistoryTokens] = useState('')
+
+  useEffect(() => {
+    if (!data) return
+    setMaxHistoryTokens(String(data.max_history_tokens ?? ''))
+  }, [data])
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await api.POST('/settings', {
+        body: { max_history_tokens: parseInt(maxHistoryTokens, 10) },
+      })
+      if (error) throw new Error()
+    },
+    onMutate: () => status.setState('saving'),
+    onSuccess: () => {
+      status.setState('saved')
+      onSaved()
+    },
+    onError: () => {
+      status.setErrorMessage('Failed to save — must be between 500 and 200000.')
+      status.setState('error')
+    },
+  })
+
+  return (
+    <Card>
+      <h2 className="mb-1 text-lg font-semibold">Context Budget</h2>
+      <p className="mb-3 text-sm text-text-muted">
+        Fallback token budget for the message history sent to the model each turn — older
+        messages are trimmed once a conversation exceeds this. Only used when
+        LMSTUDIO_MANAGEMENT_URL isn't configured or LM Studio's live loaded context length can't
+        be fetched; otherwise that live number is used instead of this guess. Set it to roughly
+        match the context length your model is loaded with in LM Studio as a safety net.
+      </p>
+      <FieldRow label="Fallback history budget (tokens, approximate)">
+        <input
+          type="number"
+          min={500}
+          max={200000}
+          step={100}
+          value={maxHistoryTokens}
+          onChange={(e) => setMaxHistoryTokens(e.target.value)}
           className={inputClass}
         />
       </FieldRow>

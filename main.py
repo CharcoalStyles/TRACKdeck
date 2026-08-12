@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ValidationError, model_validator
 from starlette.middleware.sessions import SessionMiddleware
 
 # Load .env before anything that reads os.environ (i.e. before agent imports)
@@ -62,10 +62,12 @@ from agent.graph import build_graph
 from agent.memory import MemoryStore, make_chroma_client, make_embedding_function
 from agent.runtime import (
     app_state,
+    clear_thread,
     create_new_thread,
     get_agent_activity,
     get_thread_debug,
     get_thread_messages,
+    get_thread_size,
     list_checkpoint_thread_ids,
     list_threads,
     rehydrate_threads_from_checkpoints,
@@ -82,6 +84,7 @@ from agent.settings import (
     apply_persisted,
     is_valid_digest_time,
     is_valid_poll_interval_seconds,
+    is_valid_max_history_tokens,
     is_valid_recall_max_distance,
     is_valid_recall_recency_days,
     is_valid_sync_interval_minutes,
@@ -101,6 +104,7 @@ from jobs.device_sync import build_sync_payload
 from jobs.digest import send_daily_digest
 from jobs.reminders import create_test_reminder, fire_reminder
 
+from agent.tools.general import resolve_location
 from agent.vault_watcher import reconcile_vault, watch_vault
 from utils import (
     activity_log_store,
@@ -414,6 +418,12 @@ class ThreadMessagesResponse(BaseModel):
     messages: list[ThreadMessage]
 
 
+class ThreadSizeResponse(BaseModel):
+    message_count: int
+    estimated_tokens: int
+    budget_tokens: int
+
+
 class NoteSummary(BaseModel):
     id: str
     title: str
@@ -628,6 +638,25 @@ async def thread_messages(
     thread_id: str, _: Annotated[None, Depends(auth.require_session_or_token)]
 ):
     return {"messages": await get_thread_messages(thread_id)}
+
+
+@app.get("/threads/{thread_id}/size", response_model=ThreadSizeResponse)
+async def thread_size(
+    thread_id: str, _: Annotated[None, Depends(auth.require_session_or_token)]
+):
+    """Rough context-load readout so the dashboard can warn before a thread's
+    history grows past what agent/graph.py's call_llm will trim it to."""
+    return await get_thread_size(thread_id)
+
+
+@app.delete("/threads/{thread_id}/messages")
+async def clear_thread_route(
+    thread_id: str, _: Annotated[None, Depends(auth.require_session_or_token)]
+):
+    """Wipes this thread's checkpoint history so its next turn starts fresh
+    — a deliberate reset, as opposed to call_llm's automatic gradual trim."""
+    await clear_thread(thread_id)
+    return {"status": "cleared"}
 
 
 @app.get("/checkins/today", response_model=CheckinsTodayResponse)
@@ -865,6 +894,10 @@ class SettingsUpdate(BaseModel):
     # How many days back cross-thread conversation recall is allowed to
     # reach. Same "read fresh every turn" behavior as recall_max_distance.
     recall_recency_days: int | None = None
+    # Approximate token budget for message history sent to the LLM each
+    # turn (agent/graph.py's call_llm, via trim_messages). No rescheduling
+    # — read fresh on every agent turn.
+    max_history_tokens: int | None = None
 
     @model_validator(mode="after")
     def _check_values(self):
@@ -898,6 +931,10 @@ class SettingsUpdate(BaseModel):
             self.recall_recency_days
         ):
             raise ValueError("recall_recency_days must be between 1 and 3650")
+        if self.max_history_tokens is not None and not is_valid_max_history_tokens(
+            self.max_history_tokens
+        ):
+            raise ValueError("max_history_tokens must be between 500 and 200000")
         return self
 
 
@@ -918,7 +955,9 @@ class SettingsResponse(BaseModel):
     mcp_servers: str
     recall_max_distance: float
     recall_recency_days: int
+    max_history_tokens: int
     onboarding_complete: bool
+    basics_complete: bool
 
 
 def _current_settings() -> dict:
@@ -941,10 +980,13 @@ def _current_settings() -> dict:
         "mcp_servers": settings.mcp_servers,
         "recall_max_distance": settings.recall_max_distance,
         "recall_recency_days": settings.recall_recency_days,
+        "max_history_tokens": settings.max_history_tokens,
         # Read-only here — deliberately not part of SettingsUpdate below, so
         # it can only be set via agent/tools/general.py's
         # mark_onboarding_complete tool, not a direct POST /settings call.
         "onboarding_complete": onboarding_state.is_onboarding_complete(),
+        # Read-only here too — only set by POST /onboarding/basics below.
+        "basics_complete": onboarding_state.is_basics_complete(),
     }
 
 
@@ -955,28 +997,11 @@ async def get_settings(_: Annotated[None, Depends(auth.require_session_or_token)
     return _current_settings()
 
 
-@app.post("/settings", response_model=SettingsResponse)
-async def update_settings(
-    update: SettingsUpdate, _: Annotated[None, Depends(auth.require_session_or_token)]
-):
-    """Update standing app-level toggles. Only fields present in the
-    request body are changed. Takes effect immediately — settings are
-    read fresh on every agent turn, no restart needed. Every changed
-    field is also write-through persisted to settings.db
-    (utils/settings_store.py) so it survives a restart.
-
-    timezone/digest_time/bedtime/calendar_sync_interval_minutes/wake_time
-    also live-reschedule their APScheduler jobs, since they're registered
-    as fixed triggers rather than being read fresh like the other settings.
-    latest_checkin_time needs no reschedule — jobs/checkin.py reads it
-    fresh at schedule-time, same as bedtime's use there today.
-
-    mcp_servers is the one exception to "takes effect immediately" — it's
-    persisted right away like everything else, but the agent's tool list
-    is only built once at startup (main.py's lifespan), so a changed or
-    newly-added MCP server needs an app restart before the agent can use
-    it.
-    """
+async def _apply_settings_update(update: SettingsUpdate) -> None:
+    """Applies a SettingsUpdate to the live settings singleton, reschedules
+    any affected APScheduler jobs, and persists changed fields to
+    settings.db. Shared by POST /settings and POST /onboarding/basics so
+    both go through the same write/reschedule/persist logic."""
     changed: dict[str, str] = {}
 
     if update.learning_mode is not None:
@@ -1032,6 +1057,9 @@ async def update_settings(
     if update.recall_recency_days is not None:
         settings.recall_recency_days = update.recall_recency_days
         changed["recall_recency_days"] = str(update.recall_recency_days)
+    if update.max_history_tokens is not None:
+        settings.max_history_tokens = update.max_history_tokens
+        changed["max_history_tokens"] = str(update.max_history_tokens)
 
     if reschedule_digest:
         scheduler.reschedule_job("daily_digest", trigger=digest_trigger())
@@ -1044,6 +1072,148 @@ async def update_settings(
     if changed:
         await asyncio.to_thread(settings_store.set_many, changed)
 
+
+@app.post("/settings", response_model=SettingsResponse)
+async def update_settings(
+    update: SettingsUpdate, _: Annotated[None, Depends(auth.require_session_or_token)]
+):
+    """Update standing app-level toggles. Only fields present in the
+    request body are changed. Takes effect immediately — settings are
+    read fresh on every agent turn, no restart needed. Every changed
+    field is also write-through persisted to settings.db
+    (utils/settings_store.py) so it survives a restart.
+
+    timezone/digest_time/bedtime/calendar_sync_interval_minutes/wake_time
+    also live-reschedule their APScheduler jobs, since they're registered
+    as fixed triggers rather than being read fresh like the other settings.
+    latest_checkin_time needs no reschedule — jobs/checkin.py reads it
+    fresh at schedule-time, same as bedtime's use there today.
+
+    mcp_servers is the one exception to "takes effect immediately" — it's
+    persisted right away like everything else, but the agent's tool list
+    is only built once at startup (main.py's lifespan), so a changed or
+    newly-added MCP server needs an app restart before the agent can use
+    it.
+    """
+    await _apply_settings_update(update)
+    return _current_settings()
+
+
+class OnboardingPerson(BaseModel):
+    name: str
+    relation: str | None = None
+
+
+class OnboardingBasicsRequest(BaseModel):
+    name: str | None = None
+    birthday: str | None = None
+    location: str | None = None
+    occupation: str | None = None
+    current_job: str | None = None
+    people: list[OnboardingPerson] = []
+    preferences: str | None = None
+    routine: str | None = None
+    interests: str | None = None
+    health_goals: str | None = None
+    important_dates: str | None = None
+    wake_time: str | None = None
+    bedtime: str | None = None
+
+
+class OnboardingBasicsResponse(SettingsResponse):
+    location_resolved: bool
+
+
+@app.post("/onboarding/basics", response_model=OnboardingBasicsResponse)
+async def submit_onboarding_basics(
+    request: OnboardingBasicsRequest, _: Annotated[None, Depends(auth.require_session_or_token)]
+):
+    """One-time submission from the onboarding basics form (the first step
+    of /profile, before the guided chat interview takes over). Every field
+    is optional. Location/wake_time/bedtime go through the same settings
+    write path as POST /settings (not About Me — that separation is
+    deliberate, see agent/tools/general.py's set_home_location). Everything
+    else is handed to the agent as a real turn in the "onboarding" thread —
+    its own tools (remember_about_me, get_or_create_linked_note) do the
+    actual About Me writing, so the content gets written up properly (with
+    a dedicated note per person) instead of dumped in verbatim, and its
+    reply — likely a follow-up question — lands in the thread for the chat
+    view to pick up on next load."""
+    location_resolved = False
+    try:
+        if request.location:
+            resolved = resolve_location(request.location)
+            if resolved is not None:
+                resolved_name, tz_name = resolved
+                await _apply_settings_update(
+                    SettingsUpdate(default_location=resolved_name, timezone=tz_name)
+                )
+                location_resolved = True
+        if request.wake_time or request.bedtime:
+            await _apply_settings_update(
+                SettingsUpdate(wake_time=request.wake_time, bedtime=request.bedtime)
+            )
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    recap_lines = [
+        line
+        for line in [
+            f"Name: {request.name}" if request.name else None,
+            f"Birthday: {request.birthday}" if request.birthday else None,
+            f"Occupation: {request.occupation}" if request.occupation else None,
+            f"Current job: {request.current_job}" if request.current_job else None,
+            (
+                "People: " + ", ".join(
+                    f"{p.name} ({p.relation})" if p.relation else p.name for p in request.people
+                )
+                if request.people
+                else None
+            ),
+            f"Preferences: {request.preferences}" if request.preferences else None,
+            f"Routine: {request.routine}" if request.routine else None,
+            f"Interests: {request.interests}" if request.interests else None,
+            f"Health & Goals: {request.health_goals}" if request.health_goals else None,
+            f"Important Dates: {request.important_dates}" if request.important_dates else None,
+        ]
+        if line
+    ]
+    if recap_lines:
+        recap = "I just filled out the basics form:\n" + "\n".join(recap_lines) + (
+            "\n\nPlease record this properly (a separate note for each person listed), "
+            "and ask me about anything here you'd like more detail on."
+        )
+        await run_agent(recap, thread_id="onboarding", mode="onboarding")
+
+    onboarding_state.mark_basics_complete()
+    return {**_current_settings(), "location_resolved": location_resolved}
+
+
+@app.post("/onboarding/complete", response_model=SettingsResponse)
+async def complete_onboarding(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """Explicit "Finished" action from the onboarding chat step's UI — the
+    manual, user-triggered counterpart to the mark_onboarding_complete
+    agent tool (agent/tools/general.py), which sets the same flag when the
+    model itself decides the interview has covered enough."""
+    onboarding_state.mark_onboarding_complete()
+    return _current_settings()
+
+
+@app.post("/onboarding/reset", response_model=SettingsResponse)
+async def reset_onboarding(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """Deletes About Me and restarts the onboarding wizard from the basics
+    form. Also clears the onboarding/profile_chat conversation threads,
+    since their history is all about a profile that no longer exists.
+    Scoped to About Me only — notes linked from it (individual people) and
+    Settings (location/timezone/schedule) are left untouched."""
+    about_me_path = vault.about_me_path()
+    if about_me_path.exists():
+        about_me_path.unlink()
+    await reconcile_vault(app_state.memory)
+    await clear_thread("onboarding")
+    await clear_thread("profile_chat")
+    onboarding_state.clear_basics_complete()
+    onboarding_state.clear_onboarding_complete()
     return _current_settings()
 
 

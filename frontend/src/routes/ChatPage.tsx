@@ -1,11 +1,29 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import ChatWidget from '../components/chat/ChatWidget'
 
 export default function ChatPage() {
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+
+  // A fresh, un-onboarded install lands on the basics form instead of an
+  // empty chat page — same settings-probe query ProfilePage uses, so this
+  // shares its cache rather than firing a second request.
+  const settingsProbe = useQuery({
+    queryKey: ['settings-probe'],
+    queryFn: async () => {
+      const { data } = await api.GET('/settings')
+      return data as { basics_complete?: boolean } | undefined
+    },
+  })
+  useEffect(() => {
+    if (settingsProbe.data && !settingsProbe.data.basics_complete) {
+      navigate('/profile', { replace: true })
+    }
+  }, [settingsProbe.data, navigate])
 
   const threadsQuery = useQuery({
     queryKey: ['threads'],

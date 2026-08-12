@@ -487,7 +487,10 @@ def get_or_create_about_me() -> Note:
         tags=["about-me"],
         aliases=[],
         source="agent",
-        body="## Preferences\n\n## People\n\n## Routine\n\n## Interests\n",
+        body=(
+            "## Basics\n\n## Preferences\n\n## People\n\n## Routine\n\n## Interests\n"
+            "\n## Health & Goals\n\n## Important Dates\n"
+        ),
         path=path,
     )
     write_note_atomic(path, serialize_note(note))
