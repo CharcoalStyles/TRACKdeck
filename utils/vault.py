@@ -47,7 +47,7 @@ import os
 import re
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
 
@@ -170,6 +170,21 @@ def serialize_note(note: Note) -> str:
     return f"{FRONTMATTER_DELIM}\n{fm}\n{FRONTMATTER_DELIM}\n\n{body}"
 
 
+def _coerce_iso_str(value: object) -> object:
+    """serialize_note always quotes created/updated (yaml.safe_dump quotes
+    a str that would otherwise round-trip as a different type), so our own
+    writes are safe — but a note edited directly in Obsidian can have an
+    unquoted date in frontmatter (its Properties panel writes native YAML
+    dates), which yaml.safe_load then parses as a real datetime/date
+    object instead of the str the Note dataclass declares. Normalize back
+    to a string here so every caller (e.g. list_notes_summary's sort) can
+    trust created/updated are always comparable strings, regardless of how
+    the file got edited."""
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return value
+
+
 def parse_note(path: Path) -> Note | None:
     """
     Parse a note file. Returns None if it has no valid frontmatter — e.g.
@@ -201,8 +216,8 @@ def parse_note(path: Path) -> Note | None:
     return Note(
         id=fm["id"],
         title=fm.get("title") or path.stem,
-        created=fm.get("created") or now_iso(),
-        updated=fm.get("updated") or now_iso(),
+        created=_coerce_iso_str(fm.get("created")) or now_iso(),
+        updated=_coerce_iso_str(fm.get("updated")) or now_iso(),
         tags=fm.get("tags") or [],
         aliases=fm.get("aliases") or [],
         source=fm.get("source") or "agent",
