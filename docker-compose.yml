@@ -51,6 +51,7 @@ services:
       - ./data/device_state.db:/app/data/device_state.db
       - ./data/activity_log.db:/app/data/activity_log.db
       - ./data/onboarding_complete.flag:/app/data/onboarding_complete.flag
+      - ./data/onboarding_basics.flag:/app/data/onboarding_basics.flag
       - ./data/chroma_db:/app/data/chroma_db
       # The notes vault — shared with the syncthing service below so both
       # containers see the same files. Must match VAULT_PATH in .env.
