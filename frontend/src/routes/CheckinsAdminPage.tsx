@@ -49,7 +49,15 @@ export default function CheckinsAdminPage() {
           <Card key={checkin.id}>
             <h2 className="mb-1 text-lg font-semibold">
               {formatTime(checkin.resolved_at ?? checkin.fired_at ?? checkin.scheduled_at)} —{' '}
-              {checkin.category}{' '}
+              {checkin.category}
+              {checkin.personalization_level !== 'none' && (
+                <span className="ml-2 text-xs font-normal text-text-muted">
+                  ({checkin.personalization_level})
+                </span>
+              )}
+              {checkin.helpfulness && (
+                <span className="ml-2">{checkin.helpfulness === 'up' ? '👍' : '👎'}</span>
+              )}{' '}
               <span className={`text-xs font-semibold ${STATUS_COLOR[checkin.status] ?? 'text-text-muted'}`}>
                 {STATUS_LABEL[checkin.status] ?? checkin.status}
               </span>

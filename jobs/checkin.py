@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import random
 import time
 import uuid
@@ -42,13 +43,14 @@ from urllib.parse import urlencode
 
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.triggers.date import DateTrigger
+from langchain_openai import ChatOpenAI
 
 from agent.checkin_prompts import FALLBACK_CATEGORY, PROMPTS
 from agent.memory import MemoryStore
 from agent.runtime import AgentResult, create_background_thread, run_agent
 from agent.scheduler import scheduler
 from agent.settings import settings
-from utils import checkins_store
+from utils import activity_log_store, checkins_store, vault
 from utils.notify import notify_error, send_gotify
 
 logger = logging.getLogger(__name__)
@@ -58,6 +60,42 @@ FALLBACK_RETRY_RANGE = (timedelta(minutes=30), timedelta(minutes=90))
 WAKE_JITTER_RANGE = (timedelta(minutes=0), timedelta(minutes=45))
 CHECKIN_EXPIRY = timedelta(hours=2)  # fired-but-never-answered -> 'expired'
 CHECKIN_PRIORITY = 3  # silent/routine — the device's eink display is the primary surface
+
+PERSONALIZATION_LEVELS = ("none", "select", "light")  # the live rotation real
+# check-ins are randomly assigned from — "moderate" (below) is deliberately
+# excluded, reachable only via preview_personalization for manual testing.
+
+SELECT_PROMPT_TEMPLATE = """You are choosing which single check-in prompt best fits this \
+person right now, from a fixed list. Output ONLY one of the listed prompts, copied \
+character-for-character — do not write a new one, do not alter punctuation or wording.
+
+{context}
+
+Candidate prompts:
+{candidates}
+
+Reply with ONLY the chosen prompt text, nothing else."""
+
+LIGHT_PROMPT_TEMPLATE = """Lightly reword the check-in prompt below so it references \
+something specific about this person. Keep the same rough length and tone, keep the same \
+core meaning, and it must still end in a question mark.
+
+{context}
+
+Base prompt: "{base_prompt}"
+
+Reply with ONLY the reworded prompt, nothing else — no quotes, no preamble."""
+
+MODERATE_PROMPT_TEMPLATE = """Rework the check-in prompt below so it draws more directly \
+on this person's context — you can restructure the sentence, not just swap in a \
+reference, as long as the core meaning and category of prompt stay the same. Keep it \
+roughly the same length, and it must still end in a question mark.
+
+{context}
+
+Base prompt: "{base_prompt}"
+
+Reply with ONLY the reworked prompt, nothing else — no quotes, no preamble."""
 
 
 def _random_delay(bounds: tuple[timedelta, timedelta]) -> timedelta:
@@ -148,11 +186,152 @@ async def answer_checkin(checkin_id: str, text: str) -> AgentResult | None:
     return result
 
 
+def _personalization_llm() -> ChatOpenAI:
+    return ChatOpenAI(
+        base_url=os.environ["LMSTUDIO_OPENAI_URL"],
+        api_key="lm-studio",
+        model=os.environ["CHAT_MODEL"],
+        temperature=0.35,
+    )
+
+
+def _llm_select(bank: list[str], context: str) -> str:
+    """Blocking — call via asyncio.to_thread, wrapped in asyncio.wait_for."""
+    candidates = "\n".join(f"{i + 1}. {p}" for i, p in enumerate(bank))
+    llm = _personalization_llm()
+    return llm.invoke(SELECT_PROMPT_TEMPLATE.format(context=context, candidates=candidates)).content.strip()
+
+
+def _llm_light_reword(base_prompt: str, context: str) -> str:
+    """Blocking — call via asyncio.to_thread."""
+    llm = _personalization_llm()
+    return llm.invoke(LIGHT_PROMPT_TEMPLATE.format(context=context, base_prompt=base_prompt)).content.strip()
+
+
+def _llm_moderate_reword(base_prompt: str, context: str) -> str:
+    """Blocking — call via asyncio.to_thread. Preview-only (see
+    PERSONALIZATION_LEVELS) — not part of the live rotation."""
+    llm = _personalization_llm()
+    return llm.invoke(MODERATE_PROMPT_TEMPLATE.format(context=context, base_prompt=base_prompt)).content.strip()
+
+
+def _personalization_context(values_text: str | None, recent_activity: list[dict]) -> str:
+    parts = []
+    if values_text:
+        parts.append(f"Their stated personal values:\n{values_text}")
+    if recent_activity:
+        summary = "; ".join(f"{a['activity_type']}: {a['subject']}" for a in recent_activity[:8])
+        parts.append(f"Their logged activity in the last 24h: {summary}")
+    return "\n\n".join(parts)
+
+
+async def _gather_context() -> str:
+    about_me = await asyncio.to_thread(vault.get_or_create_about_me)
+    values_text = vault.get_section(about_me.body, "Values")
+    now = int(time.time())
+    recent_activity = await asyncio.to_thread(activity_log_store.list_between, now - 86400, now)
+    return _personalization_context(values_text, recent_activity)
+
+
+async def _personalize_prompt(category: str) -> tuple[str, str]:
+    """Picks the prompt text and returns (prompt_text, level_actually_delivered)
+    — NOT the level attempted. "select"/"light" fall back to the plain bank
+    pick (recording "none") on any validation miss or LLM error, so a
+    check-in's recorded level always reflects what the user actually
+    received, keeping later helpfulness ratings honest.
+
+    No timeout on the LLM call — check-in timing was never meant to be
+    tight (there's no external trigger like location/heart-rate driving
+    it, just a semi-randomized spread through the day), so there's nothing
+    for a fast local response to protect; a slow model just takes longer
+    to schedule the next one.
+
+    Random three-way split (none/select/light) per check-in is deliberate —
+    it's the A/B mechanism for comparing whether personalization is worth it
+    for this person at all, decided from their own helpfulness ratings over
+    time rather than assumed upfront. "moderate" is excluded from this live
+    rotation on purpose — see preview_personalization to try it out first."""
+    bank = PROMPTS[category]
+    level = random.choice(PERSONALIZATION_LEVELS)
+    if level == "none":
+        return random.choice(bank), "none"
+
+    context = await _gather_context()
+    if not context:
+        # Nothing to personalize against yet (no Values section, no recent
+        # activity) — skip the LLM call entirely rather than spend a round
+        # trip asking it to personalize against nothing.
+        return random.choice(bank), "none"
+
+    try:
+        if level == "select":
+            chosen = await asyncio.to_thread(_llm_select, bank, context)
+            if chosen in bank:
+                return chosen, "select"
+        else:  # "light"
+            base = random.choice(bank)
+            reworded = await asyncio.to_thread(_llm_light_reword, base, context)
+            if reworded and reworded.endswith("?") and len(reworded) < 300:
+                return reworded, "light"
+    except Exception as e:
+        logger.warning("Check-in personalization (%s) failed, falling back: %s", level, e)
+
+    return random.choice(bank), "none"
+
+
+async def preview_personalization(category: str, level: str) -> dict:
+    """Debug-only: run one personalization level on demand and return the
+    raw LLM output plus whether it would pass the real validation — without
+    creating a checkin row, scheduling anything, or silently falling back.
+    The point is to let you actually see what a given (possibly slow) local
+    model returns, not hide a bad output behind a fallback the way the live
+    path does. "moderate" only exists on this path — it's never part of
+    PERSONALIZATION_LEVELS, so it can't be picked for a real check-in."""
+    bank = PROMPTS[category]
+    context = await _gather_context()
+
+    base_prompt: str | None = None
+    if level == "select":
+        raw = await asyncio.to_thread(_llm_select, bank, context)
+        valid = raw in bank
+    elif level == "light":
+        base_prompt = random.choice(bank)
+        raw = await asyncio.to_thread(_llm_light_reword, base_prompt, context)
+        valid = bool(raw) and raw.endswith("?") and len(raw) < 300
+    elif level == "moderate":
+        base_prompt = random.choice(bank)
+        raw = await asyncio.to_thread(_llm_moderate_reword, base_prompt, context)
+        valid = bool(raw) and raw.endswith("?") and len(raw) < 300
+    else:
+        raise ValueError(f"Unknown personalization level: {level}")
+
+    return {
+        "category": category,
+        "level": level,
+        "context_used": context or None,
+        "base_prompt": base_prompt,
+        "result": raw,
+        "would_pass_validation": valid,
+    }
+
+
+def _rate_urls(checkin_id: str) -> tuple[str, str] | None:
+    """(up_url, down_url) for the daily digest's thumbs-up/down links. None
+    if public_base_url isn't set — same degrade-gracefully contract as
+    _checkin_click_url below; the digest omits the rating block entirely
+    rather than emailing a broken link."""
+    base = settings.public_base_url
+    if not base:
+        return None
+    root = f"{base.rstrip('/')}/checkin/{checkin_id}/rate"
+    return f"{root}?helpful=yes", f"{root}?helpful=no"
+
+
 async def _create_and_schedule(
     scheduled_at_local: datetime, category: str, retry_of: str | None
 ) -> None:
     checkin_id = str(uuid.uuid4())
-    prompt_text = random.choice(PROMPTS[category])
+    prompt_text, personalization_level = await _personalize_prompt(category)
     scheduled_at_utc = scheduled_at_local.astimezone(timezone.utc)
     await asyncio.to_thread(
         checkins_store.create_checkin,
@@ -161,6 +340,7 @@ async def _create_and_schedule(
         prompt_text,
         int(scheduled_at_utc.timestamp()),
         retry_of,
+        personalization_level,
     )
     if scheduled_at_utc <= datetime.now(timezone.utc):
         await fire_checkin(checkin_id)
@@ -338,6 +518,8 @@ async def reflections_between(memory: MemoryStore, start_ts: int, end_ts: int) -
                 "fired_at": checkin["fired_at"],
                 "resolved_at": checkin["resolved_at"],
                 "reply": reply,
+                "personalization_level": checkin["personalization_level"],
+                "helpfulness": checkin["helpfulness"],
             }
         )
     return results

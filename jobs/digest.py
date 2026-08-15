@@ -33,6 +33,7 @@ from agent.memory import MemoryStore
 from agent.runtime import app_state, prune_thread_locks
 from agent.settings import settings
 from agent.vault_watcher import index_note_file
+from jobs import checkin as checkin_jobs
 from utils import checkins_store, vault
 from utils.mailer import send_email
 from utils.notify import notify_error
@@ -89,14 +90,15 @@ def _write_recap(entries: list[str], reflections: list[str]) -> str:
     return response.content
 
 
-def _todays_checkin_reflections(memory: MemoryStore, start_ts: int, end_ts: int) -> tuple[list[str], set[str]]:
+def _todays_checkin_reflections(memory: MemoryStore, answered: list[dict]) -> tuple[list[str], set[str]]:
     """Today's answered check-ins (jobs/checkin.py), formatted as
     prompt/reply pairs, plus the set of their thread_ids so the caller can
     keep them out of the generic conversation log. A reply's summary lives
     in Chroma under the check-in's own dedicated thread, not in
     checkins.db itself, so this looks it up via
-    MemoryStore.get_conversation_by_thread."""
-    answered = checkins_store.list_answered_between(start_ts, end_ts)
+    MemoryStore.get_conversation_by_thread. Takes the already-fetched
+    answered list rather than querying itself — send_daily_digest needs
+    that same list for the rating block below too."""
     reflections = []
     thread_ids = set()
     for checkin in answered:
@@ -108,6 +110,27 @@ def _todays_checkin_reflections(memory: MemoryStore, start_ts: int, end_ts: int)
         if reply:
             reflections.append(f'Prompt ({checkin["category"]}): "{checkin["prompt_text"]}"\nReply: {reply}')
     return reflections, thread_ids
+
+
+def _build_rating_block(answered: list[dict]) -> str:
+    """Deterministic string-building, no LLM call — a thumbs-up/down link
+    pair per answered check-in, appended to the email body only (not the
+    vault note, which is a long-lived document that shouldn't carry
+    tracking-link plumbing). Empty string (nothing appended) if there were
+    no answered check-ins today, or if public_base_url isn't configured
+    (checkin_jobs._rate_urls returns None) — same graceful-degradation
+    contract as the rest of this feature's link-building."""
+    lines = []
+    for checkin in answered:
+        urls = checkin_jobs._rate_urls(checkin["id"])
+        if urls is None:
+            return ""
+        up_url, down_url = urls
+        snippet = checkin["prompt_text"]
+        if len(snippet) > 80:
+            snippet = snippet[:77] + "..."
+        lines.append(f'{checkin["category"]} check-in: "{snippet}" — helpful? Yes: {up_url}  No: {down_url}')
+    return "\n\nHow were today's check-in prompts?\n" + "\n".join(lines) if lines else ""
 
 
 def _write_recap_to_vault(recap: str, now_local: datetime) -> vault.Note:
@@ -165,10 +188,12 @@ async def send_daily_digest(memory: MemoryStore) -> None:
     yesterday's keywords alive would be a worse failure mode than losing
     one day's digest.
     """
+    answered: list[dict] = []
     try:
         start_ts, end_ts = _todays_utc_bounds()
+        answered = await asyncio.to_thread(checkins_store.list_answered_between, start_ts, end_ts)
         reflections, checkin_thread_ids = await asyncio.to_thread(
-            _todays_checkin_reflections, memory, start_ts, end_ts
+            _todays_checkin_reflections, memory, answered
         )
         entries = memory.get_conversations_between(start_ts, end_ts, exclude_thread_ids=checkin_thread_ids)
         recap = await asyncio.to_thread(_write_recap, entries, reflections)
@@ -182,7 +207,8 @@ async def send_daily_digest(memory: MemoryStore) -> None:
         today_str = now_local.strftime("%A, %d %B %Y")
 
         try:
-            await asyncio.to_thread(send_email, f"Daily recap — {today_str}", recap)
+            rating_block = _build_rating_block(answered)
+            await asyncio.to_thread(send_email, f"Daily recap — {today_str}", recap + rating_block)
             logger.info("Daily digest emailed for %s (%d logged entries).", today_str, len(entries))
         except Exception as e:
             logger.error("Daily digest email failed: %s", e)

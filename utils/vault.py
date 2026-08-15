@@ -567,3 +567,14 @@ def replace_section(body: str, heading: str, new_content: str) -> str:
     tail = body[end:]
     tail_sep = "\n" if tail.strip() else ""
     return f"{body[:start]}{new_content}\n{tail_sep}{tail.lstrip(chr(10))}"
+
+
+def get_section(body: str, heading: str) -> str | None:
+    """Read-only counterpart to append_to_section/replace_section — the
+    text under `heading`, or None if that section doesn't exist or is
+    empty."""
+    span = _section_span(body, heading)
+    if span is None:
+        return None
+    text = body[span[0]:span[1]].strip()
+    return text or None

@@ -36,6 +36,7 @@ export default function BasicsForm({ onDone = () => {} }: { onDone?: () => void 
   const [preferences, setPreferences] = useState('')
   const [routine, setRoutine] = useState('')
   const [interests, setInterests] = useState('')
+  const [values, setValues] = useState('')
   const [healthGoals, setHealthGoals] = useState('')
   const [importantDates, setImportantDates] = useState('')
   const [wakeTime, setWakeTime] = useState('')
@@ -60,6 +61,7 @@ export default function BasicsForm({ onDone = () => {} }: { onDone?: () => void 
           preferences: preferences || null,
           routine: routine || null,
           interests: interests || null,
+          values: values || null,
           health_goals: healthGoals || null,
           important_dates: importantDates || null,
           wake_time: wakeTime || null,
@@ -176,6 +178,14 @@ export default function BasicsForm({ onDone = () => {} }: { onDone?: () => void 
       </FieldRow>
       <FieldRow label="Interests (hobbies, ongoing projects)">
         <textarea value={interests} onChange={(e) => setInterests(e.target.value)} className={textareaClass} />
+      </FieldRow>
+      <FieldRow label="Values">
+        <textarea
+          value={values}
+          onChange={(e) => setValues(e.target.value)}
+          placeholder="Optional. If you've worked this out already (with a counselor or on your own), paste it in — a numbered list in order of importance works well, but anything you've got is fine."
+          className={textareaClass}
+        />
       </FieldRow>
       <FieldRow label="Health & goals">
         <textarea value={healthGoals} onChange={(e) => setHealthGoals(e.target.value)} className={textareaClass} />

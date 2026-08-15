@@ -1354,6 +1354,10 @@ export interface components {
             resolved_at: number | null;
             /** Reply */
             reply: string | null;
+            /** Personalization Level */
+            personalization_level: string;
+            /** Helpfulness */
+            helpfulness: string | null;
         };
         /** CheckinReplyRequest */
         CheckinReplyRequest: {

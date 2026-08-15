@@ -40,10 +40,22 @@ def init_db() -> None:
                 status TEXT NOT NULL DEFAULT 'pending',
                 resolved_at INTEGER,
                 retry_of TEXT REFERENCES checkins(id),
+                personalization_level TEXT NOT NULL DEFAULT 'none',
+                helpfulness TEXT,
                 created_at INTEGER NOT NULL
             )
             """
         )
+        # Migration guard for a checkins.db created before these existed —
+        # CREATE TABLE IF NOT EXISTS above doesn't add columns to an
+        # already-existing table.
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(checkins)")}
+        if "personalization_level" not in columns:
+            conn.execute(
+                "ALTER TABLE checkins ADD COLUMN personalization_level TEXT NOT NULL DEFAULT 'none'"
+            )
+        if "helpfulness" not in columns:
+            conn.execute("ALTER TABLE checkins ADD COLUMN helpfulness TEXT")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS day_plans (
@@ -61,12 +73,15 @@ def create_checkin(
     prompt_text: str,
     scheduled_at: int,
     retry_of: Optional[str] = None,
+    personalization_level: str = "none",
 ) -> None:
     with _connect() as conn:
         conn.execute(
             "INSERT INTO checkins (id, category, prompt_text, scheduled_at, "
-            "status, retry_of, created_at) VALUES (?, ?, ?, ?, 'pending', ?, ?)",
-            (checkin_id, category, prompt_text, scheduled_at, retry_of, int(time.time())),
+            "status, retry_of, personalization_level, created_at) "
+            "VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)",
+            (checkin_id, category, prompt_text, scheduled_at, retry_of,
+             personalization_level, int(time.time())),
         )
 
 
@@ -83,6 +98,18 @@ def mark_resolved(checkin_id: str, status: str, resolved_at: int) -> None:
         conn.execute(
             "UPDATE checkins SET status = ?, resolved_at = ? WHERE id = ?",
             (status, resolved_at, checkin_id),
+        )
+
+
+def record_helpfulness(checkin_id: str, helpful: bool) -> None:
+    """Idempotent — last click wins, no history kept. Existence/status
+    validation is the caller's job (main.py's rating route), matching this
+    store's existing convention that store functions are thin SQL wrappers
+    (see resolve_checkin/answer_checkin, which validate one layer up)."""
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE checkins SET helpfulness = ? WHERE id = ?",
+            ("up" if helpful else "down", checkin_id),
         )
 
 

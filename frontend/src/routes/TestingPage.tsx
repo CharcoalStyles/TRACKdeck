@@ -94,6 +94,15 @@ export default function TestingPage() {
     onSuccess: (data) => setSyncPreview(JSON.stringify(data, null, 2)),
   })
 
+  const [previewCategory, setPreviewCategory] = useState<'low' | 'medium' | 'high'>('low')
+  const [previewLevel, setPreviewLevel] = useState<'select' | 'light' | 'moderate'>('light')
+  const [personalizationPreview, setPersonalizationPreview] = useState<string | null>(null)
+  const personalizationPreviewMutation = useMutation({
+    mutationFn: () =>
+      fetchDebug<unknown>(`/debug/checkin/preview?category=${previewCategory}&level=${previewLevel}`),
+    onSuccess: (data) => setPersonalizationPreview(JSON.stringify(data, null, 2)),
+  })
+
   const state = deviceStateQuery.data
 
   return (
@@ -215,6 +224,48 @@ export default function TestingPage() {
                   `RSSI: ${state.rssi_dbm != null ? state.rssi_dbm + ' dBm' : '—'}`,
                 ].join('\n')}
         </pre>
+      </Card>
+
+      <Card>
+        <h2 className="mb-1 text-lg font-semibold">Preview Check-In Personalization</h2>
+        <p className="mb-3 text-sm text-text-muted">
+          Runs one personalization level on demand and shows the raw LLM output, without creating
+          a real check-in or a real Gotify push. "Moderate" is preview-only — it's never picked
+          for a live check-in, only "none"/"select"/"light" are in that rotation.
+        </p>
+        <div className="mb-3 flex items-center gap-2">
+          <select
+            value={previewCategory}
+            onChange={(e) => setPreviewCategory(e.target.value as typeof previewCategory)}
+            className="rounded border border-border bg-card-alt px-2 py-1 text-sm text-text-primary"
+          >
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+          <select
+            value={previewLevel}
+            onChange={(e) => setPreviewLevel(e.target.value as typeof previewLevel)}
+            className="rounded border border-border bg-card-alt px-2 py-1 text-sm text-text-primary"
+          >
+            <option value="select">Select</option>
+            <option value="light">Light</option>
+            <option value="moderate">Moderate</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => personalizationPreviewMutation.mutate()}
+            disabled={personalizationPreviewMutation.isPending}
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
+          >
+            {personalizationPreviewMutation.isPending ? 'Asking the model...' : 'Preview'}
+          </button>
+        </div>
+        {personalizationPreview && (
+          <pre className="max-h-[320px] overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-[#2a2a2a] bg-header p-3 text-sm">
+            {personalizationPreview}
+          </pre>
+        )}
       </Card>
 
       <Card>

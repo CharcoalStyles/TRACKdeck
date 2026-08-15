@@ -10,7 +10,7 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime, time as dtime, timedelta, timezone
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 import uvicorn
 from apscheduler.jobstores.base import JobLookupError
@@ -27,7 +27,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, ValidationError, model_validator
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -494,6 +494,8 @@ class CheckinRecord(BaseModel):
     fired_at: int | None
     resolved_at: int | None
     reply: str | None
+    personalization_level: str
+    helpfulness: str | None
 
 
 class CheckinsTodayResponse(BaseModel):
@@ -1123,6 +1125,7 @@ class OnboardingBasicsRequest(BaseModel):
     preferences: str | None = None
     routine: str | None = None
     interests: str | None = None
+    values: str | None = None
     health_goals: str | None = None
     important_dates: str | None = None
     wake_time: str | None = None
@@ -1141,7 +1144,7 @@ _ONBOARDING_RECAP_GROUPS: list[list[str]] = [
     ["name", "birthday", "occupation", "current_job", "important_dates"],
     ["people"],
     ["preferences", "routine"],
-    ["interests", "health_goals"],
+    ["interests", "values", "health_goals"],
 ]
 
 
@@ -1164,6 +1167,7 @@ def _build_onboarding_recap_chunks(request: "OnboardingBasicsRequest") -> list[s
         "preferences": f"Preferences: {request.preferences}" if request.preferences else None,
         "routine": f"Routine: {request.routine}" if request.routine else None,
         "interests": f"Interests: {request.interests}" if request.interests else None,
+        "values": f"Values: {request.values}" if request.values else None,
         "health_goals": (
             f"Health & Goals: {request.health_goals}" if request.health_goals else None
         ),
@@ -1359,6 +1363,23 @@ async def trigger_checkin_now(_: Annotated[None, Depends(auth.require_session_or
     """
     await checkin_jobs.trigger_test_checkin()
     return {"status": "sent"}
+
+
+@app.get("/debug/checkin/preview")
+async def preview_checkin_personalization(
+    category: Literal["low", "medium", "high"],
+    level: Literal["select", "light", "moderate"],
+    _: Annotated[None, Depends(auth.require_session_or_token)],
+):
+    """
+    Runs one check-in personalization level on demand and returns the raw
+    LLM output, for testing prompt quality without creating a real check-in
+    or waiting for the live none/select/light rotation to happen to land on
+    the level you want to inspect. "moderate" is only reachable here — see
+    jobs/checkin.py's PERSONALIZATION_LEVELS for why it's excluded from
+    live check-ins.
+    """
+    return await checkin_jobs.preview_personalization(category, level)
 
 
 @app.post("/debug/notify")
@@ -1736,6 +1757,27 @@ async def reply_checkin(checkin_id: str, request: CheckinReplyRequest):
     if result is None:
         raise HTTPException(status_code=409, detail="Check-in is no longer awaiting a reply")
     return {"reply": result.reply}
+
+
+@app.get("/checkin/{checkin_id}/rate")
+async def rate_checkin(checkin_id: str, helpful: Literal["yes", "no"]):
+    """
+    Magic-link thumbs-up/down from the daily digest email (jobs/digest.py's
+    rating block). GET, not POST — a plain-text email link has no JS/form to
+    issue a POST. Same trust model as the other magic-link check-in routes
+    above (the id itself is the capability token), but scoped to
+    status == "answered" rather than "pending" — only a check-in the user
+    actually engaged with makes sense to rate. No expiry window: unlike the
+    pending-to-fired CHECKIN_EXPIRY clock, a digest email is a standing
+    record and a rating given days later is still real data.
+    """
+    checkin = await asyncio.to_thread(checkins_store.get_checkin, checkin_id)
+    if checkin is None:
+        raise HTTPException(status_code=404, detail="Unknown check-in")
+    if checkin["status"] != "answered":
+        raise HTTPException(status_code=409, detail="Only answered check-ins can be rated")
+    await asyncio.to_thread(checkins_store.record_helpfulness, checkin_id, helpful == "yes")
+    return HTMLResponse("<p>Thanks — got it. You can close this tab.</p>")
 
 
 # ---------------------------------------------------------------------------

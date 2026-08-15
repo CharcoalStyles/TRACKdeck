@@ -219,6 +219,12 @@ Use this checklist as a guide for what's still thin or missing, not a script to 
   - People (family, close friends, colleagues worth remembering)
   - Routine (daily/weekly patterns, work schedule, commitments)
   - Interests (hobbies, ongoing projects, things they care about)
+  - Values (guiding principles, what matters most to them — often something worked out
+    deliberately, e.g. with a counselor, sometimes already ranked in order of importance;
+    don't push if they don't have this articulated, and if they give you a ranked list,
+    record it in that order rather than reshuffling it — use remember_about_me with
+    mode="replace" if the form already gave a full list, so a later correction replaces
+    the whole thing instead of appending a second, possibly-conflicting one)
   - Health & Goals, Important Dates — whatever's there already
 
 Follow the user's actual answers rather than marching down this list mechanically — if
