@@ -67,6 +67,7 @@ if os.environ.get("SESSION_SECRET_KEY") in (None, _PLACEHOLDER_SESSION_SECRET_KE
     )
 
 import auth
+from agent.checkin_prompts import PROMPTS
 from agent.graph import build_graph
 from agent.memory import MemoryStore, make_chroma_client, make_embedding_function
 from agent.runtime import (
@@ -1365,11 +1366,22 @@ async def trigger_checkin_now(_: Annotated[None, Depends(auth.require_session_or
     return {"status": "sent"}
 
 
+@app.get("/debug/checkin/prompts")
+async def list_checkin_prompts(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """
+    The full built-in prompt bank (agent/checkin_prompts.PROMPTS), for the
+    Testing page's personalization preview to build its "which prompt"
+    picker from, rather than duplicating the list in the frontend.
+    """
+    return PROMPTS
+
+
 @app.get("/debug/checkin/preview")
 async def preview_checkin_personalization(
     category: Literal["low", "medium", "high"],
     level: Literal["select", "light", "moderate"],
     _: Annotated[None, Depends(auth.require_session_or_token)],
+    base_prompt: str | None = None,
 ):
     """
     Runs one check-in personalization level on demand and returns the raw
@@ -1378,8 +1390,15 @@ async def preview_checkin_personalization(
     the level you want to inspect. "moderate" is only reachable here — see
     jobs/checkin.py's PERSONALIZATION_LEVELS for why it's excluded from
     live check-ins.
+
+    base_prompt (optional, ignored for "select") pins "light"/"moderate" to
+    a specific bank prompt instead of each grabbing their own random one,
+    so the two rewrites can be compared against the same input.
     """
-    return await checkin_jobs.preview_personalization(category, level)
+    try:
+        return await checkin_jobs.preview_personalization(category, level, base_prompt)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/debug/notify")

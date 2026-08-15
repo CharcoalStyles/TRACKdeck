@@ -19,6 +19,10 @@ interface DeviceState {
   rssi_dbm?: number | null
 }
 
+type PromptCategory = 'low' | 'medium' | 'high'
+type PromptBank = Record<PromptCategory, string[]>
+const PROMPT_CATEGORIES: PromptCategory[] = ['low', 'medium', 'high']
+
 async function triggerDebug(path: string) {
   const response = await fetch(path, { method: 'POST' })
   if (!response.ok) throw new Error(`Server returned ${response.status}`)
@@ -94,12 +98,29 @@ export default function TestingPage() {
     onSuccess: (data) => setSyncPreview(JSON.stringify(data, null, 2)),
   })
 
-  const [previewCategory, setPreviewCategory] = useState<'low' | 'medium' | 'high'>('low')
+  const promptsQuery = useQuery({
+    queryKey: ['debug-checkin-prompts'],
+    queryFn: () => fetchDebug<PromptBank>('/debug/checkin/prompts'),
+  })
+  const allPrompts = PROMPT_CATEGORIES.flatMap((category) =>
+    (promptsQuery.data?.[category] ?? []).map((text, index) => ({ category, index, text })),
+  )
+
+  const [selectedPromptKey, setSelectedPromptKey] = useState('')
   const [previewLevel, setPreviewLevel] = useState<'select' | 'light' | 'moderate'>('light')
   const [personalizationPreview, setPersonalizationPreview] = useState<string | null>(null)
+  const selectedPrompt =
+    allPrompts.find((p) => `${p.category}:${p.index}` === selectedPromptKey) ?? allPrompts[0]
+
   const personalizationPreviewMutation = useMutation({
-    mutationFn: () =>
-      fetchDebug<unknown>(`/debug/checkin/preview?category=${previewCategory}&level=${previewLevel}`),
+    mutationFn: () => {
+      if (!selectedPrompt) throw new Error('No prompt selected')
+      const params = new URLSearchParams({ category: selectedPrompt.category, level: previewLevel })
+      // "select" chooses across the whole category bank rather than rewording
+      // one specific line, so the picked prompt only supplies the category.
+      if (previewLevel !== 'select') params.set('base_prompt', selectedPrompt.text)
+      return fetchDebug<unknown>(`/debug/checkin/preview?${params.toString()}`)
+    },
     onSuccess: (data) => setPersonalizationPreview(JSON.stringify(data, null, 2)),
   })
 
@@ -229,19 +250,28 @@ export default function TestingPage() {
       <Card>
         <h2 className="mb-1 text-lg font-semibold">Preview Check-In Personalization</h2>
         <p className="mb-3 text-sm text-text-muted">
-          Runs one personalization level on demand and shows the raw LLM output, without creating
-          a real check-in or a real Gotify push. "Moderate" is preview-only — it's never picked
-          for a live check-in, only "none"/"select"/"light" are in that rotation.
+          Pick one of the built-in prompts and a level, then preview the raw LLM output — without
+          creating a real check-in or a real Gotify push. "Light" and "moderate" both reword
+          whichever prompt is selected, so you can compare them against the same input. "Moderate"
+          is preview-only — it's never picked for a live check-in, only "none"/"select"/"light"
+          are in that rotation.
         </p>
-        <div className="mb-3 flex items-center gap-2">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
           <select
-            value={previewCategory}
-            onChange={(e) => setPreviewCategory(e.target.value as typeof previewCategory)}
-            className="rounded border border-border bg-card-alt px-2 py-1 text-sm text-text-primary"
+            value={selectedPromptKey || (allPrompts[0] ? `${allPrompts[0].category}:${allPrompts[0].index}` : '')}
+            onChange={(e) => setSelectedPromptKey(e.target.value)}
+            disabled={!promptsQuery.data}
+            className="min-w-0 flex-1 rounded border border-border bg-card-alt px-2 py-1 text-sm text-text-primary"
           >
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
+            {PROMPT_CATEGORIES.map((category) => (
+              <optgroup key={category} label={category}>
+                {(promptsQuery.data?.[category] ?? []).map((text, index) => (
+                  <option key={index} value={`${category}:${index}`}>
+                    {text.length > 70 ? `${text.slice(0, 67)}...` : text}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
           </select>
           <select
             value={previewLevel}
@@ -255,7 +285,7 @@ export default function TestingPage() {
           <button
             type="button"
             onClick={() => personalizationPreviewMutation.mutate()}
-            disabled={personalizationPreviewMutation.isPending}
+            disabled={personalizationPreviewMutation.isPending || !selectedPrompt}
             className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {personalizationPreviewMutation.isPending ? 'Asking the model...' : 'Preview'}

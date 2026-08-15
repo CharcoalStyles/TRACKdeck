@@ -279,27 +279,35 @@ async def _personalize_prompt(category: str) -> tuple[str, str]:
     return random.choice(bank), "none"
 
 
-async def preview_personalization(category: str, level: str) -> dict:
+async def preview_personalization(category: str, level: str, base_prompt: str | None = None) -> dict:
     """Debug-only: run one personalization level on demand and return the
     raw LLM output plus whether it would pass the real validation — without
     creating a checkin row, scheduling anything, or silently falling back.
     The point is to let you actually see what a given (possibly slow) local
     model returns, not hide a bad output behind a fallback the way the live
     path does. "moderate" only exists on this path — it's never part of
-    PERSONALIZATION_LEVELS, so it can't be picked for a real check-in."""
+    PERSONALIZATION_LEVELS, so it can't be picked for a real check-in.
+
+    base_prompt lets "light" and "moderate" be pointed at the exact same
+    bank prompt (rather than each grabbing their own random one), so the
+    two rewrites are actually comparable side by side. Falls back to a
+    random pick from the category if omitted; ignored for "select", which
+    picks across the whole bank rather than rewording one specific line."""
     bank = PROMPTS[category]
+    if base_prompt is not None and base_prompt not in bank:
+        raise ValueError(f"{base_prompt!r} is not one of the built-in {category!r} prompts")
     context = await _gather_context()
 
-    base_prompt: str | None = None
     if level == "select":
         raw = await asyncio.to_thread(_llm_select, bank, context)
         valid = raw in bank
+        base_prompt = None
     elif level == "light":
-        base_prompt = random.choice(bank)
+        base_prompt = base_prompt or random.choice(bank)
         raw = await asyncio.to_thread(_llm_light_reword, base_prompt, context)
         valid = bool(raw) and raw.endswith("?") and len(raw) < 300
     elif level == "moderate":
-        base_prompt = random.choice(bank)
+        base_prompt = base_prompt or random.choice(bank)
         raw = await asyncio.to_thread(_llm_moderate_reword, base_prompt, context)
         valid = bool(raw) and raw.endswith("?") and len(raw) < 300
     else:

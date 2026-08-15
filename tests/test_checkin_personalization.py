@@ -112,6 +112,37 @@ def test_preview_select_validates_against_bank(monkeypatch):
     assert result["base_prompt"] is None
 
 
+def test_preview_pins_light_and_moderate_to_the_given_base_prompt(monkeypatch):
+    _stub_context(monkeypatch)
+    fixed_prompt = checkin_mod.PROMPTS["medium"][3]
+    seen_bases = []
+
+    def _capture(base, context):
+        seen_bases.append(base)
+        return f"{base[:-1]} — reworded?"
+
+    monkeypatch.setattr(checkin_mod, "_llm_light_reword", _capture)
+    monkeypatch.setattr(checkin_mod, "_llm_moderate_reword", _capture)
+
+    light = asyncio.run(checkin_mod.preview_personalization("medium", "light", base_prompt=fixed_prompt))
+    moderate = asyncio.run(checkin_mod.preview_personalization("medium", "moderate", base_prompt=fixed_prompt))
+
+    assert light["base_prompt"] == fixed_prompt
+    assert moderate["base_prompt"] == fixed_prompt
+    assert seen_bases == [fixed_prompt, fixed_prompt]
+
+
+def test_preview_rejects_base_prompt_not_in_that_categorys_bank(monkeypatch):
+    _stub_context(monkeypatch)
+    foreign_prompt = checkin_mod.PROMPTS["high"][0]
+
+    try:
+        asyncio.run(checkin_mod.preview_personalization("low", "light", base_prompt=foreign_prompt))
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+
+
 def test_preview_unknown_level_raises():
     try:
         asyncio.run(checkin_mod.preview_personalization("low", "bogus"))
