@@ -118,6 +118,9 @@ async def build_sync_payload() -> dict:
                 "message": r["message"],
                 "due_at": r["due_at"],
                 "event_uid": r["event_uid"],
+                # Nullable — None means the device picks a random sound from
+                # its library, same as before this field existed.
+                "alert_sound_id": r["alert_sound_id"],
             }
             for r in reminders
         ],
@@ -137,6 +140,7 @@ async def build_sync_payload() -> dict:
                 "sha256": s["sha256"],
                 "size_bytes": s["size_bytes"],
                 "duration_seconds": s["duration_seconds"],
+                "volume": s["volume"],
                 "url": f"/device/alert-sounds/{s['id']}",
             }
             for s in alert_sounds

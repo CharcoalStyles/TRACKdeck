@@ -31,7 +31,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import auth
 from utils import alert_sounds_store
@@ -48,10 +48,15 @@ class AlertSound(BaseModel):
     size_bytes: int
     sha256: str
     created_at: int
+    volume: int
 
 
 class AlertSoundsResponse(BaseModel):
     alert_sounds: list[AlertSound]
+
+
+class AlertSoundUpdate(BaseModel):
+    volume: int = Field(ge=0, le=100)
 
 # Sanity guard against an accidentally-huge upload (e.g. a whole song)
 # creating an outsized one-off WiFi window on the device — not a storage
@@ -143,6 +148,18 @@ async def upload_alert_sound(
 @router.get("/alert-sounds", response_model=AlertSoundsResponse)
 async def list_alert_sounds(_: Annotated[None, Depends(auth.require_session_or_token)]):
     return {"alert_sounds": alert_sounds_store.list_sounds()}
+
+
+@router.patch("/alert-sounds/{sound_id}", response_model=AlertSound)
+async def update_alert_sound(
+    sound_id: str,
+    update: AlertSoundUpdate,
+    _: Annotated[None, Depends(auth.require_session_or_token)],
+):
+    if alert_sounds_store.get_sound(sound_id) is None:
+        raise HTTPException(status_code=404, detail="Alert sound not found")
+    alert_sounds_store.update_sound_volume(sound_id, update.volume)
+    return alert_sounds_store.get_sound(sound_id)
 
 
 @router.delete("/alert-sounds/{sound_id}")

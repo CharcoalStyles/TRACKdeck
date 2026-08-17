@@ -38,16 +38,19 @@ def init_db() -> None:
                 due_at INTEGER NOT NULL,
                 status TEXT NOT NULL DEFAULT 'pending',
                 created_at INTEGER NOT NULL,
-                event_uid TEXT
+                event_uid TEXT,
+                alert_sound_id TEXT
             )
             """
         )
-        # Migration guard for a reminders.db created before event_uid
-        # existed (jobs/calendar_sync.py) — CREATE TABLE IF NOT EXISTS
-        # above doesn't add columns to an already-existing table.
+        # Migration guard for a reminders.db created before event_uid/
+        # alert_sound_id existed — CREATE TABLE IF NOT EXISTS above doesn't
+        # add columns to an already-existing table.
         columns = {row[1] for row in conn.execute("PRAGMA table_info(reminders)")}
         if "event_uid" not in columns:
             conn.execute("ALTER TABLE reminders ADD COLUMN event_uid TEXT")
+        if "alert_sound_id" not in columns:
+            conn.execute("ALTER TABLE reminders ADD COLUMN alert_sound_id TEXT")
 
         # event_uid is a unique key among calendar-derived reminders (one
         # row tracks "the current known reminder state" for a given
@@ -58,12 +61,18 @@ def init_db() -> None:
         )
 
 
-def create_reminder(reminder_id: str, message: str, due_at: int, event_uid: Optional[str] = None) -> None:
+def create_reminder(
+    reminder_id: str,
+    message: str,
+    due_at: int,
+    event_uid: Optional[str] = None,
+    alert_sound_id: Optional[str] = None,
+) -> None:
     with _connect() as conn:
         conn.execute(
-            "INSERT INTO reminders (id, message, due_at, status, created_at, event_uid) "
-            "VALUES (?, ?, ?, 'pending', ?, ?)",
-            (reminder_id, message, due_at, int(time.time()), event_uid),
+            "INSERT INTO reminders (id, message, due_at, status, created_at, event_uid, alert_sound_id) "
+            "VALUES (?, ?, ?, 'pending', ?, ?, ?)",
+            (reminder_id, message, due_at, int(time.time()), event_uid, alert_sound_id),
         )
 
 

@@ -157,7 +157,8 @@ export interface paths {
         delete: operations["delete_alert_sound_alert_sounds__sound_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update Alert Sound */
+        patch: operations["update_alert_sound_alert_sounds__sound_id__patch"];
         trace?: never;
     };
     "/alert-sounds/{sound_id}/audio": {
@@ -588,12 +589,14 @@ export interface paths {
          *     is optional. Location/wake_time/bedtime go through the same settings
          *     write path as POST /settings (not About Me — that separation is
          *     deliberate, see agent/tools/general.py's set_home_location). Everything
-         *     else is handed to the agent as a real turn in the "onboarding" thread —
-         *     its own tools (remember_about_me, get_or_create_linked_note) do the
-         *     actual About Me writing, so the content gets written up properly (with
-         *     a dedicated note per person) instead of dumped in verbatim, and its
-         *     reply — likely a follow-up question — lands in the thread for the chat
-         *     view to pick up on next load.
+         *     else is handed to the agent as a handful of real turns in the
+         *     "onboarding" thread, run in the background after this responds (see
+         *     _process_onboarding_recap) — its own tools (remember_about_me,
+         *     get_or_create_linked_note) do the actual About Me writing, so the
+         *     content gets written up properly (with a dedicated note per person)
+         *     instead of dumped in verbatim, and its replies — likely follow-up
+         *     questions — land in the thread for the chat view to pick up on next
+         *     load.
          */
         post: operations["submit_onboarding_basics_onboarding_basics_post"];
         delete?: never;
@@ -782,6 +785,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/debug/checkin/prompts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Checkin Prompts
+         * @description The full built-in prompt bank (agent/checkin_prompts.PROMPTS), for the
+         *     Testing page's personalization preview to build its "which prompt"
+         *     picker from, rather than duplicating the list in the frontend.
+         */
+        get: operations["list_checkin_prompts_debug_checkin_prompts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/debug/checkin/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Checkin Personalization
+         * @description Runs one check-in personalization level on demand and returns the raw
+         *     LLM output, for testing prompt quality without creating a real check-in
+         *     or waiting for the live none/select/light rotation to happen to land on
+         *     the level you want to inspect. "moderate" is only reachable here — see
+         *     jobs/checkin.py's PERSONALIZATION_LEVELS for why it's excluded from
+         *     live check-ins.
+         *
+         *     base_prompt (optional, ignored for "select") pins "light"/"moderate" to
+         *     a specific bank prompt instead of each grabbing their own random one,
+         *     so the two rewrites can be compared against the same input.
+         */
+        get: operations["preview_checkin_personalization_debug_checkin_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/debug/notify": {
         parameters: {
             query?: never;
@@ -840,7 +894,9 @@ export interface paths {
          *     10s) and schedules it on the shared scheduler — exercises the full
          *     ad-hoc reminder pipeline (store -> scheduler -> fire_reminder ->
          *     Gotify) end to end, unlike /debug/reminders/fire/{id} which needs an
-         *     existing reminder id.
+         *     existing reminder id. alert_sound_id optionally pins which alert sound
+         *     the device should play (delivered via /device/sync) instead of its
+         *     default random pick.
          */
         post: operations["trigger_test_reminder_debug_reminder_post"];
         delete?: never;
@@ -1198,6 +1254,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/checkin/{checkin_id}/rate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rate Checkin
+         * @description Magic-link thumbs-up/down from the daily digest email (jobs/digest.py's
+         *     rating block). GET, not POST — a plain-text email link has no JS/form to
+         *     issue a POST. Same trust model as the other magic-link check-in routes
+         *     above (the id itself is the capability token), but scoped to
+         *     status == "answered" rather than "pending" — only a check-in the user
+         *     actually engaged with makes sense to rate. No expiry window: unlike the
+         *     pending-to-fired CHECKIN_EXPIRY clock, a digest email is a standing
+         *     record and a rating given days later is still real data.
+         */
+        get: operations["rate_checkin_checkin__checkin_id__rate_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/{full_path}": {
         parameters: {
             query?: never;
@@ -1284,6 +1367,13 @@ export interface components {
             sha256: string;
             /** Created At */
             created_at: number;
+            /** Volume */
+            volume: number;
+        };
+        /** AlertSoundUpdate */
+        AlertSoundUpdate: {
+            /** Volume */
+            volume: number;
         };
         /** AlertSoundsResponse */
         AlertSoundsResponse: {
@@ -1547,6 +1637,8 @@ export interface components {
             routine?: string | null;
             /** Interests */
             interests?: string | null;
+            /** Values */
+            values?: string | null;
             /** Health Goals */
             health_goals?: string | null;
             /** Important Dates */
@@ -1635,6 +1727,8 @@ export interface components {
             created_at: number;
             /** Event Uid */
             event_uid: string | null;
+            /** Alert Sound Id */
+            alert_sound_id: string | null;
         };
         /** ReminderUpdate */
         ReminderUpdate: {
@@ -2311,6 +2405,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_alert_sound_alert_sounds__sound_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path: {
+                sound_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertSoundUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertSound"];
                 };
             };
             /** @description Validation Error */
@@ -3307,6 +3438,72 @@ export interface operations {
             };
         };
     };
+    list_checkin_prompts_debug_checkin_prompts_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_checkin_personalization_debug_checkin_preview_get: {
+        parameters: {
+            query: {
+                category: "low" | "medium" | "high";
+                level: "select" | "light" | "moderate";
+                base_prompt?: string | null;
+            };
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     trigger_test_notification_debug_notify_post: {
         parameters: {
             query?: never;
@@ -3373,6 +3570,7 @@ export interface operations {
         parameters: {
             query?: {
                 delay_seconds?: number;
+                alert_sound_id?: string | null;
             };
             header?: {
                 auth?: string | null;
@@ -3872,6 +4070,39 @@ export interface operations {
                 "application/json": components["schemas"]["CheckinReplyRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rate_checkin_checkin__checkin_id__rate_get: {
+        parameters: {
+            query: {
+                helpful: "yes" | "no";
+            };
+            header?: never;
+            path: {
+                checkin_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

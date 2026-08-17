@@ -542,6 +542,7 @@ class Reminder(BaseModel):
     status: str
     created_at: int
     event_uid: str | None
+    alert_sound_id: str | None
 
 
 class RemindersResponse(BaseModel):
@@ -1428,15 +1429,18 @@ async def trigger_test_email(_: Annotated[None, Depends(auth.require_session_or_
 async def trigger_test_reminder(
     _: Annotated[None, Depends(auth.require_session_or_token)],
     delay_seconds: Annotated[int, Query(ge=1, le=3600)] = 10,
+    alert_sound_id: Annotated[str | None, Query()] = None,
 ):
     """
     Creates a real pending reminder due `delay_seconds` from now (default
     10s) and schedules it on the shared scheduler — exercises the full
     ad-hoc reminder pipeline (store -> scheduler -> fire_reminder ->
     Gotify) end to end, unlike /debug/reminders/fire/{id} which needs an
-    existing reminder id.
+    existing reminder id. alert_sound_id optionally pins which alert sound
+    the device should play (delivered via /device/sync) instead of its
+    default random pick.
     """
-    reminder_id = await create_test_reminder(delay_seconds)
+    reminder_id = await create_test_reminder(delay_seconds, alert_sound_id)
     return {"status": "scheduled", "reminder_id": reminder_id}
 
 

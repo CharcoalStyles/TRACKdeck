@@ -52,6 +52,17 @@ export default function AlertSoundsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['alert-sounds'] }),
   })
 
+  const volumeMutation = useMutation({
+    mutationFn: async ({ id, volume }: { id: string; volume: number }) => {
+      const { error } = await api.PATCH('/alert-sounds/{sound_id}', {
+        params: { path: { sound_id: id } },
+        body: { volume },
+      })
+      if (error) throw new Error()
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['alert-sounds'] }),
+  })
+
   function handleUpload() {
     const file = fileInputRef.current?.files?.[0]
     if (!file) {
@@ -102,6 +113,19 @@ export default function AlertSoundsPage() {
             </p>
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <audio controls src={`/alert-sounds/${sound.id}/audio`} className="mb-3 w-full" />
+            <div className="mb-3 flex items-center gap-2">
+              <label className="text-sm text-text-muted">Volume:</label>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                defaultValue={sound.volume}
+                onMouseUp={(e) => volumeMutation.mutate({ id: sound.id, volume: Number(e.currentTarget.value) })}
+                onTouchEnd={(e) => volumeMutation.mutate({ id: sound.id, volume: Number(e.currentTarget.value) })}
+                className="w-full"
+              />
+              <span className="w-10 text-right text-sm text-text-muted">{sound.volume}%</span>
+            </div>
             <button
               type="button"
               onClick={() => deleteMutation.mutate(sound.id)}

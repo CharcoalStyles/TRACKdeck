@@ -38,11 +38,14 @@ async def fire_reminder(reminder_id: str) -> None:
         notify_error(f"Reminder failed to fire ({reminder_id})", e)
 
 
-async def create_test_reminder(delay_seconds: int | None = None) -> str:
+async def create_test_reminder(delay_seconds: int | None = None, alert_sound_id: str | None = None) -> str:
     """Debug-only round-trip test (see main.py's POST /debug/reminder):
     creates a real pending row in reminders.db and schedules it on the
     shared scheduler, exercising the full store -> scheduler ->
     fire_reminder -> Gotify pipeline rather than faking any step.
+    alert_sound_id optionally pins which alert sound the device should
+    play instead of its default random pick — delivered via
+    jobs/device_sync.py, not through Gotify itself.
     Returns the new reminder_id."""
     delay = timedelta(seconds=delay_seconds) if delay_seconds is not None else TEST_REMINDER_DELAY
     reminder_id = str(uuid.uuid4())
@@ -52,6 +55,8 @@ async def create_test_reminder(delay_seconds: int | None = None) -> str:
         reminder_id,
         "Test reminder from the dashboard",
         int(due_at_utc.timestamp()),
+        None,
+        alert_sound_id,
     )
     scheduler.add_job(
         fire_reminder,

@@ -38,10 +38,16 @@ def init_db() -> None:
                 duration_seconds REAL NOT NULL,
                 size_bytes INTEGER NOT NULL,
                 sha256 TEXT NOT NULL,
-                created_at INTEGER NOT NULL
+                created_at INTEGER NOT NULL,
+                volume INTEGER NOT NULL DEFAULT 100
             )
             """
         )
+        # Migration guard for a DB created before volume existed — CREATE
+        # TABLE IF NOT EXISTS above doesn't add columns to an existing table.
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(alert_sounds)")}
+        if "volume" not in columns:
+            conn.execute("ALTER TABLE alert_sounds ADD COLUMN volume INTEGER NOT NULL DEFAULT 100")
 
 
 def audio_path(sound_id: str) -> str:
@@ -55,13 +61,14 @@ def create_sound(
     size_bytes: int,
     sha256: str,
     created_at: int,
+    volume: int = 100,
 ) -> None:
     with _connect() as conn:
         conn.execute(
             "INSERT INTO alert_sounds "
-            "(id, display_name, duration_seconds, size_bytes, sha256, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (sound_id, display_name, duration_seconds, size_bytes, sha256, created_at),
+            "(id, display_name, duration_seconds, size_bytes, sha256, created_at, volume) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (sound_id, display_name, duration_seconds, size_bytes, sha256, created_at, volume),
         )
 
 
@@ -80,3 +87,8 @@ def list_sounds() -> list[dict]:
 def delete_sound(sound_id: str) -> None:
     with _connect() as conn:
         conn.execute("DELETE FROM alert_sounds WHERE id = ?", (sound_id,))
+
+
+def update_sound_volume(sound_id: str, volume: int) -> None:
+    with _connect() as conn:
+        conn.execute("UPDATE alert_sounds SET volume = ? WHERE id = ?", (volume, sound_id))

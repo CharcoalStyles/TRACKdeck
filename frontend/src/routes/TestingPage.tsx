@@ -19,6 +19,11 @@ interface DeviceState {
   rssi_dbm?: number | null
 }
 
+interface AlertSound {
+  id: string
+  display_name: string
+}
+
 type PromptCategory = 'low' | 'medium' | 'high'
 type PromptBank = Record<PromptCategory, string[]>
 const PROMPT_CATEGORIES: PromptCategory[] = ['low', 'medium', 'high']
@@ -85,7 +90,15 @@ function TriggerCard({
 
 export default function TestingPage() {
   const [minutes, setMinutes] = useState(1)
-  const reminderTrigger = useTrigger(`/debug/reminder?delay_seconds=${minutes * 60}`)
+  const [alertSoundId, setAlertSoundId] = useState('')
+  const reminderTrigger = useTrigger(
+    `/debug/reminder?delay_seconds=${minutes * 60}${alertSoundId ? `&alert_sound_id=${alertSoundId}` : ''}`,
+  )
+
+  const alertSoundsQuery = useQuery({
+    queryKey: ['alert-sounds'],
+    queryFn: () => fetchDebug<{ alert_sounds: AlertSound[] }>('/alert-sounds').then((r) => r.alert_sounds),
+  })
 
   const deviceStateQuery = useQuery({
     queryKey: ['debug-device-state'],
@@ -201,6 +214,19 @@ export default function TestingPage() {
             onChange={(e) => setMinutes(Number(e.target.value) || 1)}
             className="w-16 rounded border border-border bg-card-alt px-2 py-1 text-sm text-text-primary"
           />
+          <label className="text-sm text-text-muted">Sound:</label>
+          <select
+            value={alertSoundId}
+            onChange={(e) => setAlertSoundId(e.target.value)}
+            className="rounded border border-border bg-card-alt px-2 py-1 text-sm text-text-primary"
+          >
+            <option value="">Random (default)</option>
+            {(alertSoundsQuery.data ?? []).map((sound) => (
+              <option key={sound.id} value={sound.id}>
+                {sound.display_name}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             onClick={reminderTrigger.trigger}
