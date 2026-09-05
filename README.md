@@ -401,6 +401,8 @@ utils/
   caldav_client.py           CalDAV client, protocol-generic (any CalDAV server)
   datetime.py                 Calendar day-boundary helpers, parse_local_datetime
   reminders_store.py           sqlite3 CRUD for reminders.db
+  llm_client.py                 get_chat_llm() — LM Studio vs. Gemini, via LLM_PROVIDER
+  lmstudio_client.py              Live context-length lookup, LM Studio only
   notify.py, mailer.py        Gotify, SMTP
 routes/
   synth.py                    Piper TTS (built, not wired into the production voice flow)
@@ -422,6 +424,14 @@ See `.env.example` for the full list. Grouped by what needs external setup:
   Mini. `LMSTUDIO_MANAGEMENT_URL` is separate and optional — LM Studio's own REST API
   (not OpenAI-compatible), used to live-fetch the loaded model's actual context length so
   history trimming matches what you set in LM Studio's model loader rather than a guess.
+- **`LLM_PROVIDER`** — `lmstudio` (default) or `gemini`, picks which chat-completion
+  backend `utils/llm_client.py`'s `get_chat_llm()` builds for every LLM call site (the
+  main agent, digest, check-in personalization, Inbox auto-titling). Embeddings always
+  stay on LM Studio regardless — Chroma's HNSW index locks to whatever vector dimension
+  the first embedding used, so swapping embedding providers would mean wiping
+  `./data/chroma_db`. Env-var only, not dashboard-editable, restart to apply. Set
+  `GEMINI_API_KEY`/`GEMINI_CHAT_MODEL` when using `gemini` (get a key at
+  [aistudio.google.com/apikey](https://aistudio.google.com/apikey)).
 - **CalDAV** — `CALDAV_URL`, `CALDAV_USERNAME`, `CALDAV_PASSWORD`. Points at the bundled
   Radicale service by default (see "First-run calendar setup" below), or any external
   CalDAV server (Nextcloud, Baikal, Fastmail, etc.).

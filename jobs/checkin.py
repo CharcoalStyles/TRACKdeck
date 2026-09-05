@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import random
 import time
 import uuid
@@ -43,7 +42,7 @@ from urllib.parse import urlencode
 
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.triggers.date import DateTrigger
-from langchain_openai import ChatOpenAI
+from langchain_core.language_models.chat_models import BaseChatModel
 
 from agent.checkin_prompts import FALLBACK_CATEGORY, PROMPTS
 from agent.memory import MemoryStore
@@ -51,6 +50,7 @@ from agent.runtime import AgentResult, create_background_thread, run_agent
 from agent.scheduler import scheduler
 from agent.settings import settings
 from utils import activity_log_store, checkins_store, vault
+from utils.llm_client import get_chat_llm
 from utils.notify import notify_error, send_gotify
 
 logger = logging.getLogger(__name__)
@@ -186,13 +186,8 @@ async def answer_checkin(checkin_id: str, text: str) -> AgentResult | None:
     return result
 
 
-def _personalization_llm() -> ChatOpenAI:
-    return ChatOpenAI(
-        base_url=os.environ["LMSTUDIO_OPENAI_URL"],
-        api_key="lm-studio",
-        model=os.environ["CHAT_MODEL"],
-        temperature=0.35,
-    )
+def _personalization_llm() -> BaseChatModel:
+    return get_chat_llm(temperature=0.35)
 
 
 def _llm_select(bank: list[str], context: str) -> str:

@@ -20,14 +20,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 from pathlib import Path
 
-from langchain_openai import ChatOpenAI
 from watchfiles import Change, awatch
 
 from agent.memory import MemoryStore
 from utils import vault
+from utils.llm_client import get_chat_llm
 from utils.notify import notify_error, send_gotify
 
 logger = logging.getLogger(__name__)
@@ -77,12 +76,7 @@ async def index_note_file(memory: MemoryStore, path: Path) -> None:
 
 def _generate_inbox_frontmatter(content: str) -> dict:
     """Blocking LLM call — run via asyncio.to_thread from async code."""
-    llm = ChatOpenAI(
-        base_url=os.environ["LMSTUDIO_OPENAI_URL"],
-        api_key="lm-studio",
-        model=os.environ["CHAT_MODEL"],
-        temperature=0.3,
-    )
+    llm = get_chat_llm(temperature=0.3)
     response = llm.invoke(INGEST_PROMPT.format(content=content))
     raw = response.content.strip()
     # be forgiving of stray markdown fences some local models add anyway

@@ -8,14 +8,12 @@ LLM connection is configured via environment variables.
 import asyncio
 import json
 import logging
-import os
 import time
 
 from langchain_core.messages import SystemMessage, trim_messages
 from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.runnables import RunnableConfig
 from langchain_core.utils.function_calling import convert_to_openai_tool
-from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
 
@@ -23,10 +21,17 @@ from agent.memory import MemoryStore
 from agent.settings import settings
 from agent.tools.all_tools import get_tools
 from utils import vault
+from utils.llm_client import get_chat_llm, CHAT_PROVIDER
 from utils.lmstudio_client import get_history_budget_tokens
 from utils.recall_log_store import log_recall
 
 logger = logging.getLogger(__name__)
+
+# ponytail: static guess at Gemini's usable context — Google doesn't expose a
+# live "loaded context length" like LM Studio's management API does, and
+# building a second discovery mechanism for one hosted model isn't worth it.
+# Bump this if a different Gemini model/context tier is tried.
+GEMINI_HISTORY_BUDGET_TOKENS = 200_000
 
 # Fixed-thread-id prefix for per-project chats (agent/runtime.py's run_agent
 # skips normal keyword/recency resolution whenever an explicit thread_id is
@@ -312,12 +317,7 @@ reply with a short summary of what you did and where to find it (e.g. the note
 title(s)), not the full note content again."""
 
 def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None):
-    llm = ChatOpenAI(
-        base_url=os.environ["LMSTUDIO_OPENAI_URL"],
-        api_key="lm-studio",
-        model=os.environ["CHAT_MODEL"],
-        temperature=0.7,
-    )
+    llm = get_chat_llm(temperature=0.7)
 
     tools = get_tools(memory)
     if mcp_tools:
@@ -443,7 +443,10 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
         # of the budget before history gets whatever's left. Without this, history
         # alone could grow to fill the full budget and the actual request (system +
         # tools + history) would still overflow the model's real context.
-        budget = await get_history_budget_tokens()
+        if CHAT_PROVIDER == "lmstudio":
+            budget = await get_history_budget_tokens()
+        else:
+            budget = GEMINI_HISTORY_BUDGET_TOKENS
         reserved = count_tokens_approximately([system]) + _tools_token_estimate
         history_budget = max(budget - reserved, 0)
         if history_budget == 0:
@@ -459,7 +462,13 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
             strategy="last",
             start_on="human",
         )
-        async with llm_semaphore:
+        if CHAT_PROVIDER == "lmstudio":
+            async with llm_semaphore:
+                response = await llm_with_tools.ainvoke([system] + history)
+        else:
+            # No concurrency gate — llm_semaphore above exists only to protect
+            # LM Studio's shared unified KV cache; a cloud API has no such
+            # constraint.
             response = await llm_with_tools.ainvoke([system] + history)
         return {"messages": [response]}
 

@@ -27,14 +27,13 @@ from datetime import datetime
 from datetime import time as dtime
 from zoneinfo import ZoneInfo
 
-from langchain_openai import ChatOpenAI
-
 from agent.memory import MemoryStore
 from agent.runtime import app_state, prune_thread_locks
 from agent.settings import settings
 from agent.vault_watcher import index_note_file
 from jobs import checkin as checkin_jobs
 from utils import checkins_store, vault
+from utils.llm_client import get_chat_llm
 from utils.mailer import send_email
 from utils.notify import notify_error
 from voice import UPLOAD_DIR
@@ -78,12 +77,7 @@ def _todays_utc_bounds(now_local: datetime | None = None) -> tuple[int, int]:
 
 def _write_recap(entries: list[str], reflections: list[str]) -> str:
     """Blocking LLM call — run via asyncio.to_thread from async code."""
-    llm = ChatOpenAI(
-        base_url=os.environ["LMSTUDIO_OPENAI_URL"],
-        api_key="lm-studio",
-        model=os.environ["CHAT_MODEL"],
-        temperature=0.7,
-    )
+    llm = get_chat_llm(temperature=0.7)
     joined = "\n---\n".join(entries) if entries else "(nothing logged today)"
     joined_reflections = "\n---\n".join(reflections) if reflections else "(none answered today)"
     response = llm.invoke(DIGEST_PROMPT.format(entries=joined, reflections=joined_reflections))
