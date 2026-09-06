@@ -33,7 +33,7 @@ from agent.settings import settings
 from agent.vault_watcher import index_note_file
 from jobs import checkin as checkin_jobs
 from utils import checkins_store, vault
-from utils.llm_client import get_chat_llm
+from utils.llm_client import get_chat_llm, stringify_content
 from utils.mailer import send_email
 from utils.notify import notify_error
 from voice import UPLOAD_DIR
@@ -81,7 +81,7 @@ def _write_recap(entries: list[str], reflections: list[str]) -> str:
     joined = "\n---\n".join(entries) if entries else "(nothing logged today)"
     joined_reflections = "\n---\n".join(reflections) if reflections else "(none answered today)"
     response = llm.invoke(DIGEST_PROMPT.format(entries=joined, reflections=joined_reflections))
-    return response.content
+    return stringify_content(response.content) or ""
 
 
 def _todays_checkin_reflections(memory: MemoryStore, answered: list[dict]) -> tuple[list[str], set[str]]:

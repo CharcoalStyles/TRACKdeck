@@ -23,7 +23,6 @@ apply.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import sqlite3
 import time
@@ -39,6 +38,7 @@ from agent.graph import get_fixed_overhead_tokens
 from agent.keywords import generate_keyword, match_keyword_prefix
 from agent.memory import MemoryStore
 from agent.settings import settings
+from utils.llm_client import stringify_content
 from utils.lmstudio_client import get_history_budget_tokens
 
 from utils.notify import send_gotify, notify_error
@@ -223,7 +223,7 @@ async def get_thread_messages(thread_id: str) -> list[dict]:
     for m in messages:
         if getattr(m, "tool_calls", None):
             continue  # AI requested a tool call, not a reply to show
-        content = getattr(m, "content", None)
+        content = stringify_content(getattr(m, "content", None))
         if isinstance(content, str):
             content = content.strip()
         if not content:
@@ -266,31 +266,6 @@ async def list_checkpoint_thread_ids() -> list[dict]:
     return await asyncio.to_thread(_list_checkpoint_thread_ids_sync)
 
 
-def _stringify_message_content(content):
-    """LangChain message content is typed as str | list[dict] — the list
-    form is a sequence of multimodal content blocks (e.g.
-    {"type": "text", "text": "..."}), which is what MCP-sourced tools
-    (search_web and its searxng-mcp-server siblings, see
-    agent/settings.py's _default_mcp_servers) actually hand back as
-    ToolMessage.content; langchain_core/langgraph both pass that shape
-    through unconverted rather than stringifying it. This repo's own
-    tools all return plain str, so they're unaffected — but rendering the
-    list form as-is (main.py's /debug/thread/{id} -> static/thread-debug.html)
-    would just show "[object Object]" once JSON-serialized and dropped
-    into the DOM. Flatten text blocks back into plain text; anything else
-    falls back to a JSON dump so at least the raw shape is visible."""
-    if content is None or isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        texts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
-        if texts:
-            return "\n".join(texts)
-    try:
-        return json.dumps(content)
-    except TypeError:
-        return str(content)
-
-
 async def get_thread_debug(thread_id: str) -> dict:
     """
     Unfiltered per-thread history for the thread-debug dashboard page —
@@ -318,7 +293,7 @@ async def get_thread_debug(thread_id: str) -> dict:
     opening_message = None
     for m in messages:
         msg_type = getattr(m, "type", None)
-        entry = {"type": msg_type, "content": _stringify_message_content(getattr(m, "content", None))}
+        entry = {"type": msg_type, "content": stringify_content(getattr(m, "content", None))}
         if msg_type == "ai" and getattr(m, "tool_calls", None):
             entry["tool_calls"] = [
                 {"name": tc["name"], "args": tc["args"]} for tc in m.tool_calls
@@ -460,7 +435,7 @@ async def _run_graph_streamed(thread_id: str, cleaned_text: str, config: dict) -
                                 "args": tool_call["args"],
                             })
                     elif getattr(msg, "type", None) == "tool":
-                        content = _stringify_message_content(msg.content) or ""
+                        content = stringify_content(msg.content) or ""
                         activity["steps"].append({
                             "type": "result",
                             "tool": getattr(msg, "name", None),
@@ -554,7 +529,7 @@ async def run_agent(
                     logger.debug("Tool output: %s", msg.content)
 
     reply = next(
-        (m.content for m in reversed(result["messages"]) if m.content),
+        (stringify_content(m.content) for m in reversed(result["messages"]) if m.content),
         "Done.",
     )
 

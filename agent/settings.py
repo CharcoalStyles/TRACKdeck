@@ -114,7 +114,15 @@ def _default_mcp_servers() -> str:
     format-detection stack), fully isolated in uvx's own cache instead of
     polluting this app's venv. Exposes search_web/search_images/
     search_videos/search_news/fetch_url — see
-    https://github.com/IceWreck/SearxNG-MCP-Server."""
+    https://github.com/IceWreck/SearxNG-MCP-Server.
+
+    `--with "fastmcp<4"` pins searxng-mcp-server's own transitive fastmcp
+    dependency: it only declares `fastmcp>=2.12.4` (no upper bound), so a
+    bare `uvx searxng-mcp-server` resolves whatever fastmcp is newest —
+    which as of fastmcp 4.0 has moved fastmcp.tools.tool.Tool to a
+    different path, so searxng-mcp-server's own import of it crashes on
+    startup ("Could not load tools from MCP server 'searxng'"). Bump/drop
+    this pin once searxng-mcp-server's own metadata catches up."""
     if not os.environ.get("SEARXNG_URL"):
         return "{}"
     return json.dumps({
@@ -122,7 +130,7 @@ def _default_mcp_servers() -> str:
             "enabled": True,
             "transport": "stdio",
             "command": "uvx",
-            "args": ["searxng-mcp-server"],
+            "args": ["--with", "fastmcp<4", "searxng-mcp-server"],
             # SEARXNG_URL isn't in the MCP stdio client's default-inherited
             # env subset (HOME/LOGNAME/PATH/SHELL/TERM/USER) — passing it
             # here merges it in (mcp.client.stdio.stdio_client unions

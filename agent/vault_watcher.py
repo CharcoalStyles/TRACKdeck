@@ -26,7 +26,7 @@ from watchfiles import Change, awatch
 
 from agent.memory import MemoryStore
 from utils import vault
-from utils.llm_client import get_chat_llm
+from utils.llm_client import get_chat_llm, stringify_content
 from utils.notify import notify_error, send_gotify
 
 logger = logging.getLogger(__name__)
@@ -78,7 +78,7 @@ def _generate_inbox_frontmatter(content: str) -> dict:
     """Blocking LLM call — run via asyncio.to_thread from async code."""
     llm = get_chat_llm(temperature=0.3)
     response = llm.invoke(INGEST_PROMPT.format(content=content))
-    raw = response.content.strip()
+    raw = (stringify_content(response.content) or "").strip()
     # be forgiving of stray markdown fences some local models add anyway
     if raw.startswith("```"):
         raw = raw.strip("`")

@@ -50,7 +50,7 @@ from agent.runtime import AgentResult, create_background_thread, run_agent
 from agent.scheduler import scheduler
 from agent.settings import settings
 from utils import activity_log_store, checkins_store, vault
-from utils.llm_client import get_chat_llm
+from utils.llm_client import get_chat_llm, stringify_content
 from utils.notify import notify_error, send_gotify
 
 logger = logging.getLogger(__name__)
@@ -194,20 +194,23 @@ def _llm_select(bank: list[str], context: str) -> str:
     """Blocking — call via asyncio.to_thread, wrapped in asyncio.wait_for."""
     candidates = "\n".join(f"{i + 1}. {p}" for i, p in enumerate(bank))
     llm = _personalization_llm()
-    return llm.invoke(SELECT_PROMPT_TEMPLATE.format(context=context, candidates=candidates)).content.strip()
+    response = llm.invoke(SELECT_PROMPT_TEMPLATE.format(context=context, candidates=candidates))
+    return (stringify_content(response.content) or "").strip()
 
 
 def _llm_light_reword(base_prompt: str, context: str) -> str:
     """Blocking — call via asyncio.to_thread."""
     llm = _personalization_llm()
-    return llm.invoke(LIGHT_PROMPT_TEMPLATE.format(context=context, base_prompt=base_prompt)).content.strip()
+    response = llm.invoke(LIGHT_PROMPT_TEMPLATE.format(context=context, base_prompt=base_prompt))
+    return (stringify_content(response.content) or "").strip()
 
 
 def _llm_moderate_reword(base_prompt: str, context: str) -> str:
     """Blocking — call via asyncio.to_thread. Preview-only (see
     PERSONALIZATION_LEVELS) — not part of the live rotation."""
     llm = _personalization_llm()
-    return llm.invoke(MODERATE_PROMPT_TEMPLATE.format(context=context, base_prompt=base_prompt)).content.strip()
+    response = llm.invoke(MODERATE_PROMPT_TEMPLATE.format(context=context, base_prompt=base_prompt))
+    return (stringify_content(response.content) or "").strip()
 
 
 def _personalization_context(values_text: str | None, recent_activity: list[dict]) -> str:
