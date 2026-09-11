@@ -138,6 +138,7 @@ from routes.synth import router as synth_router
 from routes.transcribe import router as transcribe_router
 from routes.calendar_proxy import router as calendar_proxy_router
 from routes.alert_sounds import router as alert_sounds_router
+from routes.reflection import router as reflection_router
 
 # ---------------------------------------------------------------------------
 # Lifespan
@@ -363,6 +364,7 @@ app.include_router(synth_router)  # /synthesize
 app.include_router(transcribe_router)  # /transcribe
 app.include_router(calendar_proxy_router)  # /calendar — proxies the bundled Radicale UI
 app.include_router(alert_sounds_router)  # /alert-sounds, /device/alert-sounds/{id}
+app.include_router(reflection_router)  # /reflection
 
 
 # ---------------------------------------------------------------------------
@@ -911,6 +913,14 @@ class SettingsUpdate(BaseModel):
     # turn (agent/graph.py's call_llm, via trim_messages). No rescheduling
     # — read fresh on every agent turn.
     max_history_tokens: int | None = None
+    # Vault note id to clone from for a new day's task-planning note
+    # (agent/settings.py's planning_template_note_id). Blank is a valid
+    # "no template, start with empty headings" state.
+    planning_template_note_id: str | None = None
+    # Alert sound id pinned on generate_schedule_blocks' auto-created
+    # boundary reminders (agent/settings.py's chime_alert_sound_id).
+    # Blank is a valid "no pinned sound" state.
+    chime_alert_sound_id: str | None = None
 
     @model_validator(mode="after")
     def _check_values(self):
@@ -969,6 +979,8 @@ class SettingsResponse(BaseModel):
     recall_max_distance: float
     recall_recency_days: int
     max_history_tokens: int
+    planning_template_note_id: str
+    chime_alert_sound_id: str
     onboarding_complete: bool
     basics_complete: bool
 
@@ -994,6 +1006,8 @@ def _current_settings() -> dict:
         "recall_max_distance": settings.recall_max_distance,
         "recall_recency_days": settings.recall_recency_days,
         "max_history_tokens": settings.max_history_tokens,
+        "planning_template_note_id": settings.planning_template_note_id,
+        "chime_alert_sound_id": settings.chime_alert_sound_id,
         # Read-only here — deliberately not part of SettingsUpdate below, so
         # it can only be set via agent/tools/general.py's
         # mark_onboarding_complete tool, not a direct POST /settings call.
@@ -1073,6 +1087,12 @@ async def _apply_settings_update(update: SettingsUpdate) -> None:
     if update.max_history_tokens is not None:
         settings.max_history_tokens = update.max_history_tokens
         changed["max_history_tokens"] = str(update.max_history_tokens)
+    if update.planning_template_note_id is not None:
+        settings.planning_template_note_id = update.planning_template_note_id.strip()
+        changed["planning_template_note_id"] = settings.planning_template_note_id
+    if update.chime_alert_sound_id is not None:
+        settings.chime_alert_sound_id = update.chime_alert_sound_id.strip()
+        changed["chime_alert_sound_id"] = settings.chime_alert_sound_id
 
     if reschedule_digest:
         scheduler.reschedule_job("daily_digest", trigger=digest_trigger())

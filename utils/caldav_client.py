@@ -37,7 +37,7 @@ def parse_ics(ics_text):
     the plain "TRIGGER" key check below and is silently skipped rather
     than guessed at — see parse_ics_duration.
     """
-    event_details = {"alarms": []}
+    event_details = {"alarms": [], "generated": False}
 
     # 1. Unfold lines (iCalendar spec standardizes splitting long lines with CRLF + Space)
     unfolded_text = ics_text.replace("\r\n ", "").replace("\n ", "")
@@ -76,6 +76,13 @@ def parse_ics(ics_text):
             event_details["uid"] = value
         elif key == "RRULE":
             event_details["rrule"] = value
+        elif key == "X-GENERATED-BLOCK":
+            # Custom X- property (RFC 5545 §3.8.8.2 allows arbitrary
+            # experimental properties) — marks a VEVENT created by
+            # agent/tools/planning.py's generate_schedule_blocks so
+            # jobs/device_sync.py can tell a schedule block apart from a
+            # real appointment, e.g. for the e-ink active/next view.
+            event_details["generated"] = value.strip().upper() == "TRUE"
 
     return event_details
 
@@ -186,13 +193,19 @@ def _escape_ics_text(value):
     )
 
 
-def create_or_update_event(uid, summary, start_iso, end_iso, description="", location="", rrule=None):
+def create_or_update_event(uid, summary, start_iso, end_iso, description="", location="", rrule=None, generated=False):
     """
     Creates or updates an event. `rrule` is an RFC 5545 RRULE value (e.g.
     "FREQ=WEEKLY;BYDAY=MO,WE,FR") for a repeating event, or None for a
     one-off. Like description/location, this is a full replace — updating
     an existing event without passing `rrule` again drops any recurrence
     it previously had.
+
+    `generated` marks the event as created by agent/tools/planning.py's
+    generate_schedule_blocks (a sprint/break block) rather than a real
+    appointment — written as a custom X-GENERATED-BLOCK property, read
+    back by parse_ics. Never pass True for a user-requested event
+    (add_calendar_event never sets it).
     """
     url = f"{BASE_URL}{uid}.ics"
 
@@ -224,6 +237,8 @@ def create_or_update_event(uid, summary, start_iso, end_iso, description="", loc
     ]
     if rrule:
         ics_lines.append(f"RRULE:{rrule}")
+    if generated:
+        ics_lines.append("X-GENERATED-BLOCK:TRUE")
 
     ics_lines.extend(["END:VEVENT", "END:VCALENDAR"])
     

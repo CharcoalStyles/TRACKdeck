@@ -127,6 +127,30 @@ def _build_rating_block(answered: list[dict]) -> str:
     return "\n\nHow were today's check-in prompts?\n" + "\n".join(lines) if lines else ""
 
 
+def _reflection_url(date_str: str) -> str | None:
+    """Deep link into the dashboard's authenticated /reflection page —
+    same None-if-unset contract as checkin_jobs._checkin_click_url/
+    _rate_urls. Unlike those (magic-link, no session), this route sits
+    behind require_session_or_token — it's opened from your own
+    logged-in browser via the recap email, not a bare push notification."""
+    base = settings.public_base_url
+    if not base:
+        return None
+    return f"{base.rstrip('/')}/reflection?date={date_str}&session=planning"
+
+
+def _build_reflection_block(date_str: str) -> str:
+    """Only links to a reflection if a planning note actually exists for
+    today — a plain Tuesday shouldn't offer a reflection link for a plan
+    that was never made."""
+    if vault.parse_note(vault.planning_note_path(date_str)) is None:
+        return ""
+    url = _reflection_url(date_str)
+    if url is None:
+        return ""
+    return f"\n\nHow did today's plan go? {url}"
+
+
 def _write_recap_to_vault(recap: str, now_local: datetime) -> vault.Note:
     """Write today's recap into the vault as a dated note, alongside the
     email rather than instead of it. Deterministic path (see
@@ -202,7 +226,10 @@ async def send_daily_digest(memory: MemoryStore) -> None:
 
         try:
             rating_block = _build_rating_block(answered)
-            await asyncio.to_thread(send_email, f"Daily recap — {today_str}", recap + rating_block)
+            reflection_block = _build_reflection_block(now_local.strftime("%Y-%m-%d"))
+            await asyncio.to_thread(
+                send_email, f"Daily recap — {today_str}", recap + rating_block + reflection_block
+            )
             logger.info("Daily digest emailed for %s (%d logged entries).", today_str, len(entries))
         except Exception as e:
             logger.error("Daily digest email failed: %s", e)

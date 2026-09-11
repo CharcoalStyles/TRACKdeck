@@ -27,6 +27,7 @@ from agent.tools.general import (
     set_home_location,
 )
 from agent.tools.notes import make_note_tools
+from agent.tools.planning import get_tools as get_planning_tools
 from agent.tools.weather import get_tools as get_weather_tools
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ def get_tools(memory: MemoryStore):
     tools.extend(get_calendar_tools())
     tools.extend(get_weather_tools())
     tools.extend(make_note_tools(memory))
+    tools.extend(get_planning_tools())
     tools.extend([
         get_current_datetime,
         set_reminder,

@@ -77,6 +77,10 @@ def _fetch_calendar_events(now_utc: datetime) -> list[dict]:
                 "summary": event.get("summary") or "(untitled)",
                 "start": int(start.timestamp()),
                 "end": int(end.timestamp()) if end else None,
+                # True for a sprint/break block from agent/tools/planning.py's
+                # generate_schedule_blocks, false for a real appointment —
+                # lets the e-ink view render the two differently.
+                "generated": bool(event.get("generated", False)),
             }
         )
     return events

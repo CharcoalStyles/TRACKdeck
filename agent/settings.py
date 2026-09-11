@@ -227,6 +227,23 @@ class Settings:
     # same reasoning as default_location above.
     recall_recency_days: int = 30
 
+    # Vault note id to clone from when creating a new day's task-planning
+    # note (utils.vault.get_or_create_planning_note, agent/tools/planning.py)
+    # — point this at your own "Tasks & Time Estimates" template note.
+    # Blank means new planning notes start with just empty
+    # Tasks/Generated Schedule/End of Day Reflection headings. No env var,
+    # same reasoning as default_location above.
+    planning_template_note_id: str = ""
+
+    # Which alert sound (utils/alert_sounds_store.py, id from GET
+    # /alert-sounds) to pin on the auto-created reminders
+    # generate_schedule_blocks schedules at every sprint/break boundary —
+    # see agent/tools/planning.py. Blank means those reminders go out with
+    # no pinned sound, same as an ordinary ad-hoc reminder (the device
+    # falls back to picking one at random). No env var, same reasoning as
+    # default_location above.
+    chime_alert_sound_id: str = ""
+
     # Fallback token budget for the message history sent to the LLM every
     # turn (agent/graph.py's call_llm, via trim_messages) — the oldest
     # messages are dropped once the thread's history exceeds the budget.
@@ -331,6 +348,10 @@ def apply_persisted(values: dict[str, str]) -> None:
         settings.recall_recency_days = int(values["recall_recency_days"])
     if "max_history_tokens" in values:
         settings.max_history_tokens = int(values["max_history_tokens"])
+    if "planning_template_note_id" in values:
+        settings.planning_template_note_id = values["planning_template_note_id"]
+    if "chime_alert_sound_id" in values:
+        settings.chime_alert_sound_id = values["chime_alert_sound_id"]
     if "digest_email_to" in values:
         settings.digest_email_to = values["digest_email_to"]
     if "public_base_url" in values:

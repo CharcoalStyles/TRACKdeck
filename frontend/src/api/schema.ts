@@ -200,6 +200,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reflection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Reflection */
+        get: operations["get_reflection_reflection_get"];
+        put?: never;
+        /** Save Reflection */
+        post: operations["save_reflection_reflection_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/login": {
         parameters: {
             query?: never;
@@ -1682,6 +1700,8 @@ export interface components {
             recall_recency_days: number;
             /** Max History Tokens */
             max_history_tokens: number;
+            /** Planning Template Note Id */
+            planning_template_note_id: string;
             /** Onboarding Complete */
             onboarding_complete: boolean;
             /** Basics Complete */
@@ -1712,6 +1732,43 @@ export interface components {
         ProjectsResponse: {
             /** Projects */
             projects: string[];
+        };
+        /** ReflectionResponse */
+        ReflectionResponse: {
+            /** Date */
+            date: string;
+            /** Session */
+            session: string;
+            /** Title */
+            title: string;
+            /** Schedule */
+            schedule: string | null;
+            /** Energy Rating */
+            energy_rating: string | null;
+            /** What Worked Well */
+            what_worked_well: string | null;
+            /** What Had Friction */
+            what_had_friction: string | null;
+            /** Adjustments */
+            adjustments: string | null;
+        };
+        /** ReflectionUpdate */
+        ReflectionUpdate: {
+            /** Date */
+            date: string;
+            /**
+             * Session
+             * @default planning
+             */
+            session: string;
+            /** Energy Rating */
+            energy_rating?: string | null;
+            /** What Worked Well */
+            what_worked_well?: string | null;
+            /** What Had Friction */
+            what_had_friction?: string | null;
+            /** Adjustments */
+            adjustments?: string | null;
         };
         /** Reminder */
         Reminder: {
@@ -1776,6 +1833,8 @@ export interface components {
             recall_recency_days: number;
             /** Max History Tokens */
             max_history_tokens: number;
+            /** Planning Template Note Id */
+            planning_template_note_id: string;
             /** Onboarding Complete */
             onboarding_complete: boolean;
             /** Basics Complete */
@@ -1817,6 +1876,8 @@ export interface components {
             recall_recency_days?: number | null;
             /** Max History Tokens */
             max_history_tokens?: number | null;
+            /** Planning Template Note Id */
+            planning_template_note_id?: string | null;
         };
         /** TTSRequest */
         TTSRequest: {
@@ -2508,6 +2569,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_reflection_reflection_get: {
+        parameters: {
+            query: {
+                date: string;
+                session?: string;
+            };
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReflectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_reflection_reflection_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReflectionUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReflectionResponse"];
                 };
             };
             /** @description Validation Error */

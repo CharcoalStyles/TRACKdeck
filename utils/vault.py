@@ -78,6 +78,12 @@ ABOUT_ME_TITLE = "About Me"
 # not create a second one.
 DAILY_NOTE_TAG = "daily-digest"
 
+# Task-planning notes (agent/tools/planning.py) use the same date-keyed
+# filename pattern as daily digest notes, but a distinct one — the two
+# serve different purposes and shouldn't collide.
+PLANNING_NOTE_TAG = "planning-session"
+PLANNING_STARTER_BODY = "## Tasks\n\n## Generated Schedule & Sprints\n\n## End of Day Reflection\n"
+
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -463,6 +469,49 @@ def daily_note_path(date_str: str) -> Path:
     """Deterministic path for a given day's digest note. `date_str` is
     "YYYY-MM-DD" in the user's configured timezone (see jobs/digest.py)."""
     return vault_root() / f"daily-{date_str}.md"
+
+
+def planning_note_path(date_str: str) -> Path:
+    """Deterministic path for a given day's task-planning note (see
+    get_or_create_planning_note). `date_str` is "YYYY-MM-DD" in the
+    user's configured timezone — same pattern as daily_note_path, but a
+    distinct filename since the two notes serve different purposes."""
+    return vault_root() / f"planning-{date_str}.md"
+
+
+def get_or_create_planning_note(date_str: str, template_note_id: str | None = None) -> Note:
+    """Get (or create) the day's task-planning note. A new note clones
+    the body of the configured template note (`template_note_id`, from
+    agent/settings.py's planning_template_note_id) so it starts with the
+    usual Tasks/Generated Schedule/End of Day Reflection layout; if no
+    template is configured (or it's gone missing), falls back to just
+    those three empty section headings — same graceful-fallback shape
+    get_or_create_about_me already uses."""
+    path = planning_note_path(date_str)
+    note = parse_note(path)
+    if note is not None:
+        return note
+
+    body = PLANNING_STARTER_BODY
+    if template_note_id:
+        template_path = find_note_by_id(template_note_id)
+        template = parse_note(template_path) if template_path else None
+        if template is not None:
+            body = template.body
+
+    now = now_iso()
+    note = Note(
+        id=generate_id(),
+        title=f"Planning — {date_str}",
+        created=now,
+        updated=now,
+        tags=[PLANNING_NOTE_TAG],
+        source="agent",
+        body=body,
+        path=path,
+    )
+    write_note_atomic(path, serialize_note(note))
+    return note
 
 
 def find_linked_note_id(linked_notes: dict, topic: str) -> str | None:
