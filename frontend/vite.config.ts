@@ -10,6 +10,7 @@ const API_PATHS = [
   'login', 'logout', 'health', 'text', 'agent-activity', 'voice', 'transcribe',
   'synthesize', 'threads', 'vault', 'projects', 'settings', 'debug', 'device',
   'alert-sounds', 'checkins', 'checkin', 'reminders', 'activity-log', 'calendar',
+  'reflection',
 ]
 
 // A few of these paths (settings, reminders, projects, activity-log) are

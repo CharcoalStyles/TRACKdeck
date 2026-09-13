@@ -200,6 +200,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reflection/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Reflection History
+         * @description Every day that has a planning note, most recent first — backs the
+         *     dashboard's reflection-history list, since /reflection itself only
+         *     ever addresses one exact date.
+         */
+        get: operations["list_reflection_history_reflection_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reflection": {
         parameters: {
             query?: never;
@@ -1702,6 +1724,8 @@ export interface components {
             max_history_tokens: number;
             /** Planning Template Note Id */
             planning_template_note_id: string;
+            /** Chime Alert Sound Id */
+            chime_alert_sound_id: string;
             /** Onboarding Complete */
             onboarding_complete: boolean;
             /** Basics Complete */
@@ -1732,6 +1756,15 @@ export interface components {
         ProjectsResponse: {
             /** Projects */
             projects: string[];
+        };
+        /** ReflectionHistoryItem */
+        ReflectionHistoryItem: {
+            /** Date */
+            date: string;
+            /** Title */
+            title: string;
+            /** Has Reflection */
+            has_reflection: boolean;
         };
         /** ReflectionResponse */
         ReflectionResponse: {
@@ -1835,6 +1868,8 @@ export interface components {
             max_history_tokens: number;
             /** Planning Template Note Id */
             planning_template_note_id: string;
+            /** Chime Alert Sound Id */
+            chime_alert_sound_id: string;
             /** Onboarding Complete */
             onboarding_complete: boolean;
             /** Basics Complete */
@@ -1878,6 +1913,8 @@ export interface components {
             max_history_tokens?: number | null;
             /** Planning Template Note Id */
             planning_template_note_id?: string | null;
+            /** Chime Alert Sound Id */
+            chime_alert_sound_id?: string | null;
         };
         /** TTSRequest */
         TTSRequest: {
@@ -2569,6 +2606,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_reflection_history_reflection_history_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReflectionHistoryItem"][];
                 };
             };
             /** @description Validation Error */

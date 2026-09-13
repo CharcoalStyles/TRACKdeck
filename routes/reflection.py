@@ -19,12 +19,17 @@ import auth
 from agent.runtime import app_state
 from agent.vault_watcher import index_note_file
 from utils import vault
-from utils.planning import format_reflection_section, parse_reflection_section
+from utils.planning import (
+    REFLECTION_SECTION_HEADING,
+    format_reflection_section,
+    parse_reflection_section,
+    reflection_is_filled,
+)
 
 router = APIRouter()
 
 SCHEDULE_SECTION = "Generated Schedule & Sprints"
-REFLECTION_SECTION = "End of Day Reflection"
+REFLECTION_SECTION = REFLECTION_SECTION_HEADING
 
 
 class ReflectionResponse(BaseModel):
@@ -45,6 +50,31 @@ class ReflectionUpdate(BaseModel):
     what_worked_well: str | None = None
     what_had_friction: str | None = None
     adjustments: str | None = None
+
+
+class ReflectionHistoryItem(BaseModel):
+    date: str
+    title: str
+    has_reflection: bool
+
+
+@router.get("/reflection/history", response_model=list[ReflectionHistoryItem])
+async def list_reflection_history(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """Every day that has a planning note, most recent first — backs the
+    dashboard's reflection-history list, since /reflection itself only
+    ever addresses one exact date."""
+    items = []
+    for entry in vault.list_planning_notes():
+        note = vault.parse_note(vault.planning_note_path(entry["date"]))
+        values = parse_reflection_section(vault.get_section(note.body, REFLECTION_SECTION)) if note else {}
+        items.append(
+            {
+                "date": entry["date"],
+                "title": entry["title"],
+                "has_reflection": reflection_is_filled(values),
+            }
+        )
+    return items
 
 
 @router.get("/reflection", response_model=ReflectionResponse)

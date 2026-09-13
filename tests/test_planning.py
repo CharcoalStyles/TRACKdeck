@@ -3,9 +3,11 @@ from zoneinfo import ZoneInfo
 
 from utils.planning import (
     compute_schedule_blocks,
+    format_reflection_digest,
     format_reflection_section,
     parse_reflection_section,
     parse_target_tasks,
+    reflection_is_filled,
 )
 
 TZ = ZoneInfo("Australia/Canberra")
@@ -54,3 +56,32 @@ def test_reflection_section_round_trips():
     }
     text = format_reflection_section(values)
     assert parse_reflection_section(text) == values
+
+
+def test_reflection_is_filled():
+    empty = {"energy_rating": None, "what_worked_well": None, "what_had_friction": None, "adjustments": None}
+    assert reflection_is_filled(empty) is False
+    assert reflection_is_filled({**empty, "energy_rating": "7"}) is True
+
+
+def test_format_reflection_digest_empty():
+    assert format_reflection_digest([]) == ""
+
+
+def test_format_reflection_digest_formats_filled_fields_only():
+    entries = [
+        (
+            "2026-09-11",
+            {
+                "energy_rating": "6",
+                "what_worked_well": None,
+                "what_had_friction": "Too many context switches",
+                "adjustments": None,
+            },
+        ),
+    ]
+    digest = format_reflection_digest(entries)
+    assert "Recent reflections to consider:" in digest
+    assert "2026-09-11" in digest
+    assert "Too many context switches" in digest
+    assert "What worked well" not in digest

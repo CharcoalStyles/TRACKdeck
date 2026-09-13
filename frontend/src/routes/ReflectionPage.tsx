@@ -8,10 +8,18 @@ import SaveStatus, { type SaveState } from '../components/SaveStatus'
 const TODAY = new Date().toISOString().slice(0, 10)
 
 export default function ReflectionPage() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const date = searchParams.get('date') || TODAY
   const session = searchParams.get('session') || 'planning'
   const [status, setStatus] = useState<SaveState>('idle')
+
+  const historyQuery = useQuery({
+    queryKey: ['reflection', 'history'],
+    queryFn: async () => {
+      const { data } = await api.GET('/reflection/history')
+      return data ?? []
+    },
+  })
 
   const [energyRating, setEnergyRating] = useState('')
   const [whatWorkedWell, setWhatWorkedWell] = useState('')
@@ -54,8 +62,38 @@ export default function ReflectionPage() {
     onError: () => setStatus('error'),
   })
 
+  const selectDate = (nextDate: string) => {
+    setStatus('idle')
+    setSearchParams({ date: nextDate, session })
+  }
+
+  const history = historyQuery.data ?? []
+
   return (
     <div className="flex flex-col gap-4 w-full max-w-xl">
+      {history.length > 0 && (
+        <Card>
+          <h2 className="mb-2 text-sm font-semibold text-text-muted">Past reflections</h2>
+          <div className="flex flex-col gap-1">
+            {history.map((entry) => (
+              <button
+                key={entry.date}
+                type="button"
+                onClick={() => selectDate(entry.date)}
+                className={`flex items-center justify-between rounded px-2 py-1 text-left text-sm hover:bg-card-alt ${
+                  entry.date === date ? 'bg-card-alt text-accent' : 'text-text-primary'
+                }`}>
+                <span>
+                  {entry.date}
+                  {entry.date === TODAY && ' (today)'}
+                </span>
+                {!entry.has_reflection && <span className="text-xs text-text-muted">no reflection yet</span>}
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
+
       <Card>
         <h2 className="mb-1 text-lg font-semibold">
           {reflectionQuery.data?.title ?? 'End of Day Reflection'}

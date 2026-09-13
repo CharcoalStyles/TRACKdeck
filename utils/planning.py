@@ -177,6 +177,10 @@ def format_schedule_section(blocks: list[Block], unscheduled: list[str]) -> str:
     return "\n".join(lines)
 
 
+# Heading name for the reflection section — the one source of truth so
+# routes/reflection.py and agent/tools/planning.py don't each redefine it.
+REFLECTION_SECTION_HEADING = "End of Day Reflection"
+
 # (field key, note bullet label) — order controls both display and
 # read/write round-tripping through the "## End of Day Reflection" section.
 REFLECTION_FIELDS: list[tuple[str, str]] = [
@@ -205,3 +209,25 @@ def parse_reflection_section(section_text: Optional[str]) -> dict[str, Optional[
 
 def format_reflection_section(values: dict[str, Optional[str]]) -> str:
     return "\n".join(f"- **{label}**: {values.get(key) or ''}" for key, label in REFLECTION_FIELDS)
+
+
+def reflection_is_filled(values: dict[str, Optional[str]]) -> bool:
+    """True if the user actually filled in at least one reflection field —
+    an empty/never-visited reflection section shouldn't count as history."""
+    return any(values.get(key) for key, _ in REFLECTION_FIELDS)
+
+
+def format_reflection_digest(entries: list[tuple[str, dict[str, Optional[str]]]]) -> str:
+    """Format past days' filled-in reflections into a short digest for
+    generate_schedule_blocks to surface back to the LLM. `entries` is
+    (date_str, parsed_reflection_values) pairs, already filtered to ones
+    reflection_is_filled — most recent first. Returns "" for an empty
+    list so callers can unconditionally append the result."""
+    if not entries:
+        return ""
+    lines = ["", "Recent reflections to consider:"]
+    for date_str, values in entries:
+        bits = [f"{label}: {values[key]}" for key, label in REFLECTION_FIELDS if values.get(key)]
+        if bits:
+            lines.append(f"- {date_str} — " + "; ".join(bits))
+    return "\n".join(lines)

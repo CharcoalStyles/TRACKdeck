@@ -35,20 +35,54 @@ from utils import reminders_store, vault
 from utils.caldav_client import create_or_update_event, get_events_in_range
 from utils.datetime import parse_local_datetime, text_to_utc
 from utils.planning import (
+    REFLECTION_SECTION_HEADING,
     compute_schedule_blocks,
+    format_reflection_digest,
     format_schedule_section,
     occupied_from_calendar_events,
+    parse_reflection_section,
     parse_target_tasks,
+    reflection_is_filled,
 )
 
 TASKS_SECTION = "Tasks"
 SCHEDULE_SECTION = "Generated Schedule & Sprints"
+
+# How far back generate_schedule_blocks looks for reflections to surface —
+# a week covers "same day last week" patterns without dredging up stale
+# feedback.
+RECENT_REFLECTION_DAYS = 7
+RECENT_REFLECTION_LIMIT = 5
 
 
 def _resolve_date_str(date_str: Optional[str]) -> str:
     if date_str:
         return parse_local_datetime(date_str).strftime("%Y-%m-%d")
     return datetime.now(settings.zoneinfo()).strftime("%Y-%m-%d")
+
+
+def _recent_reflections(before_date_str: str, days: int = RECENT_REFLECTION_DAYS) -> str:
+    """Digest of filled-in reflections from the `days` before
+    `before_date_str`, for generate_schedule_blocks to append to its
+    return value — see that function's docstring for why this rides in
+    the tool result rather than a separate call/system-prompt addition."""
+    cutoff_date = datetime.strptime(before_date_str, "%Y-%m-%d").date()
+    entries = []
+    for item in vault.list_planning_notes():
+        if item["date"] >= before_date_str:
+            continue
+        note_date = datetime.strptime(item["date"], "%Y-%m-%d").date()
+        if (cutoff_date - note_date).days > days:
+            continue
+        note = vault.parse_note(vault.planning_note_path(item["date"]))
+        if note is None:
+            continue
+        values = parse_reflection_section(vault.get_section(note.body, REFLECTION_SECTION_HEADING))
+        if reflection_is_filled(values):
+            entries.append((item["date"], values))
+
+    entries.sort(key=lambda e: e[0], reverse=True)
+    return format_reflection_digest(entries[:RECENT_REFLECTION_LIMIT])
 
 
 @tool
@@ -82,7 +116,10 @@ def generate_schedule_blocks(date: Optional[str] = None) -> str:
     breaks between sprints, writes the resulting timeline into the note,
     creates a real calendar event for each scheduled block (tasks and
     breaks alike), and schedules a reminder at each block's end so the
-    device can chime when a sprint or break finishes.
+    device can chime when a sprint or break finishes. The result also
+    includes a digest of the past week's filled-in "End of Day
+    Reflection" entries (if any) — factor that friction/adjustments
+    feedback into how you talk about the new schedule.
 
     Args:
         date: The day to schedule, e.g. "2026-09-13". Defaults to today.
@@ -161,6 +198,7 @@ def generate_schedule_blocks(date: Optional[str] = None) -> str:
     summary = f"Scheduled {task_count} task block(s) with breaks for {date_str}, added {created} calendar event(s)."
     if unscheduled:
         summary += f" Couldn't fit: {', '.join(unscheduled)}."
+    summary += _recent_reflections(date_str)
     return summary
 
 

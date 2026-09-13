@@ -514,6 +514,32 @@ def get_or_create_planning_note(date_str: str, template_note_id: str | None = No
     return note
 
 
+def list_planning_notes() -> list[dict]:
+    """Every task-planning note (see PLANNING_NOTE_TAG), most recent date
+    first. Backs GET /reflection/history — lets the dashboard list past
+    days instead of only reaching one via an exact date in the URL. Same
+    shape/spirit as list_notes_summary, but scoped to this one note kind
+    since planning notes use a deterministic date-keyed filename rather
+    than needing a full vault scan."""
+    root = vault_root()
+    if not root.exists():
+        return []
+    notes = []
+    for path in root.glob("planning-*.md"):
+        note = parse_note(path)
+        if note is None or PLANNING_NOTE_TAG not in note.tags:
+            continue
+        notes.append(
+            {
+                "date": path.stem.removeprefix("planning-"),
+                "title": note.title,
+                "updated": note.updated,
+            }
+        )
+    notes.sort(key=lambda n: n["date"], reverse=True)
+    return notes
+
+
 def find_linked_note_id(linked_notes: dict, topic: str) -> str | None:
     """
     Look up `topic` in a linked_notes registry, tolerant of case/whitespace
