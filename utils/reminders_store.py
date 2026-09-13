@@ -39,18 +39,21 @@ def init_db() -> None:
                 status TEXT NOT NULL DEFAULT 'pending',
                 created_at INTEGER NOT NULL,
                 event_uid TEXT,
-                alert_sound_id TEXT
+                alert_sound_id TEXT,
+                alarm_derived INTEGER NOT NULL DEFAULT 0
             )
             """
         )
         # Migration guard for a reminders.db created before event_uid/
-        # alert_sound_id existed — CREATE TABLE IF NOT EXISTS above doesn't
-        # add columns to an already-existing table.
+        # alert_sound_id/alarm_derived existed — CREATE TABLE IF NOT EXISTS
+        # above doesn't add columns to an already-existing table.
         columns = {row[1] for row in conn.execute("PRAGMA table_info(reminders)")}
         if "event_uid" not in columns:
             conn.execute("ALTER TABLE reminders ADD COLUMN event_uid TEXT")
         if "alert_sound_id" not in columns:
             conn.execute("ALTER TABLE reminders ADD COLUMN alert_sound_id TEXT")
+        if "alarm_derived" not in columns:
+            conn.execute("ALTER TABLE reminders ADD COLUMN alarm_derived INTEGER NOT NULL DEFAULT 0")
 
         # event_uid is a unique key among calendar-derived reminders (one
         # row tracks "the current known reminder state" for a given
@@ -81,7 +84,10 @@ def upsert_calendar_reminder(event_uid: str, message: str, due_at: int) -> tuple
     Insert or update the single reminder linked to a calendar event
     (jobs/calendar_sync.py). event_uid is treated as a unique key: one
     call per sync pass per event that currently has a native calendar
-    alarm.
+    alarm. Always marks the row alarm_derived=1 — this is the only writer
+    that mirrors a real VALARM, which is what makes it safe for
+    jobs/calendar_sync.py to later cancel this row if the alarm disappears
+    (see list_pending_calendar_linked).
 
     Returns (reminder_id, changed). changed is False only when a pending
     row already exists with this exact due_at — nothing for the caller to
@@ -98,8 +104,8 @@ def upsert_calendar_reminder(event_uid: str, message: str, due_at: int) -> tuple
         if existing is None:
             reminder_id = str(uuid.uuid4())
             conn.execute(
-                "INSERT INTO reminders (id, message, due_at, status, created_at, event_uid) "
-                "VALUES (?, ?, ?, 'pending', ?, ?)",
+                "INSERT INTO reminders (id, message, due_at, status, created_at, event_uid, alarm_derived) "
+                "VALUES (?, ?, ?, 'pending', ?, ?, 1)",
                 (reminder_id, message, due_at, int(time.time()), event_uid),
             )
             return reminder_id, True
@@ -109,7 +115,7 @@ def upsert_calendar_reminder(event_uid: str, message: str, due_at: int) -> tuple
             return existing["id"], False
 
         conn.execute(
-            "UPDATE reminders SET message = ?, due_at = ?, status = 'pending' WHERE id = ?",
+            "UPDATE reminders SET message = ?, due_at = ?, status = 'pending', alarm_derived = 1 WHERE id = ?",
             (message, due_at, existing["id"]),
         )
         return existing["id"], True
@@ -145,10 +151,16 @@ def list_pending_due_within_24h(now_epoch: int) -> list[dict]:
 def list_pending_calendar_linked() -> list[dict]:
     """Pending reminders derived from a calendar event's own alarm — used
     by jobs/calendar_sync.py to notice an event was deleted or had its
-    alarm removed outside the current lookahead window's result set."""
+    alarm removed outside the current lookahead window's result set.
+
+    Filters on alarm_derived rather than event_uid IS NOT NULL: some
+    reminders (e.g. agent/tools/planning.py's generate_schedule_blocks)
+    set event_uid to link to a calendar event for a different reason and
+    must never be treated as candidates for this job's cancellation
+    sweep."""
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT * FROM reminders WHERE status = 'pending' AND event_uid IS NOT NULL"
+            "SELECT * FROM reminders WHERE status = 'pending' AND alarm_derived = 1"
         ).fetchall()
         return [dict(row) for row in rows]
 
