@@ -1698,6 +1698,8 @@ export interface components {
             timezone: string;
             /** Digest Time */
             digest_time: string;
+            /** Bedtime */
+            bedtime: string;
             /** Calendar Sync Interval Minutes */
             calendar_sync_interval_minutes: number;
             /** Wake Time */
@@ -1842,6 +1844,8 @@ export interface components {
             timezone: string;
             /** Digest Time */
             digest_time: string;
+            /** Bedtime */
+            bedtime: string;
             /** Calendar Sync Interval Minutes */
             calendar_sync_interval_minutes: number;
             /** Wake Time */

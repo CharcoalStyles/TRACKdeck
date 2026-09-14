@@ -34,39 +34,25 @@ def log_activity(
     mood_energy: Optional[int] = None,
     reflection: Optional[str] = None,
 ) -> str:
-    """Log one entry in the user's structured activity log — a personal
-    record of meals, exercise, project work, socializing, and rest,
-    intended to be reviewed and charted later (mood over time, time spent
-    per activity type) on the dashboard's Activity Log page.
+    """Log one entry in the user's structured activity log (meals,
+    exercise, project work, socializing, rest) — charted later on the
+    dashboard.
 
-    Call this when the user narrates something they did or are doing —
-    "I just had a tofu scramble", "went for a 5k run", "worked on the
-    garden project for a couple hours" — not for a general chat message
-    with nothing to log. This is a separate, stricter record from
-    remember_about_me (durable facts about who the user is) and save_note
-    (freeform notes) — use this specifically for a loggable activity
-    occurrence with a type/time/duration shape.
+    Call when the user narrates something they did/are doing ("I just had
+    a tofu scramble", "went for a 5k run") — not for general chat.
+    Distinct from remember_about_me (durable facts) and save_note
+    (freeform notes); use only for a loggable occurrence with a
+    type/time/duration shape.
 
     Args:
-        activity_type: One of "Meal", "Exercise", "Project Work",
-            "Socializing", "Rest" — pick the closest fit.
-        subject: A brief description of what it was, e.g. "Tofu scramble
-            with roasted veg" or "5k run around the park".
-        when: An absolute local date/time the activity happened (resolve
-            relative language like "just now" or "this morning" yourself
-            first, per the date/time grounding rule). Omit if the user is
-            describing something happening right now — defaults to the
-            current local time.
-        duration: How long it took, in whatever form the user gave it —
-            a plain estimate like "60 minutes" or "45 min", or a
-            free-form answer like "All Day" or "a couple hours". Omit if
-            not mentioned; don't ask for it unless the user seems to be
-            deliberately giving a full log entry.
-        mood_energy: The user's mood/energy level for this entry on a
-            1-10 scale, only if they mentioned or gave one — never invent
-            a number on their behalf.
-        reflection: Any free-text notes or reflection the user gave about
-            it. Omit if they didn't say anything beyond the basic fact.
+        activity_type: Closest fit among the allowed values.
+        subject: Brief description, e.g. "Tofu scramble with roasted veg".
+        when: Absolute local date/time (resolve relative language like
+            "this morning" yourself first). Omit for "happening now".
+        duration: However the user phrased it (e.g. "45 min", "a couple
+            hours"). Omit if unmentioned.
+        mood_energy: 1-10 if the user gave one — never invent a number.
+        reflection: Any free-text notes the user gave. Omit if none.
     """
     if when:
         try:

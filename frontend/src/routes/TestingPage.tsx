@@ -19,6 +19,12 @@ interface DeviceState {
   rssi_dbm?: number | null
 }
 
+interface LlmProvider {
+  provider: string
+  model?: string | null
+  base_url?: string | null
+}
+
 interface AlertSound {
   id: string
   display_name: string
@@ -103,6 +109,11 @@ export default function TestingPage() {
   const deviceStateQuery = useQuery({
     queryKey: ['debug-device-state'],
     queryFn: () => fetchDebug<DeviceState>('/debug/device-state'),
+  })
+
+  const llmProviderQuery = useQuery({
+    queryKey: ['debug-llm-provider'],
+    queryFn: () => fetchDebug<LlmProvider>('/debug/llm-provider'),
   })
 
   const [syncPreview, setSyncPreview] = useState<string | null>(null)
@@ -241,6 +252,24 @@ export default function TestingPage() {
           savedMessage={`Scheduled — check Gotify in ~${minutes} minute(s).`}
           errorMessage="Failed — check server logs."
         />
+      </Card>
+
+      <Card>
+        <h2 className="mb-1 text-lg font-semibold">Active LLM Provider</h2>
+        <p className="mb-3 text-sm text-text-muted">
+          What LLM_PROVIDER/model/base_url the app is actually using right now — this is
+          env-only (no dashboard field, restart to change), so check here rather than
+          guessing from container logs.
+        </p>
+        <pre className="whitespace-pre-line text-sm text-text-muted">
+          {!llmProviderQuery.data
+            ? 'Loading…'
+            : [
+                `Provider: ${llmProviderQuery.data.provider}`,
+                `Model: ${llmProviderQuery.data.model ?? '—'}`,
+                `Base URL: ${llmProviderQuery.data.base_url ?? '—'}`,
+              ].join('\n')}
+        </pre>
       </Card>
 
       <Card>

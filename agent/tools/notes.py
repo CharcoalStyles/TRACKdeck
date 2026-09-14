@@ -88,24 +88,18 @@ def make_note_tools(memory: MemoryStore):
         tags: Optional[list[str]] = None,
         project: Optional[str] = None,
     ) -> str:
-        """Create a brand new note in the vault. Use this when the user wants
-        to jot something down or remember something new. If it might relate
-        to an existing note, search_notes first — prefer append_to_note or
-        update_note_section over creating a near-duplicate note.
+        """Create a brand new note in the vault. If it might relate to an
+        existing note, search_notes first — prefer append_to_note/
+        update_note_section over a near-duplicate note.
 
         Args:
-            content: The body of the note.
-            title: A short, specific title for the note. Optional — if
-                omitted, one is derived from the note's content, but a
-                real title is preferred when you have one.
-            tags: Optional list of lowercase category tags (spaces are
-                fine here — they're normalized to hyphens automatically).
-            project: If this note belongs to an ongoing project, its name
-                (as returned by get_or_create_project) — files the note
-                inside that project's folder instead of the vault root.
-                If linking to other notes via [[wikilinks]], keep links
-                inside the same project — don't link out to the rest of
-                the vault.
+            content: The note's body.
+            title: A short, specific title. Optional — derived from content if omitted.
+            tags: Optional lowercase category tags (spaces are fine, normalized to hyphens).
+            project: If part of an ongoing project, its name (from
+                get_or_create_project) — files the note in that project's folder.
+                Keep [[wikilinks]] within the same project, don't link out to the
+                rest of the vault.
         """
         title = (title or "").strip() or _derive_title(content)
         now = vault.now_iso()
@@ -130,17 +124,14 @@ def make_note_tools(memory: MemoryStore):
 
     @tool
     def search_notes(query: str, project: Optional[str] = None) -> str:
-        """Search saved notes for information. Returns short excerpts with
-        each note's id — use read_note with that id if you need the full
-        note before editing it.
+        """Search saved notes. Returns short excerpts with each note's id —
+        use read_note with that id for the full note before editing.
 
         Args:
-            query: What to search for in past notes.
-            project: If the user is actively discussing a specific ongoing
-                project, its name (as returned by get_or_create_project) —
-                scopes the search to just that project's notes instead of
-                the whole vault. Leave unset for a normal, vault-wide
-                search.
+            query: What to search for.
+            project: If actively discussing a specific project, its name
+                (from get_or_create_project) to scope the search to it.
+                Leave unset for a vault-wide search.
         """
         resolved_project = None
         if project:
@@ -171,13 +162,12 @@ def make_note_tools(memory: MemoryStore):
 
     @tool
     async def append_to_note(note_id: str, section: str, content: str) -> str:
-        """Add a new entry to a note under a given heading, without changing
-        anything already there. Use this for log-style additions — a new
-        service record, a new dated observation — where old entries should
-        stay. Creates the heading if it doesn't already exist on the note.
+        """Add an entry to a note under a heading, without touching what's
+        already there — for log-style additions (a new service record, a
+        dated observation). Creates the heading if it doesn't exist.
 
         Args:
-            note_id: The note's id, as returned by search_notes.
+            note_id: The note's id, from search_notes.
             section: The heading to append under (e.g. "Service Log").
             content: The text to add.
         """
@@ -196,14 +186,13 @@ def make_note_tools(memory: MemoryStore):
 
     @tool
     async def update_note_section(note_id: str, section: str, new_content: str) -> str:
-        """Replace the content under one heading in a note, leaving
-        everything else in the note untouched. Use this when something has
-        superseded the old value — e.g. a status or a due date changed —
-        not for adding new history (use append_to_note for that). Creates
-        the heading if it doesn't already exist on the note.
+        """Replace the content under one heading in a note, leaving the rest
+        untouched. Use when a value is superseded (a status, a due date) —
+        not for adding new history (use append_to_note). Creates the
+        heading if it doesn't exist.
 
         Args:
-            note_id: The note's id, as returned by search_notes.
+            note_id: The note's id, from search_notes.
             section: The heading to replace (e.g. "Current Status").
             new_content: The new content for that section.
         """
@@ -224,30 +213,23 @@ def make_note_tools(memory: MemoryStore):
     async def remember_about_me(
         section: str, content: str, mode: Literal["append", "replace"] = "append"
     ) -> str:
-        """Record or update something learned about the user in their
-        permanent About Me note. This is the ONLY tool to use for that —
-        it always finds or creates the right note automatically, so there
-        is no need to search for it first or keep track of its id.
+        """Record/update a fact in the user's About Me note — the only tool
+        for this; it always resolves the right note automatically, no need
+        to search or track an id.
 
-        Do NOT use this for a section that holds multiple distinct entries
-        (e.g. "People" covering several different people, or any section
-        that's really a collection rather than one coherent topic). Using
-        mode="replace" on a collection section wipes every entry in it, not
-        just the one being corrected. For that situation, use
-        get_or_create_linked_note instead to get a dedicated note for the
-        specific person/topic, and edit that note directly.
+        Never use mode="replace" on a section holding multiple distinct
+        entries (e.g. "People") — it wipes everything under that heading,
+        not just one entry. Use get_or_create_linked_note for a specific
+        person/topic instead.
 
         Args:
-            section: Which part of the profile this belongs to (e.g.
-                "Preferences", "Routine", "Interests" — single-topic
-                sections only). Created automatically if it doesn't
-                already exist.
+            section: Profile section (e.g. "Preferences", "Routine") —
+                single-topic only. Created automatically if missing.
             content: The fact or update to record.
-            mode: "append" (default) adds to what's already under that
-                heading without touching it — use for new facts. "replace"
-                overwrites that heading's content entirely — use only when
-                something supersedes an old value, not for adding new facts,
-                and never on a section holding multiple distinct entries.
+            mode: "append" (default) adds without touching existing content
+                — use for new facts. "replace" overwrites the section
+                entirely — only for superseding an old value, never on a
+                multi-entry section.
         """
         async with _about_me_lock:
             note = vault.get_or_create_about_me()
@@ -262,31 +244,24 @@ def make_note_tools(memory: MemoryStore):
 
     @tool
     async def get_or_create_linked_note(topic: str, category: str) -> str:
-        """Get (or create) a dedicated note for one specific person, project,
-        or other distinct sub-topic, linked from About Me. Returns that
-        note's id — use read_note/append_to_note/update_note_section with
-        that id for everything about this topic afterward, exactly as you
-        would for any other note.
+        """Get (or create) a dedicated note for one specific person/project/
+        topic, linked from About Me. Returns its id — use read_note/
+        append_to_note/update_note_section with that id afterward.
 
-        Use this instead of writing into a shared About Me section whenever:
-          - The relevant section holds multiple distinct entries (e.g.
-            "People" has several different people) and you're about to add
-            or correct information about ONE of them specifically.
-          - A single topic (a person, an ongoing project, a specific health
-            matter) is accumulating enough detail that it no longer fits as
-            a short line in About Me.
+        Use instead of writing into a shared About Me section when: the
+        section holds multiple distinct entries (e.g. "People") and you're
+        updating ONE of them, or a single topic is accumulating enough
+        detail to outgrow a short line in About Me.
 
-        This always finds the same note for the same topic — never search
-        for it, never guess an id from earlier in the conversation, never
-        create a second note for something that already has one. If in
-        doubt whether a topic already has a note, call this first; it's
-        safe to call even when one already exists.
+        Always resolves to the same note for the same topic — never search
+        for it or guess an id from earlier in the conversation. Safe to
+        call even when one already exists.
 
         Args:
-            topic: The specific name of the person/project/topic (e.g.
-                "Alex", not "People"). Use the exact same name consistently
-                once created — it's the key used to find this note again.
-            category: Which About Me section this gets indexed under (e.g.
+            topic: The specific name (e.g. "Alex", not "People"). Use the
+                same name consistently — it's the key used to find this
+                note again.
+            category: Which About Me section this is indexed under (e.g.
                 "People", "Career", "Health").
         """
         async with _about_me_lock:
@@ -329,21 +304,15 @@ def make_note_tools(memory: MemoryStore):
     @tool
     async def get_or_create_project(name: str) -> str:
         """Get (or create) a dedicated vault folder for one ongoing project,
-        so all the notes/ideas that build up on it over many separate
-        conversations live together and can be searched as a unit. Returns
+        so its notes live together and can be searched as a unit. Returns
         the project's canonical name — use that exact string with
-        save_note's and search_notes's `project` argument afterward.
+        save_note's/search_notes's `project` argument afterward.
 
-        Use this for a recurring, evolving body of work (a side project, a
-        creative endeavor) the user comes back to repeatedly across
-        sessions — not for a single one-off note, and not for a specific
-        person/topic that belongs in About Me (use get_or_create_linked_note
-        for that instead).
-
-        This always resolves to the same folder for the same project —
-        fuzzy-matches close variations of a name used before rather than
-        creating a near-duplicate folder for what's really the same
-        project. Safe to call even when the project already exists.
+        For a recurring body of work the user returns to across sessions —
+        not a one-off note, and not a person/topic (use
+        get_or_create_linked_note for that). Fuzzy-matches close variations
+        of a name already used, so it always resolves to the same folder.
+        Safe to call even if it already exists.
 
         Args:
             name: The project's name (e.g. "Track Deck"). Use the same name

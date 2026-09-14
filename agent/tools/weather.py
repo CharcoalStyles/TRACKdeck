@@ -99,10 +99,7 @@ def get_current_weather(location: Optional[str] = None) -> str:
     """Get the current weather.
 
     Args:
-        location: City or suburb. If not provided, uses the user's configured default location.
-
-    Returns:
-        A string containing the current weather in the specified location.
+        location: City or suburb. Defaults to the user's configured location.
     """
     loc = location or settings.default_location
     logger.info("Fetching weather for: %s", loc)
@@ -122,10 +119,7 @@ def get_weather_forecast(location: Optional[str] = None) -> str:
     """Get the forecast weather for the next 7 days.
 
     Args:
-        location: City or suburb. If not provided, uses the user's configured default location.
-
-    Returns:
-        A list of dictionaries containing the forecast for the next 7 days.
+        location: City or suburb. Defaults to the user's configured location.
     """
 
     loc = location or settings.default_location
@@ -181,10 +175,7 @@ def get_range_forecast(start: str, end: str, location: Optional[str] = None) -> 
     Args:
         start: Start date in ISO format (e.g., "2023-01-01")
         end: End date in ISO format (e.g., "2023-01-05")
-        location: City or suburb. If not provided, uses the user's configured default location.
-
-    Returns:
-        A list of dictionaries containing the forecast for the specified range of days.
+        location: City or suburb. Defaults to the user's configured location.
     """
 
     loc = location or settings.default_location

@@ -52,6 +52,24 @@ def get_chat_llm(temperature: float) -> BaseChatModel:
     return ChatOpenAI(
         base_url=os.environ["LMSTUDIO_OPENAI_URL"],
         api_key="lm-studio",
-        model=os.environ["CHAT_MODEL"],
+        model=os.environ["LMSTUDIO_CHAT_MODEL"],
         temperature=temperature,
     )
+
+
+def describe_chat_llm() -> dict:
+    """Which provider/model/base_url get_chat_llm() actually builds right
+    now — for the dashboard's Testing page, since LLM_PROVIDER is env-only
+    and easy to lose track of across restarts/deployments. No credentials
+    included."""
+    if CHAT_PROVIDER == "gemini":
+        return {
+            "provider": "gemini",
+            "model": os.environ.get("GEMINI_CHAT_MODEL"),
+            "base_url": None,
+        }
+    return {
+        "provider": "lmstudio",
+        "model": os.environ.get("LMSTUDIO_CHAT_MODEL"),
+        "base_url": os.environ.get("LMSTUDIO_OPENAI_URL"),
+    }

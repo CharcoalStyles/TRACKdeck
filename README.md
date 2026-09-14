@@ -420,10 +420,10 @@ reset_knowledge.sh              Wipes memory/index/checkpoints, then re-runs set
 
 See `.env.example` for the full list. Grouped by what needs external setup:
 
-- **LM Studio** — `LMSTUDIO_OPENAI_URL`, `CHAT_MODEL`, `EMBEDDING_MODEL`. Local, on the Mac
-  Mini. `LMSTUDIO_MANAGEMENT_URL` is separate and optional — LM Studio's own REST API
-  (not OpenAI-compatible), used to live-fetch the loaded model's actual context length so
-  history trimming matches what you set in LM Studio's model loader rather than a guess.
+- **LM Studio** — `LMSTUDIO_OPENAI_URL`, `LMSTUDIO_CHAT_MODEL`, `EMBEDDING_MODEL`. Local, on
+  the Mac Mini. `LMSTUDIO_MANAGEMENT_URL` is separate and optional — LM Studio's own REST
+  API (not OpenAI-compatible), used to live-fetch the loaded model's actual context length
+  so history trimming matches what you set in LM Studio's model loader rather than a guess.
 - **`LLM_PROVIDER`** — `lmstudio` (default) or `gemini`, picks which chat-completion
   backend `utils/llm_client.py`'s `get_chat_llm()` builds for every LLM call site (the
   main agent, digest, check-in personalization, Inbox auto-titling). Embeddings always

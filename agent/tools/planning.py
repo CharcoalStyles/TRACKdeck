@@ -87,17 +87,16 @@ def _recent_reflections(before_date_str: str, days: int = RECENT_REFLECTION_DAYS
 
 @tool
 def add_planning_task(task: str, duration_minutes: int, date: Optional[str] = None) -> str:
-    """Add one task with a time estimate to a day's planning note, ready
-    for generate_schedule_blocks to arrange later. When the user lists
-    several tasks at once (e.g. a voice brain-dump of chores), call this
-    once per task — not a single combined call.
+    """Add one task with a time estimate to a day's planning note, for
+    generate_schedule_blocks to arrange later. If the user lists several
+    tasks at once, call this once per task, not a combined call.
 
     Args:
-        task: A short description of the task (e.g. "Kitchen dishes").
+        task: A short description (e.g. "Kitchen dishes").
         duration_minutes: Estimated time to complete it, in minutes.
         date: The day this task is for, e.g. "2026-09-13". Defaults to
-            today. Resolve relative language ("this Saturday") to an
-            actual date yourself before calling, same as set_reminder.
+            today. Resolve relative language ("this Saturday") first,
+            same as set_reminder.
     """
     date_str = _resolve_date_str(date)
     note = vault.get_or_create_planning_note(date_str, settings.planning_template_note_id)
@@ -111,15 +110,13 @@ def add_planning_task(task: str, duration_minutes: int, date: Optional[str] = No
 
 @tool
 def generate_schedule_blocks(date: Optional[str] = None) -> str:
-    """Build a day's schedule: reads the planning note's task list,
-    merges it around that day's actual calendar events with sensible
-    breaks between sprints, writes the resulting timeline into the note,
-    creates a real calendar event for each scheduled block (tasks and
-    breaks alike), and schedules a reminder at each block's end so the
-    device can chime when a sprint or break finishes. The result also
-    includes a digest of the past week's filled-in "End of Day
-    Reflection" entries (if any) — factor that friction/adjustments
-    feedback into how you talk about the new schedule.
+    """Build a day's schedule: reads the planning note's tasks, merges
+    them around that day's calendar events with breaks between sprints,
+    writes the timeline into the note, creates a calendar event per
+    block, and schedules an end-of-block reminder for each. Also returns
+    a digest of the past week's filled-in "End of Day Reflection"
+    entries, if any — factor that feedback into how you talk about the
+    new schedule.
 
     Args:
         date: The day to schedule, e.g. "2026-09-13". Defaults to today.

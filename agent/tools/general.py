@@ -60,10 +60,9 @@ def resolve_location(location: str) -> tuple[str, str] | None:
 @tool
 def mark_onboarding_complete() -> str:
     """Call this once the guided onboarding interview's main areas (preferences, people,
-    routine, interests) feel reasonably covered — only when the onboarding mode addendum's
-    guidance applies, not during ordinary chat or profile Q&A. Marks onboarding complete so
-    the dashboard defaults to the profile Q&A view instead of the interview. Safe to call
-    more than once; the user can still switch back to the interview manually afterward."""
+    routine, interests) feel reasonably covered — only in onboarding mode, not during
+    ordinary chat or profile Q&A. Switches the dashboard to the profile Q&A view instead
+    of the interview. Safe to call more than once."""
     onboarding_state.mark_onboarding_complete()
     logger.info("Onboarding marked complete.")
     return "Onboarding marked complete."
@@ -72,22 +71,14 @@ def mark_onboarding_complete() -> str:
 @tool
 def set_home_location(location: str) -> str:
     """Call this during guided onboarding as soon as the user answers where they live —
-    only in onboarding mode, never during ordinary chat or profile Q&A. Resolves the
-    free-text place name to a canonical location and its IANA timezone via geocoding
-    (rather than guessing the timezone yourself), then saves both as the app's standing
-    default_location/timezone settings — used by weather lookups, calendar day
-    boundaries, and the daily digest/bedtime schedule. This is separate from the About
-    Me profile — do not also record it with remember_about_me. If it resolves to the
-    wrong place (e.g. an ambiguous town name), the user can always correct it afterward
-    from the dashboard's Settings page.
+    only in onboarding mode, never ordinary chat or profile Q&A. Resolves the free-text
+    place name to a canonical location + IANA timezone via geocoding (don't guess the
+    timezone yourself) and saves both as the app's standing location/timezone settings.
+    Separate from the About Me profile — do not also record it with remember_about_me.
 
     Args:
         location: The place the user said they live, as close to their own words as
             possible (e.g. "Melbourne, Australia").
-
-    Returns:
-        Confirmation of what was set, or an explanation if the location couldn't be
-        resolved.
     """
     resolved = resolve_location(location)
     if resolved is None:

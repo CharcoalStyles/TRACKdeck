@@ -32,8 +32,8 @@ def get_calendar_event(uid: str) -> str:
     """Retrieves a specific event from the calendar.
 
     Args:
-        uid (str): The unique ID of the event to retrieve.
-    """ 
+        uid: The event's unique ID.
+    """
     logger.info("Retrieving event with UID: %s", uid)
     
     response = get_event(uid)
@@ -48,19 +48,19 @@ def add_calendar_event(title: str, start: str, end: Optional[str] = None, descri
     """Add an event to the calendar.
 
     Args:
-        title (str): The title of the event.
-        start (str): The start date and time of the event
-        end (Optional[str], optional): The end date and time of the event. Defaults to one hour after the start time.
-        description (Optional[str], optional): A description of the event. Defaults to None.
-        location (Optional[str], optional): The location of the event. Defaults to None.
-        recurrence (Optional[str], optional): An RFC 5545 RRULE value if this event
-            repeats — e.g. "FREQ=DAILY", "FREQ=WEEKLY;BYDAY=MO,WE,FR",
+        title: The event's title.
+        start: The event's start date/time.
+        end: The event's end date/time. Defaults to one hour after start.
+        description: Optional event description.
+        location: Optional event location.
+        recurrence: An RFC 5545 RRULE value if this event repeats — e.g.
+            "FREQ=DAILY", "FREQ=WEEKLY;BYDAY=MO,WE,FR",
             "FREQ=WEEKLY;INTERVAL=2" (every two weeks), "FREQ=MONTHLY;BYMONTHDAY=15",
             "FREQ=DAILY;COUNT=10" (stop after 10 occurrences), or
             "FREQ=WEEKLY;UNTIL=20261231T000000Z" (stop by a date, always UTC/"Z").
-            Leave unset for a one-off event. This is for events that actually repeat on
-            the calendar — a single reminder that happens once, even a relative one like
-            "30 minutes before my appointment," should still use set_reminder instead.
+            Leave unset for a one-off event. A single reminder that happens once —
+            even a relative one like "30 minutes before my appointment" — should
+            use set_reminder instead, not a recurring event.
     """
 
     start_UTC = text_to_utc(start)
@@ -99,8 +99,8 @@ def delete_calendar_event(uid: str) -> str:
     """Delete an event from the calendar.
 
     Args:
-        uid (str): The unique ID of the event to delete.
-    """ 
+        uid: The event's unique ID.
+    """
     logger.info("Deleting event with UID: %s", uid)
     
     response = delete_event(uid)
@@ -115,9 +115,9 @@ def get_calendar_events(start: str, end: str) -> str:
     """Retrieves calendar events within a specific time range.
 
     Args:
-        start (str): The start date and time of the event
-        end (str): The end date and time of the event
-    """ 
+        start: Start of the range.
+        end: End of the range.
+    """
 
     start_UTC = text_to_utc(start)
     end_UTC = text_to_utc(end)
@@ -136,16 +136,15 @@ def update_calendar_event(uid: str, title: str, start: str, end: str, descriptio
     """Update an event in the calendar.
 
     Args:
-        uid (str): The unique ID of the event to update.
-        title (str): The title of the event.
-        start (str): The start date and time of the event
-        end (str): The end date and time of the event
-        description (Optional[str], optional): A description of the event. Defaults to None.
-        location (Optional[str], optional): The location of the event. Defaults to None.
-        recurrence (Optional[str], optional): An RFC 5545 RRULE value, same format as
-            add_calendar_event. This replaces the event's recurrence outright — to keep
-            an existing repeat pattern, pass it again; omitting it turns a repeating
-            event into a one-off.
+        uid: The event's unique ID.
+        title: The event's title.
+        start: The event's start date/time.
+        end: The event's end date/time.
+        description: Optional event description.
+        location: Optional event location.
+        recurrence: An RFC 5545 RRULE value, same format as add_calendar_event.
+            Replaces the event's recurrence outright — pass the existing value
+            again to keep it, or omit to turn a repeating event into a one-off.
     """
 
     start_UTC = text_to_utc(start)

@@ -33,6 +33,7 @@ export default function SettingsPage() {
       <LocationTimeCard data={data} onSaved={invalidate} />
       <DigestCard data={data} onSaved={invalidate} />
       <CheckinWindowCard data={data} onSaved={invalidate} />
+      <BedtimeCard data={data} onSaved={invalidate} />
       <NotificationsCard data={data} onSaved={invalidate} />
       <DeviceSyncCard data={data} onSaved={invalidate} />
       <RecallCard data={data} onSaved={invalidate} />
@@ -99,6 +100,7 @@ type Settings = NonNullable<ReturnType<typeof useQuery<{
   digest_time: string
   digest_email_to: string
   wake_time: string
+  bedtime: string
   latest_checkin_time: string
   gotify_url: string
   gotify_token_set: boolean
@@ -323,6 +325,52 @@ function CheckinWindowCard({ data, onSaved }: { data?: Settings; onSaved: () => 
           type="time"
           value={latestCheckinTime}
           onChange={(e) => setLatestCheckinTime(e.target.value)}
+          className={inputClass}
+        />
+      </FieldRow>
+      <button type="button" onClick={() => mutation.mutate()} className={primaryBtnClass}>
+        Save
+      </button>
+      <SaveStatus state={status.state} />
+    </Card>
+  )
+}
+
+function BedtimeCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
+  const status = useSaveStatus()
+  const [bedtime, setBedtime] = useState('')
+
+  useEffect(() => {
+    if (!data) return
+    setBedtime(data.bedtime || '')
+  }, [data])
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await api.POST('/settings', { body: { bedtime } })
+      if (error) throw new Error()
+    },
+    onMutate: () => status.setState('saving'),
+    onSuccess: () => {
+      status.setState('saved')
+      onSaved()
+    },
+    onError: () => status.setState('error'),
+  })
+
+  return (
+    <Card>
+      <h2 className="mb-1 text-lg font-semibold">Bedtime Reminder</h2>
+      <p className="mb-3 text-sm text-text-muted">
+        Local time a wind-down nudge is pushed each night (see the Timezone above) — separate
+        from the daily digest and from the check-in window's own times. Takes effect
+        immediately, no restart needed.
+      </p>
+      <FieldRow label="Bedtime">
+        <input
+          type="time"
+          value={bedtime}
+          onChange={(e) => setBedtime(e.target.value)}
           className={inputClass}
         />
       </FieldRow>

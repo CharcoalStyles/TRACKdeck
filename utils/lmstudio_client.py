@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 async def get_loaded_context_length() -> int | None:
-    """loaded_context_length for CHAT_MODEL from LM Studio's
+    """loaded_context_length for LMSTUDIO_CHAT_MODEL from LM Studio's
     /api/v0/models, or None if it can't be determined (management URL
     not configured, model not currently loaded, or the request failed).
     No caching — this is a cheap LAN call, refetched fresh every time so
@@ -47,10 +47,27 @@ async def get_loaded_context_length() -> int | None:
         logger.warning("Could not reach LM Studio's management API for context length: %s", e)
         return None
 
-    chat_model = os.environ["CHAT_MODEL"]
-    for entry in data.get("data", []):
+    chat_model = os.environ["LMSTUDIO_CHAT_MODEL"]
+    entries = data.get("data", [])
+    for entry in entries:
         if entry.get("id") == chat_model and entry.get("state") == "loaded":
             return entry.get("loaded_context_length")
+
+    # The API call succeeded but nothing matched — silently falling back
+    # to settings.max_history_tokens here previously gave zero indication
+    # of *why*, which reads as "the model has a tiny context" when the
+    # real cause is usually just LMSTUDIO_CHAT_MODEL not exactly matching
+    # what LM Studio reports (quant suffix, exact name) after switching
+    # models. Log what we were looking for against what's actually loaded
+    # so a mismatch is obvious from the logs instead of a guessing game.
+    loaded_ids = [e.get("id") for e in entries if e.get("state") == "loaded"]
+    logger.warning(
+        "LM Studio's management API has no loaded entry matching "
+        "LMSTUDIO_CHAT_MODEL=%r — currently loaded: %r. Falling back to "
+        "the max_history_tokens setting instead of this model's real "
+        "context length; check LMSTUDIO_CHAT_MODEL matches exactly.",
+        chat_model, loaded_ids,
+    )
     return None
 
 

@@ -29,23 +29,17 @@ _ALL_PROMPTS = [prompt for prompts in PROMPTS.values() for prompt in prompts]
 
 @tool
 def get_reflection_prompt(category: Optional[str] = None) -> str:
-    """Give the user a short mental-health grounding or reflection exercise
-    to do right now, when they ask for one directly (e.g. "give me a
-    grounding exercise", "I need to check in with myself", "got a
-    mindfulness thing I could try?"). Just relay the returned prompt to
-    the user conversationally — it already ends in a question, so let
-    them answer in the same reply.
-
-    This is separate from the app's own randomized check-in schedule:
-    calling this does not create a scheduled check-in and has no effect
-    on today's check-in count or cooldowns.
+    """Give the user a short grounding/reflection exercise when they ask
+    for one directly (e.g. "give me a grounding exercise", "I need to
+    check in with myself"). Relay the returned prompt conversationally —
+    it already ends in a question. Separate from the app's randomized
+    check-in schedule: doesn't create a scheduled check-in or affect
+    today's count/cooldowns.
 
     Args:
-        category: Optional effort level to draw from: "low" (quick
-                  grounding/somatic), "medium" (brief reflection), or
-                  "high" (deeper values/self-efficacy reflection). Omit,
-                  or pass anything else, to get a random one from any
-                  category.
+        category: Optional effort level — "low" (quick grounding/somatic),
+            "medium" (brief reflection), "high" (deeper values/self-efficacy
+            reflection). Omit for a random one from any category.
     """
     pool = PROMPTS.get(category, _ALL_PROMPTS) if category else _ALL_PROMPTS
     return random.choice(pool)

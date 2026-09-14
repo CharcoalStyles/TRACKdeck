@@ -130,6 +130,7 @@ from utils import (
 )
 from utils.caldav_client import ensure_collection_exists
 from utils.datetime import parse_local_datetime
+from utils.llm_client import CHAT_PROVIDER, describe_chat_llm
 from utils.mailer import send_email
 from utils.notify import notify_device_error, notify_error, send_gotify
 
@@ -966,6 +967,7 @@ class SettingsResponse(BaseModel):
     default_location: str
     timezone: str
     digest_time: str
+    bedtime: str
     calendar_sync_interval_minutes: int
     wake_time: str
     latest_checkin_time: str
@@ -1170,6 +1172,20 @@ _ONBOARDING_RECAP_GROUPS: list[list[str]] = [
 ]
 
 
+def _onboarding_recap_groups() -> list[list[str]]:
+    """One group per _process_onboarding_recap turn. Chunked only for
+    lmstudio — the small local model's limited context is what made one
+    combined message overflow in the first place (see comment above).
+    Hosted providers have far more context, and chunking there is
+    actively counterproductive: every chunk re-pays the full system
+    prompt + tool schemas + onboarding addendum fixed cost, so 4 small
+    chunks cost more total input tokens than 1 combined one — exactly
+    the kind of thing that blows through Groq's per-minute rate limit."""
+    if CHAT_PROVIDER == "lmstudio":
+        return _ONBOARDING_RECAP_GROUPS
+    return [[key for group in _ONBOARDING_RECAP_GROUPS for key in group]]
+
+
 def _build_onboarding_recap_chunks(request: "OnboardingBasicsRequest") -> list[str]:
     field_lines = {
         "name": f"Name: {request.name}" if request.name else None,
@@ -1197,7 +1213,7 @@ def _build_onboarding_recap_chunks(request: "OnboardingBasicsRequest") -> list[s
 
     groups = [
         [field_lines[key] for key in group if field_lines[key]]
-        for group in _ONBOARDING_RECAP_GROUPS
+        for group in _onboarding_recap_groups()
     ]
     groups = [g for g in groups if g]
 
@@ -1547,6 +1563,17 @@ async def get_device_state(_: Annotated[None, Depends(auth.require_session_or_to
     """
     state = await asyncio.to_thread(device_state.get_state)
     return state or {}
+
+
+@app.get("/debug/llm-provider")
+async def get_llm_provider(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """
+    Which LLM_PROVIDER/model/base_url get_chat_llm() actually builds right
+    now — LLM_PROVIDER is env-only (no dashboard field, restart to change),
+    so this is the only place to confirm it without reading container logs
+    or shelling into the box. No credentials included.
+    """
+    return describe_chat_llm()
 
 
 @app.get("/debug/threads", response_model=DebugThreadsResponse)
