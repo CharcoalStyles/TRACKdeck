@@ -21,6 +21,7 @@ support.
 """
 from __future__ import annotations
 
+import threading
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -53,6 +54,16 @@ SCHEDULE_SECTION = "Generated Schedule & Sprints"
 # feedback.
 RECENT_REFLECTION_DAYS = 7
 RECENT_REFLECTION_LIMIT = 5
+
+# Guards the read-modify-write on a planning note: add_planning_task is
+# designed to be called several times in one turn (once per task), and
+# LangGraph's ToolNode runs same-turn tool calls concurrently — without
+# this, two concurrent calls for the same date can both read the note
+# before either writes, and the second write silently drops the first
+# call's task. One global lock rather than a per-date registry: this app
+# is single-user/single-process, so the only real contention is a
+# handful of same-turn tool calls, not enough to justify finer locking.
+_planning_note_lock = threading.Lock()
 
 
 def _resolve_date_str(date_str: Optional[str]) -> str:
@@ -99,17 +110,20 @@ def add_planning_task(task: str, duration_minutes: int, date: Optional[str] = No
             same as set_reminder.
     """
     date_str = _resolve_date_str(date)
-    note = vault.get_or_create_planning_note(date_str, settings.planning_template_note_id)
-    note.body = vault.append_to_section(
-        note.body, TASKS_SECTION, f"- [ ] {task.strip()} — Est: {duration_minutes} mins"
-    )
-    note.updated = vault.now_iso()
-    vault.write_note_atomic(note.path, vault.serialize_note(note))
+    with _planning_note_lock:
+        note = vault.get_or_create_planning_note(date_str, settings.planning_template_note_id)
+        note.body = vault.append_to_section(
+            note.body, TASKS_SECTION, f"- [ ] {task.strip()} — Est: {duration_minutes} mins"
+        )
+        note.updated = vault.now_iso()
+        vault.write_note_atomic(note.path, vault.serialize_note(note))
     return f"Added '{task}' ({duration_minutes} mins) to the {date_str} planning note."
 
 
 @tool
-def generate_schedule_blocks(date: Optional[str] = None) -> str:
+def generate_schedule_blocks(
+    date: Optional[str] = None, start_time: Optional[str] = None, end_time: Optional[str] = None
+) -> str:
     """Build a day's schedule: reads the planning note's tasks, merges
     them around that day's calendar events with breaks between sprints,
     writes the timeline into the note, creates a calendar event per
@@ -120,31 +134,43 @@ def generate_schedule_blocks(date: Optional[str] = None) -> str:
 
     Args:
         date: The day to schedule, e.g. "2026-09-13". Defaults to today.
+        start_time: "HH:MM" (24-hour) to start scheduling from — use this
+            instead of guessing when planning only part of the day (e.g. an
+            evening after work). Defaults to the wake_time setting.
+        end_time: "HH:MM" (24-hour) to stop scheduling at. Defaults to the
+            bedtime setting.
     """
     date_str = _resolve_date_str(date)
-    note = vault.get_or_create_planning_note(date_str, settings.planning_template_note_id)
-    tasks = parse_target_tasks(vault.get_section(note.body, TASKS_SECTION) or "")
-    if not tasks:
-        return (
-            f"No unchecked tasks with time estimates found in the {date_str} "
-            f"planning note's '{TASKS_SECTION}' section."
-        )
+    # Held across the whole read...write round trip (including the CalDAV
+    # lookup in between), not just the individual read/write calls — same
+    # race add_planning_task's lock guards against, and splitting it into
+    # two shorter critical sections would just let a concurrent
+    # add_planning_task call sneak in between and get overwritten by this
+    # function's stale note.body when it finally writes.
+    with _planning_note_lock:
+        note = vault.get_or_create_planning_note(date_str, settings.planning_template_note_id)
+        tasks = parse_target_tasks(vault.get_section(note.body, TASKS_SECTION) or "")
+        if not tasks:
+            return (
+                f"No unchecked tasks with time estimates found in the {date_str} "
+                f"planning note's '{TASKS_SECTION}' section."
+            )
 
-    tz = settings.zoneinfo()
-    day_start_utc = text_to_utc(f"{date_str} 00:00:00")
-    day_end_utc = text_to_utc(f"{date_str} 23:59:59")
-    calendar_response = get_events_in_range(day_start_utc, day_end_utc)
-    events = calendar_response.get("events", []) if calendar_response.get("success") else []
-    occupied = occupied_from_calendar_events(events, tz)
+        tz = settings.zoneinfo()
+        day_start_utc = text_to_utc(f"{date_str} 00:00:00")
+        day_end_utc = text_to_utc(f"{date_str} 23:59:59")
+        calendar_response = get_events_in_range(day_start_utc, day_end_utc)
+        events = calendar_response.get("events", []) if calendar_response.get("success") else []
+        occupied = occupied_from_calendar_events(events, tz)
 
-    window_start = parse_local_datetime(f"{date_str} {settings.wake_time}:00")
-    window_end = parse_local_datetime(f"{date_str} {settings.bedtime}:00")
+        window_start = parse_local_datetime(f"{date_str} {start_time or settings.wake_time}:00")
+        window_end = parse_local_datetime(f"{date_str} {end_time or settings.bedtime}:00")
 
-    blocks, unscheduled = compute_schedule_blocks(tasks, occupied, window_start, window_end)
+        blocks, unscheduled = compute_schedule_blocks(tasks, occupied, window_start, window_end)
 
-    note.body = vault.replace_section(note.body, SCHEDULE_SECTION, format_schedule_section(blocks, unscheduled))
-    note.updated = vault.now_iso()
-    vault.write_note_atomic(note.path, vault.serialize_note(note))
+        note.body = vault.replace_section(note.body, SCHEDULE_SECTION, format_schedule_section(blocks, unscheduled))
+        note.updated = vault.now_iso()
+        vault.write_note_atomic(note.path, vault.serialize_note(note))
 
     # Breaks get calendar events too, not just tasks — the device-side
     # active/next view (and interval-chime reminders below) reads the

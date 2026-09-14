@@ -209,13 +209,29 @@ one fixed."""
 DAY_PLANNING_ADDENDUM = """
 
 ## Mode: Day Planning
-The message below is a pre-structured task list from a dashboard form, already broken into
-numbered (task, minutes) pairs for a specific date — not something to interpret or re-parse.
+The message below comes from a dashboard form, not free text to interpret or re-parse.
 
-Call add_planning_task once per numbered line, exactly as given (don't merge, split, reword,
-or invent tasks), then call generate_schedule_blocks for that date. Reply with a brief
-natural-language summary of the resulting schedule — note anything that didn't fit, and
-factor in any recent reflections the tool result surfaces."""
+If it includes a numbered task list, call add_planning_task once per numbered line, exactly
+as given (don't merge, split, reword, or invent tasks), then call generate_schedule_blocks
+for that date. Reply with a brief natural-language summary of the resulting schedule — note
+anything that didn't fit, and factor in any recent reflections the tool result surfaces.
+
+If it instead says to generate from tasks already saved (no task list included — this is the
+normal case for a "start my day" trigger the morning after tasks were entered the night
+before), do NOT call add_planning_task at all — the tasks are already in that date's planning
+note. Just call generate_schedule_blocks directly.
+
+If a "Guidance on how to arrange these" note is included, use it to choose the ORDER you
+call add_planning_task in — generate_schedule_blocks places tasks strictly in the order they
+were added, into the day's next free gap, with no reordering of its own. So "put shopping
+after my lunch break" means: add whatever else fills the morning first, then shopping, so it
+naturally lands in the first free gap after lunch. If the guidance can't be satisfied this
+way (e.g. it names an event or constraint that doesn't actually exist on the calendar or in
+the task list), say so plainly in your reply rather than silently ignoring it.
+
+If a "Schedule window" line is included (e.g. planning just an evening rather than the whole
+day), pass its two values to generate_schedule_blocks as start_time/end_time exactly as
+given — they're already resolved, not something to reinterpret."""
 
 PROJECT_CHAT_ADDENDUM = """
 

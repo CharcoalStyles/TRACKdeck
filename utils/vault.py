@@ -237,9 +237,16 @@ def write_note_atomic(path: Path, content: str) -> None:
     """
     Write via temp file + rename so a concurrent reader (or Syncthing
     mid-scan) never sees a half-written file.
+
+    The temp suffix includes a uuid, not just the pid: concurrent tool
+    calls from one LangGraph turn run in different threads of the same
+    process (LangGraph's ToolNode gathers them), so pid alone let two
+    concurrent writers to the same path collide on the same temp name —
+    whichever's os.replace ran second found the file already renamed
+    away and crashed with FileNotFoundError.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(path.name + f".tmp{os.getpid()}")
+    tmp_path = path.with_name(f"{path.name}.tmp{os.getpid()}-{uuid.uuid4().hex[:8]}")
     tmp_path.write_text(content, encoding="utf-8")
     os.replace(tmp_path, path)
 

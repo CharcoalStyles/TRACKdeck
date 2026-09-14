@@ -1,3 +1,4 @@
+import threading
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -66,6 +67,37 @@ def test_reflection_is_filled():
 
 def test_format_reflection_digest_empty():
     assert format_reflection_digest([]) == ""
+
+
+def test_add_planning_task_concurrent_calls_dont_crash_or_lose_tasks(tmp_path, monkeypatch):
+    """Regression test for the day-planning form's actual failure: LangGraph
+    runs same-turn tool calls concurrently (once per task, by design — see
+    add_planning_task's docstring), which used to crash write_note_atomic
+    (pid-only temp names collided across threads) and, even once that's
+    fixed, could silently drop a task to a read-modify-write race without
+    _planning_note_lock serializing it."""
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+
+    from agent.tools.planning import add_planning_task
+    from utils import vault
+
+    date_str = "2026-09-19"
+    task_names = [f"Task {i}" for i in range(8)]
+
+    threads = [
+        threading.Thread(target=add_planning_task.func, args=(name, 10, date_str))
+        for name in task_names
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    note = vault.parse_note(vault.planning_note_path(date_str))
+    assert note is not None
+    tasks_section = vault.get_section(note.body, "Tasks") or ""
+    for name in task_names:
+        assert name in tasks_section
 
 
 def test_format_reflection_digest_formats_filled_fields_only():
