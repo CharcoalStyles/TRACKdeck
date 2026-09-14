@@ -206,6 +206,17 @@ and edit that note directly rather than the shared About Me section — editing 
 holding multiple entries (e.g. "People") risks losing every other entry in it, not just the
 one fixed."""
 
+DAY_PLANNING_ADDENDUM = """
+
+## Mode: Day Planning
+The message below is a pre-structured task list from a dashboard form, already broken into
+numbered (task, minutes) pairs for a specific date — not something to interpret or re-parse.
+
+Call add_planning_task once per numbered line, exactly as given (don't merge, split, reword,
+or invent tasks), then call generate_schedule_blocks for that date. Reply with a brief
+natural-language summary of the resulting schedule — note anything that didn't fit, and
+factor in any recent reflections the tool result surfaces."""
+
 PROJECT_CHAT_ADDENDUM = """
 
 ## Mode: Project Chat — {project}
@@ -349,6 +360,8 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
             addendum += ONBOARDING_ADDENDUM
         elif mode == "profile_chat":
             addendum += PROFILE_CHAT_ADDENDUM
+        elif mode == "day_planning":
+            addendum += DAY_PLANNING_ADDENDUM
         elif project_slug and agent_run:
             addendum += PROJECT_AGENT_ADDENDUM.format(project=project_slug)
         elif project_slug:

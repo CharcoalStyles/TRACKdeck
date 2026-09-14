@@ -382,10 +382,11 @@ class TextRequest(BaseModel):
     # end on a clarifying question, since real hardware has no way to hear
     # a follow-up.
     one_shot: bool = False
-    # "onboarding" | "profile_chat" | None — switches to a different active
-    # system-prompt mode. Used by the dashboard's onboarding/profile pages,
-    # which also pass a fixed thread_id ("onboarding"/"profile_chat") so
-    # those conversations stay continuous across visits.
+    # "onboarding" | "profile_chat" | "day_planning" | None — switches to a
+    # different active system-prompt mode. Used by the dashboard's
+    # onboarding/profile/day-planning pages, which also pass a fixed
+    # thread_id ("onboarding"/"profile_chat"/"day_planning:<date>") so those
+    # conversations stay continuous across visits.
     mode: str | None = None
     # Explicit per-message opt-in from the project page's "Run as agent"
     # checkbox — reframes `text` as a goal to complete autonomously rather

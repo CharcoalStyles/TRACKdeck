@@ -78,6 +78,9 @@ const MainNav = () => {
       <NavLink to="/activity-log" className={navLinkClass}>
         Activity Log
       </NavLink>
+      <NavLink to="/day-planning" className={navLinkClass}>
+        Plan Day
+      </NavLink>
       <NavLink to="/reflection" className={navLinkClass}>
         Planning
       </NavLink>
