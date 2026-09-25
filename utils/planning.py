@@ -20,6 +20,14 @@ TASK_LINE = re.compile(
     re.IGNORECASE,
 )
 
+# Matches "- [ ] Work — 09:00 to 17:00" style lines in a "## Fixed Blocks"
+# section — a name plus an already-occupied HH:MM-HH:MM window, as
+# opposed to TASK_LINE's name-plus-duration shape.
+FIXED_BLOCK_LINE = re.compile(
+    r"^-\s*\[ \]\s*(?P<name>.+?)\s*[-—]+\s*(?P<start>\d{1,2}:\d{2})\s*to\s*(?P<end>\d{1,2}:\d{2})",
+    re.IGNORECASE,
+)
+
 # Matches the template's own "(5-10 min)" break guidance: a short sprint
 # gets a short break, a longer one gets more recovery time. Not a
 # setting — see compute_schedule_blocks' ponytail note.
@@ -39,6 +47,21 @@ def parse_target_tasks(section_text: str) -> list[tuple[str, int]]:
         if match:
             tasks.append((match.group("task").strip(), int(match.group("minutes"))))
     return tasks
+
+
+def parse_fixed_blocks(section_text: str) -> list[tuple[str, str, str]]:
+    """Extracts (name, start "HH:MM", end "HH:MM") from a "## Fixed
+    Blocks" section's checklist lines — time already spoken for (e.g.
+    "Work — 09:00 to 17:00") that the scheduler should treat as occupied
+    on top of the day's real calendar events. Checked-off and
+    unparseable lines are silently skipped, same convention as
+    parse_target_tasks."""
+    blocks = []
+    for line in section_text.splitlines():
+        match = FIXED_BLOCK_LINE.match(line.strip())
+        if match:
+            blocks.append((match.group("name").strip(), match.group("start"), match.group("end")))
+    return blocks
 
 
 @dataclass

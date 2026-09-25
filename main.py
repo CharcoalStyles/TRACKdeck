@@ -110,6 +110,7 @@ from jobs import checkin as checkin_jobs
 from jobs.bedtime import send_bedtime_reminder
 from jobs.calendar_sync import sync_calendar_reminders
 from jobs.day_start import start_of_day_setup
+from jobs.day_plan_trigger import schedule_or_run
 from jobs.device_sync import build_sync_payload
 from jobs.digest import send_daily_digest
 from jobs.reminders import create_test_reminder, fire_reminder
@@ -120,12 +121,14 @@ from utils import (
     activity_log_store,
     alert_sounds_store,
     checkins_store,
+    day_plans_store,
     device_errors_store,
     device_state,
     onboarding_state,
     recall_log_store,
     reminders_store,
     settings_store,
+    task_library_store,
     vault,
 )
 from utils.caldav_client import ensure_collection_exists
@@ -140,6 +143,8 @@ from routes.transcribe import router as transcribe_router
 from routes.calendar_proxy import router as calendar_proxy_router
 from routes.alert_sounds import router as alert_sounds_router
 from routes.reflection import router as reflection_router
+from routes.day_plans import router as day_plans_router
+from routes.task_library import router as task_library_router
 
 # ---------------------------------------------------------------------------
 # Lifespan
@@ -239,6 +244,8 @@ async def lifespan(app: FastAPI):
         await asyncio.to_thread(device_errors_store.init_db)
         await asyncio.to_thread(activity_log_store.init_db)
         await asyncio.to_thread(recall_log_store.init_db)
+        await asyncio.to_thread(day_plans_store.init_db)
+        await asyncio.to_thread(task_library_store.init_db)
         for reminder in await asyncio.to_thread(reminders_store.list_pending):
             due_local = datetime.fromtimestamp(reminder["due_at"], tz=timezone.utc)
             if due_local <= datetime.now(timezone.utc):
@@ -251,6 +258,13 @@ async def lifespan(app: FastAPI):
                     id=f"reminder:{reminder['id']}",
                     replace_existing=True,
                 )
+
+        # Re-hydrate scheduled day plans (utils/day_plans_store.py) across
+        # restarts, same reasoning as the reminders block above — a plan
+        # whose T-15 trigger already passed while the app was down fires
+        # immediately instead of silently missing its window.
+        for plan in await asyncio.to_thread(day_plans_store.list_scheduled):
+            await schedule_or_run(plan["id"], plan)
 
         scheduler.add_job(
             start_of_day_setup,
@@ -366,6 +380,8 @@ app.include_router(transcribe_router)  # /transcribe
 app.include_router(calendar_proxy_router)  # /calendar — proxies the bundled Radicale UI
 app.include_router(alert_sounds_router)  # /alert-sounds, /device/alert-sounds/{id}
 app.include_router(reflection_router)  # /reflection
+app.include_router(day_plans_router)  # /day-plans
+app.include_router(task_library_router)  # /task-library
 
 
 # ---------------------------------------------------------------------------

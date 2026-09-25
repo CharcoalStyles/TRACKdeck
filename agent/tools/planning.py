@@ -41,12 +41,14 @@ from utils.planning import (
     format_reflection_digest,
     format_schedule_section,
     occupied_from_calendar_events,
+    parse_fixed_blocks,
     parse_reflection_section,
     parse_target_tasks,
     reflection_is_filled,
 )
 
 TASKS_SECTION = "Tasks"
+FIXED_BLOCKS_SECTION = "Fixed Blocks"
 SCHEDULE_SECTION = "Generated Schedule & Sprints"
 
 # How far back generate_schedule_blocks looks for reflections to surface —
@@ -96,6 +98,41 @@ def _recent_reflections(before_date_str: str, days: int = RECENT_REFLECTION_DAYS
     return format_reflection_digest(entries[:RECENT_REFLECTION_LIMIT])
 
 
+def save_planning_tasks(date_str: str, tasks: list[tuple[str, int]]) -> None:
+    """Append one or more (task, duration_minutes) tasks to a day's
+    planning note's Tasks section — the LLM-free core of
+    add_planning_task, also called directly by routes/day_plans.py so
+    the dashboard's "Plan my day" form can save a whole plan's tasks
+    without spending an agent turn on it (see the day-planning
+    task-library/upcoming-plans feature's design)."""
+    with _planning_note_lock:
+        note = vault.get_or_create_planning_note(date_str, settings.planning_template_note_id)
+        for task, duration_minutes in tasks:
+            note.body = vault.append_to_section(
+                note.body, TASKS_SECTION, f"- [ ] {task.strip()} — Est: {duration_minutes} mins"
+            )
+        note.updated = vault.now_iso()
+        vault.write_note_atomic(note.path, vault.serialize_note(note))
+
+
+def save_fixed_blocks(date_str: str, blocks: list[tuple[str, str, str]]) -> None:
+    """Append one or more (name, start "HH:MM", end "HH:MM") fixed
+    blocks to a day's planning note's Fixed Blocks section — time
+    already spoken for (e.g. "Work, 09:00-17:00") that
+    generate_schedule_blocks treats as occupied on top of the day's
+    real calendar events, and materializes onto the calendar itself if
+    not already there. LLM-free, same reasoning as save_planning_tasks;
+    called directly by routes/day_plans.py."""
+    with _planning_note_lock:
+        note = vault.get_or_create_planning_note(date_str, settings.planning_template_note_id)
+        for name, start_time, end_time in blocks:
+            note.body = vault.append_to_section(
+                note.body, FIXED_BLOCKS_SECTION, f"- [ ] {name.strip()} — {start_time} to {end_time}"
+            )
+        note.updated = vault.now_iso()
+        vault.write_note_atomic(note.path, vault.serialize_note(note))
+
+
 @tool
 def add_planning_task(task: str, duration_minutes: int, date: Optional[str] = None) -> str:
     """Add one task with a time estimate to a day's planning note, for
@@ -110,13 +147,7 @@ def add_planning_task(task: str, duration_minutes: int, date: Optional[str] = No
             same as set_reminder.
     """
     date_str = _resolve_date_str(date)
-    with _planning_note_lock:
-        note = vault.get_or_create_planning_note(date_str, settings.planning_template_note_id)
-        note.body = vault.append_to_section(
-            note.body, TASKS_SECTION, f"- [ ] {task.strip()} — Est: {duration_minutes} mins"
-        )
-        note.updated = vault.now_iso()
-        vault.write_note_atomic(note.path, vault.serialize_note(note))
+    save_planning_tasks(date_str, [(task, duration_minutes)])
     return f"Added '{task}' ({duration_minutes} mins) to the {date_str} planning note."
 
 
@@ -162,6 +193,30 @@ def generate_schedule_blocks(
         calendar_response = get_events_in_range(day_start_utc, day_end_utc)
         events = calendar_response.get("events", []) if calendar_response.get("success") else []
         occupied = occupied_from_calendar_events(events, tz)
+
+        # Fixed blocks (e.g. "Work, 09:00-17:00") are time the user
+        # already has spoken for, on top of whatever's actually on the
+        # calendar — materialize each onto the calendar if it isn't
+        # there yet (matched by summary+start, so re-generating/editing
+        # a plan doesn't create duplicates), then fold its interval into
+        # `occupied` so compute_schedule_blocks never places a task over it.
+        fixed_blocks = parse_fixed_blocks(vault.get_section(note.body, FIXED_BLOCKS_SECTION) or "")
+        existing_by_summary_start = {
+            (event.get("summary"), event.get("start")) for event in events
+        }
+        for name, block_start, block_end in fixed_blocks:
+            start_dt = parse_local_datetime(f"{date_str} {block_start}:00")
+            end_dt = parse_local_datetime(f"{date_str} {block_end}:00")
+            start_iso = text_to_utc(start_dt.strftime("%Y-%m-%d %H:%M:%S"))
+            if (name, start_iso) not in existing_by_summary_start:
+                create_or_update_event(
+                    uid=str(uuid.uuid4()),
+                    summary=name,
+                    start_iso=start_iso,
+                    end_iso=text_to_utc(end_dt.strftime("%Y-%m-%d %H:%M:%S")),
+                    generated=False,
+                )
+            occupied.append((start_dt, end_dt))
 
         window_start = parse_local_datetime(f"{date_str} {start_time or settings.wake_time}:00")
         window_end = parse_local_datetime(f"{date_str} {end_time or settings.bedtime}:00")

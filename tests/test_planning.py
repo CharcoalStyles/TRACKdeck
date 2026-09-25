@@ -6,6 +6,7 @@ from utils.planning import (
     compute_schedule_blocks,
     format_reflection_digest,
     format_reflection_section,
+    parse_fixed_blocks,
     parse_reflection_section,
     parse_target_tasks,
     reflection_is_filled,
@@ -39,6 +40,29 @@ def test_compute_schedule_blocks_fits_tasks_around_a_calendar_event():
     assert [b.label for b in task_blocks] == ["Kitchen", "Laundry"]
     for block in blocks:
         assert not (block.start < _dt(13) and block.end > _dt(12))
+
+
+def test_parse_fixed_blocks_skips_checked_and_unparseable_lines():
+    section = """
+- [ ] Work — 09:00 to 17:00
+- [x] Gym — 06:00 to 07:00
+- [ ] No times here
+"""
+    assert parse_fixed_blocks(section) == [("Work", "09:00", "17:00")]
+
+
+def test_compute_schedule_blocks_treats_a_fixed_block_interval_as_occupied():
+    """A fixed block's interval is folded into `occupied` the same way a
+    real calendar event is (agent/tools/planning.py's generate_schedule_blocks)
+    — no task should ever be placed across it."""
+    tasks = [("Deep work", 90)]
+    fixed_block_occupied = [(_dt(10), _dt(11))]  # e.g. "Work — 10:00 to 11:00"
+
+    blocks, unscheduled = compute_schedule_blocks(tasks, fixed_block_occupied, _dt(9), _dt(17))
+
+    assert unscheduled == []
+    for block in blocks:
+        assert not (block.start < _dt(11) and block.end > _dt(10))
 
 
 def test_compute_schedule_blocks_reports_unscheduled_when_no_room():

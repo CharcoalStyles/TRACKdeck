@@ -82,7 +82,9 @@ DAILY_NOTE_TAG = "daily-digest"
 # filename pattern as daily digest notes, but a distinct one — the two
 # serve different purposes and shouldn't collide.
 PLANNING_NOTE_TAG = "planning-session"
-PLANNING_STARTER_BODY = "## Tasks\n\n## Generated Schedule & Sprints\n\n## End of Day Reflection\n"
+PLANNING_STARTER_BODY = (
+    "## Tasks\n\n## Fixed Blocks\n\n## Generated Schedule & Sprints\n\n## End of Day Reflection\n"
+)
 
 
 # ---------------------------------------------------------------------------
