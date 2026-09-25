@@ -17,6 +17,7 @@ import ThreadDebugPage from './routes/ThreadDebugPage'
 import TestingPage from './routes/TestingPage'
 import ReflectionPage from './routes/ReflectionPage'
 import DayPlanningPage from './routes/DayPlanningPage'
+import ModelsPage from './routes/ModelsPage'
 
 export default function App() {
   return (
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="/activity-log" element={<ActivityLogPage />} />
           <Route path="/admin/thread-debug" element={<ThreadDebugPage />} />
           <Route path="/admin/testing" element={<TestingPage />} />
+          <Route path="/admin/models" element={<ModelsPage />} />
           <Route path="/reflection" element={<ReflectionPage />} />
           <Route path="/day-planning" element={<DayPlanningPage />} />
         </Route>

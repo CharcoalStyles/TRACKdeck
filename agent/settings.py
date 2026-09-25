@@ -63,6 +63,13 @@ def is_valid_recall_recency_days(value: int) -> bool:
     return 1 <= value <= 3650
 
 
+def is_valid_llm_provider(value: str) -> bool:
+    # "gemini" is intentionally excluded — it's honored if LLM_PROVIDER=gemini
+    # was set at startup (see agent/settings.py's llm_provider field), but the
+    # dashboard switch only ever offers/accepts these two.
+    return value in ("lmstudio", "openrouter")
+
+
 def is_valid_max_history_tokens(value: int) -> bool:
     # Sanity bounds, not hard technical limits — the right value depends on
     # whatever context length the user's model was loaded with in LM Studio,
@@ -250,13 +257,16 @@ class Settings:
     # Exists because "onboarding"/"profile_chat"/"project_<slug>" threads
     # reuse the same thread_id forever and are never swept, so their
     # history otherwise grows until it exceeds whatever context length the
-    # model was loaded with in LM Studio. Only used when
+    # active model actually has. Shared fallback across both providers with
+    # live context lookups: used when LLM_PROVIDER=lmstudio and either
     # LMSTUDIO_MANAGEMENT_URL isn't set or LM Studio's live
     # loaded_context_length can't be fetched (utils/lmstudio_client.py's
-    # get_history_budget_tokens prefers the live value whenever it's
-    # available) — otherwise this is a guess this app has no way to
-    # verify, so the live number is trusted first. 6000 is a conservative
-    # default for a small local model. No env var, same reasoning as
+    # get_history_budget_tokens), or when LLM_PROVIDER=openrouter and
+    # OPENROUTER_CHAT_MODEL's context_length isn't in OpenRouter's catalog
+    # (utils/openrouter_client.py's get_history_budget_tokens) — in both
+    # cases the live number is trusted first since this is otherwise a
+    # guess this app has no way to verify. 6000 is a conservative default
+    # for a small local model. No env var, same reasoning as
     # default_location above.
     max_history_tokens: int = 6000
 
@@ -295,6 +305,50 @@ class Settings:
     # next app restart: the tool list is fetched once when the graph is
     # built at startup (main.py's lifespan), not re-fetched per request.
     mcp_servers: str = _default_mcp_servers()
+
+    # Which OpenRouter model get_chat_llm() (utils/llm_client.py) and
+    # agent/graph.py's call_llm actually send requests to when
+    # LLM_PROVIDER=openrouter — the dashboard's OpenRouter Models admin
+    # page (utils/openrouter_client.py's catalog) writes here when you
+    # pick one. Seeded from OPENROUTER_CHAT_MODEL so an existing .env
+    # keeps working, but — unlike LLM_PROVIDER itself, which stays
+    # env-only/restart-required by design (switching *providers* means a
+    # different client/base_url/api_key entirely) — this is live-editable:
+    # switching *which* model an already-running OpenAI-compatible
+    # provider uses is just a different string in the request body, so
+    # agent/graph.py's call_llm re-binds it fresh every turn instead of
+    # baking it into the LLM client built once at graph-build time.
+    # Irrelevant (and left blank) whenever LLM_PROVIDER isn't "openrouter".
+    openrouter_chat_model: str = os.environ.get("OPENROUTER_CHAT_MODEL", "")
+
+    # Which model get_chat_llm() (utils/llm_client.py) sends chat-completion
+    # requests to on LM Studio's OpenAI-compatible endpoint — the
+    # dashboard's LM Studio Models admin card (utils/lmstudio_client.py's
+    # live catalog, sourced from LMSTUDIO_MANAGEMENT_URL) writes here when
+    # you pick one, same "env var seeds it, dashboard owns it after that"
+    # pattern as openrouter_chat_model above. Also what
+    # utils/lmstudio_client.py's get_loaded_context_length() looks up
+    # against LM Studio's live loaded-models list. Live-editable, no
+    # restart: agent/graph.py's call_llm re-binds it fresh every turn.
+    lmstudio_chat_model: str = os.environ.get("LMSTUDIO_CHAT_MODEL", "")
+
+    # Which chat-completion backend utils/llm_client.py's get_chat_llm()
+    # builds: "lmstudio" (default, always configured — see .env.example) or
+    # "openrouter" (needs OPENROUTER_API_KEY). Seeded from LLM_PROVIDER so an
+    # existing deployment's env var keeps working unchanged, but — unlike
+    # before, when this was env-only and required a restart to change — now
+    # live-editable from the dashboard's Settings page: agent/graph.py's
+    # call_llm picks whichever provider this currently names fresh every
+    # turn (same "read fresh, no restart" pattern already used for
+    # openrouter_chat_model above), and every other get_chat_llm() call site
+    # (jobs/digest.py, jobs/checkin.py, agent/vault_watcher.py) already calls
+    # it fresh per invocation so they pick it up automatically too. A third
+    # value, "gemini", is also honored here if LLM_PROVIDER=gemini was set at
+    # startup — but main.py's /settings validation (is_valid_llm_provider)
+    # only accepts lmstudio/openrouter, and the dashboard switch only offers
+    # those two, since gemini's setup story (a whole separate hosted API key)
+    # isn't worth a live UI toggle.
+    llm_provider: str = os.environ.get("LLM_PROVIDER", "lmstudio")
 
     def zoneinfo(self) -> ZoneInfo:
         return ZoneInfo(self.timezone)
@@ -356,6 +410,12 @@ def apply_persisted(values: dict[str, str]) -> None:
         settings.digest_email_to = values["digest_email_to"]
     if "public_base_url" in values:
         settings.public_base_url = values["public_base_url"]
+    if "openrouter_chat_model" in values:
+        settings.openrouter_chat_model = values["openrouter_chat_model"]
+    if "lmstudio_chat_model" in values:
+        settings.lmstudio_chat_model = values["lmstudio_chat_model"]
+    if "llm_provider" in values:
+        settings.llm_provider = values["llm_provider"]
     if "gotify_url" in values:
         settings.gotify_url = values["gotify_url"]
     if "gotify_token" in values:

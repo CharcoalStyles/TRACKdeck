@@ -401,8 +401,10 @@ utils/
   caldav_client.py           CalDAV client, protocol-generic (any CalDAV server)
   datetime.py                 Calendar day-boundary helpers, parse_local_datetime
   reminders_store.py           sqlite3 CRUD for reminders.db
-  llm_client.py                 get_chat_llm() — LM Studio vs. Gemini, via LLM_PROVIDER
+  llm_client.py                 get_chat_llm() — LM Studio vs. Gemini vs. OpenRouter, via LLM_PROVIDER
   lmstudio_client.py              Live context-length lookup, LM Studio only
+  openrouter_client.py              OpenRouter's public model catalog — pricing/context-length
+                                      browser + live context-length lookup, OpenRouter only
   notify.py, mailer.py        Gotify, SMTP
 routes/
   synth.py                    Piper TTS (built, not wired into the production voice flow)
@@ -420,18 +422,45 @@ reset_knowledge.sh              Wipes memory/index/checkpoints, then re-runs set
 
 See `.env.example` for the full list. Grouped by what needs external setup:
 
-- **LM Studio** — `LMSTUDIO_OPENAI_URL`, `LMSTUDIO_CHAT_MODEL`, `EMBEDDING_MODEL`. Local, on
-  the Mac Mini. `LMSTUDIO_MANAGEMENT_URL` is separate and optional — LM Studio's own REST
-  API (not OpenAI-compatible), used to live-fetch the loaded model's actual context length
-  so history trimming matches what you set in LM Studio's model loader rather than a guess.
-- **`LLM_PROVIDER`** — `lmstudio` (default) or `gemini`, picks which chat-completion
-  backend `utils/llm_client.py`'s `get_chat_llm()` builds for every LLM call site (the
-  main agent, digest, check-in personalization, Inbox auto-titling). Embeddings always
-  stay on LM Studio regardless — Chroma's HNSW index locks to whatever vector dimension
-  the first embedding used, so swapping embedding providers would mean wiping
-  `./data/chroma_db`. Env-var only, not dashboard-editable, restart to apply. Set
-  `GEMINI_API_KEY`/`GEMINI_CHAT_MODEL` when using `gemini` (get a key at
-  [aistudio.google.com/apikey](https://aistudio.google.com/apikey)).
+- **LM Studio** — `LMSTUDIO_OPENAI_URL`, `EMBEDDING_MODEL` (always env-only — embeddings
+  never switch providers/models). `LMSTUDIO_CHAT_MODEL` is only a first-run default now,
+  same "env var seeds it, `settings.db` owns it after that" pattern as
+  `OPENROUTER_CHAT_MODEL` below — the dashboard's LM Studio Models admin page
+  (`GET /debug/lmstudio-models`, `utils/lmstudio_client.py`) switches the active model live,
+  no restart (`agent/settings.py`'s `lmstudio_chat_model`). `LMSTUDIO_MANAGEMENT_URL` is
+  separate and optional — LM Studio's own REST API (not OpenAI-compatible), used both to
+  live-fetch the loaded model's actual context length (so history trimming matches what you
+  set in LM Studio's model loader rather than a guess) and to back that admin page's catalog
+  — every model LM Studio currently has downloaded, its context length, and whether it's
+  actually loaded right now, one click to switch. Without it, the admin page falls back to
+  a plain text field for typing the exact model id LM Studio should use by hand.
+- **`LLM_PROVIDER`** — `lmstudio` (default), `gemini`, or `openrouter`, seeds which
+  chat-completion backend `utils/llm_client.py`'s `get_chat_llm()` builds for every LLM
+  call site (the main agent, digest, check-in personalization, Inbox auto-titling).
+  Embeddings always stay on LM Studio regardless — Chroma's HNSW index locks to whatever
+  vector dimension the first embedding used, so swapping embedding providers would mean
+  wiping `./data/chroma_db`. Only a first-run default now, same "env var seeds it, then
+  `settings.db` is the source of truth" pattern as `digest_email_to`/`gotify_url` etc. —
+  the Settings page's LLM Provider card switches live between `lmstudio` and `openrouter`
+  with no restart (`agent/settings.py`'s `llm_provider`, `agent/graph.py`'s `call_llm`
+  picks it fresh every turn, caching one tool-bound client per provider actually used).
+  `gemini` is the one exception: it's honored if `LLM_PROVIDER=gemini` at startup, but
+  isn't offered by the dashboard switch (a separate hosted API key isn't worth a live UI
+  toggle for it) — set `GEMINI_API_KEY`/`GEMINI_CHAT_MODEL` when using it (get a key at
+  [aistudio.google.com/apikey](https://aistudio.google.com/apikey)). Set
+  `OPENROUTER_API_KEY`/`OPENROUTER_CHAT_MODEL` to enable `openrouter` (get a key at
+  [openrouter.ai/settings/keys](https://openrouter.ai/settings/keys)) — useful mainly for
+  its free-tier (`:free`-suffixed) models; browse what's currently available, with
+  pricing and context length, on the dashboard's OpenRouter Models admin page
+  (`GET /debug/openrouter-models`, `utils/openrouter_client.py`, sourced live from
+  OpenRouter's public `/models` endpoint — no key needed just to list). The Settings
+  page's provider switch refuses to select `openrouter` when `OPENROUTER_API_KEY` isn't
+  set (`POST /settings` rejects it with a 422). `OPENROUTER_CHAT_MODEL` is likewise only
+  the first-run default for *which* OpenRouter model is used — once `openrouter` is
+  active, the same admin page can switch the active model with one click, no restart
+  (`agent/settings.py`'s `openrouter_chat_model`, live-editable via `/settings` same as
+  `gotify_url` etc.). That page only offers switching when `openrouter` is the active
+  provider; otherwise it's a read-only catalog for picking a value to set later.
 - **CalDAV** — `CALDAV_URL`, `CALDAV_USERNAME`, `CALDAV_PASSWORD`. Points at the bundled
   Radicale service by default (see "First-run calendar setup" below), or any external
   CalDAV server (Nextcloud, Baikal, Fastmail, etc.).

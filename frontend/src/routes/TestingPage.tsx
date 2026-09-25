@@ -257,9 +257,8 @@ export default function TestingPage() {
       <Card>
         <h2 className="mb-1 text-lg font-semibold">Active LLM Provider</h2>
         <p className="mb-3 text-sm text-text-muted">
-          What LLM_PROVIDER/model/base_url the app is actually using right now — this is
-          env-only (no dashboard field, restart to change), so check here rather than
-          guessing from container logs.
+          What provider/model/base_url the app is actually using right now — switchable from
+          the Settings page's LLM Provider card, no restart needed.
         </p>
         <pre className="whitespace-pre-line text-sm text-text-muted">
           {!llmProviderQuery.data

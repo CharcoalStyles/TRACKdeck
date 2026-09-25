@@ -299,12 +299,19 @@ reset_knowledge.sh              Wipes memory/index/checkpoints, then re-runs set
 See `.env.example` for the full list. Notable ones:
 
 - **LM Studio** — `LMSTUDIO_OPENAI_URL` (OpenAI-compatible endpoint, used for chat/embeddings),
-  `LMSTUDIO_CHAT_MODEL`, `EMBEDDING_MODEL`. `LMSTUDIO_MANAGEMENT_URL` is a separate, optional
-  endpoint (LM Studio's own REST API, not OpenAI-compatible) — when set,
-  `utils/lmstudio_client.py` live-fetches `LMSTUDIO_CHAT_MODEL`'s actual loaded context length
-  from it, so history trimming (`agent/graph.py`'s `call_llm`) always matches what's
-  configured in LM Studio's model loader instead of a guessed setting; unset, it falls back
-  to the dashboard-editable `max_history_tokens` setting.
+  `LMSTUDIO_CHAT_MODEL` (only the first-run seed for `settings.lmstudio_chat_model` — the
+  Settings/Models pages own it live from then on, same pattern as `openrouter_chat_model`),
+  `EMBEDDING_MODEL` (always env-only — embeddings never switch providers/models).
+  `LMSTUDIO_MANAGEMENT_URL` is a separate, optional endpoint (LM Studio's own REST API, not
+  OpenAI-compatible) — when set, `utils/lmstudio_client.py` live-fetches the configured
+  model's actual loaded context length from it, so history trimming (`agent/graph.py`'s
+  `call_llm`) always matches what's configured in LM Studio's model loader instead of a
+  guessed setting (unset, it falls back to the dashboard-editable `max_history_tokens`
+  setting); it also backs the dashboard's LM Studio Models admin card
+  (`GET /debug/lmstudio-models`), listing every model LM Studio has downloaded so one can
+  be picked with a click, no restart — same live-switch UX as the OpenRouter Models page.
+  Without it, that card falls back to a plain text field for typing the exact model id by
+  hand.
 - **CalDAV** — `CALDAV_URL`, `CALDAV_USERNAME`, `CALDAV_PASSWORD`. Points at the bundled
   Radicale service (`docker-compose.yml`'s `caldav`) by default, or any external CalDAV
   server.
@@ -352,12 +359,31 @@ See `.env.example` for the full list. Notable ones:
     be set only from the frontend (the onboarding "Basics" form, or the Settings page), so
     `.env` was never a second source of truth for these.
   - *Env-seeded, so an existing deployment keeps working unchanged after upgrading* —
-    `digest_email_to`, `public_base_url`, `gotify_url`, `gotify_token`, `mcp_servers` (from
-    `DIGEST_EMAIL_TO`/`PUBLIC_BASE_URL`/`GOTIFY_URL`/`GOTIFY_TOKEN`/`SEARXNG_URL`
+    `digest_email_to`, `public_base_url`, `gotify_url`, `gotify_token`, `mcp_servers`,
+    `openrouter_chat_model`, `lmstudio_chat_model`, `llm_provider` (from
+    `DIGEST_EMAIL_TO`/`PUBLIC_BASE_URL`/`GOTIFY_URL`/`GOTIFY_TOKEN`/`SEARXNG_URL`/`OPENROUTER_CHAT_MODEL`/`LMSTUDIO_CHAT_MODEL`/`LLM_PROVIDER`
     respectively). Once saved once via `/settings`, `settings.db` — not `.env` — is the
     source of truth. `gotify_token` is the one exception to "GET /settings echoes the
     current value back": it's a real credential, so the response only reports
     `gotify_token_set` (bool); the Settings page treats its input as write-only/blank-to-keep.
+    `openrouter_chat_model`, `lmstudio_chat_model`, and `llm_provider` are all live-update, no
+    restart, unlike every other field's "no APScheduler job to reschedule, no restart
+    needed" — for these three it's stronger: `agent/graph.py`'s `call_llm` reads
+    `settings.llm_provider` fresh every turn to pick between a `lmstudio`/`openrouter`
+    tool-bound LLM client (each built once, cached, since building one is pure object
+    construction — see `build_graph`'s `get_llm_with_tools`), then re-binds that turn's model
+    name fresh too (via LangChain's `.bind()`, since a cached client's baked-in model would
+    otherwise never change) from whichever of `settings.lmstudio_chat_model` /
+    `settings.openrouter_chat_model` matches — sourced from the dashboard's LM Studio Models
+    (`utils/lmstudio_client.py`, `GET /debug/lmstudio-models`, local — LM Studio's own
+    management API, `LMSTUDIO_MANAGEMENT_URL`) or OpenRouter Models
+    (`utils/openrouter_client.py`, `GET /debug/openrouter-models`, OpenRouter's public
+    catalog) admin page respectively, rather than trusting whatever was configured when a
+    client was first cached. `llm_provider`'s dashboard switch (Settings page's LLM Provider
+    card) only ever offers/accepts `lmstudio`/`openrouter` — POST `/settings` also rejects
+    `openrouter` outright if `OPENROUTER_API_KEY` isn't set. A third value, `gemini`, is
+    honored if `LLM_PROVIDER=gemini` was set at startup, but stays env-only/restart-required
+    to *introduce* — a separate hosted API key isn't worth a live UI toggle for it.
 
 ## Known limitations (true today, not proposals — don't "fix" without asking)
 

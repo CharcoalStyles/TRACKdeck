@@ -240,6 +240,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/day-plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Day Plans */
+        get: operations["list_day_plans_day_plans_get"];
+        put?: never;
+        /** Create Day Plan */
+        post: operations["create_day_plan_day_plans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/day-plans/{plan_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Day Plan */
+        get: operations["get_day_plan_day_plans__plan_id__get"];
+        /** Update Day Plan */
+        put: operations["update_day_plan_day_plans__plan_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/day-plans/{plan_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Day Plan */
+        post: operations["cancel_day_plan_day_plans__plan_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/task-library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Task Library */
+        get: operations["list_task_library_task_library_get"];
+        put?: never;
+        /** Create Task Library Item */
+        post: operations["create_task_library_item_task_library_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/task-library/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Task Library Item */
+        put: operations["update_task_library_item_task_library__item_id__put"];
+        post?: never;
+        /** Delete Task Library Item */
+        delete: operations["delete_task_library_item_task_library__item_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/login": {
         parameters: {
             query?: never;
@@ -1039,6 +1128,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/debug/llm-provider": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Llm Provider
+         * @description Which provider/model/base_url get_chat_llm() actually builds right now,
+         *     derived from the live settings.llm_provider (switchable from the
+         *     Settings page's LLM Provider card, no restart needed) plus, when that's
+         *     "openrouter", the live settings.openrouter_chat_model (see the
+         *     OpenRouter Models admin page). No credentials included.
+         */
+        get: operations["get_llm_provider_debug_llm_provider_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/debug/openrouter-models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Openrouter Models
+         * @description OpenRouter's public model catalog (utils/openrouter_client.py, cached
+         *     5 minutes) — name/context length/per-token pricing for every model
+         *     OpenRouter serves, plus whether settings.llm_provider is "openrouter"
+         *     right now and if so which model settings.openrouter_chat_model
+         *     currently points at. Backs the dashboard's OpenRouter Models admin
+         *     page, mainly for finding free-tier (":free") models. No API key needed
+         *     for this — OpenRouter's /models endpoint is public.
+         */
+        get: operations["get_openrouter_models_debug_openrouter_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/debug/lmstudio-models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Lmstudio Models
+         * @description Every chat-capable model LM Studio currently has downloaded
+         *     (utils/lmstudio_client.py, live, uncached — a local LAN call to
+         *     LMSTUDIO_MANAGEMENT_URL, the same management API surface used for
+         *     live context-length lookups), plus whether settings.llm_provider is
+         *     "lmstudio" right now and if so which model settings.lmstudio_chat_model
+         *     currently points at. Backs the dashboard's LM Studio Models admin
+         *     card. Empty models list (management_configured: false) if
+         *     LMSTUDIO_MANAGEMENT_URL isn't set.
+         */
+        get: operations["get_lmstudio_models_debug_lmstudio_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/debug/threads": {
         parameters: {
             query?: never;
@@ -1499,6 +1665,69 @@ export interface components {
             /** Checkins */
             checkins: components["schemas"]["CheckinRecord"][];
         };
+        /** DayPlanCreate */
+        DayPlanCreate: {
+            /** Date */
+            date: string;
+            /**
+             * Tasks
+             * @default []
+             */
+            tasks: components["schemas"]["TaskInput"][];
+            /**
+             * Fixed Blocks
+             * @default []
+             */
+            fixed_blocks: components["schemas"]["FixedBlockInput"][];
+            /** Notes */
+            notes?: string | null;
+            /** Start Time */
+            start_time?: string | null;
+            /** End Time */
+            end_time?: string | null;
+        };
+        /** DayPlanDetail */
+        DayPlanDetail: {
+            /** Id */
+            id: string;
+            /** Date */
+            date: string;
+            /** Start Time */
+            start_time: string | null;
+            /** End Time */
+            end_time: string | null;
+            /** Notes */
+            notes: string | null;
+            /** Status */
+            status: string;
+            /** Reply */
+            reply?: string | null;
+            /** Trigger At */
+            trigger_at?: string | null;
+            /** Tasks */
+            tasks: components["schemas"]["TaskInput"][];
+            /** Fixed Blocks */
+            fixed_blocks: components["schemas"]["FixedBlockInput"][];
+        };
+        /** DayPlanResponse */
+        DayPlanResponse: {
+            /** Id */
+            id: string;
+            /** Date */
+            date: string;
+            /** Start Time */
+            start_time: string | null;
+            /** End Time */
+            end_time: string | null;
+            /** Notes */
+            notes: string | null;
+            /** Status */
+            status: string;
+            /** Reply */
+            reply?: string | null;
+            /** Trigger At */
+            trigger_at?: string | null;
+        };
         /** DebugThreadEntry */
         DebugThreadEntry: {
             /** Thread Id */
@@ -1588,10 +1817,50 @@ export interface components {
             /** Entry Count */
             entry_count: number;
         };
+        /** FixedBlockInput */
+        FixedBlockInput: {
+            /** Name */
+            name: string;
+            /** Start Time */
+            start_time: string;
+            /** End Time */
+            end_time: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** LlmProviderResponse */
+        LlmProviderResponse: {
+            /** Provider */
+            provider: string;
+            /** Model */
+            model: string | null;
+            /** Base Url */
+            base_url: string | null;
+        };
+        /** LmStudioModel */
+        LmStudioModel: {
+            /** Id */
+            id: string;
+            /** State */
+            state: string;
+            /** Max Context Length */
+            max_context_length: number | null;
+            /** Loaded Context Length */
+            loaded_context_length: number | null;
+        };
+        /** LmStudioModelsResponse */
+        LmStudioModelsResponse: {
+            /** Models */
+            models: components["schemas"]["LmStudioModel"][];
+            /** Management Configured */
+            management_configured: boolean;
+            /** Active */
+            active: boolean;
+            /** Configured Model */
+            configured_model: string | null;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -1728,6 +1997,14 @@ export interface components {
             planning_template_note_id: string;
             /** Chime Alert Sound Id */
             chime_alert_sound_id: string;
+            /** Openrouter Chat Model */
+            openrouter_chat_model: string;
+            /** Lmstudio Chat Model */
+            lmstudio_chat_model: string;
+            /** Llm Provider */
+            llm_provider: string;
+            /** Openrouter Configured */
+            openrouter_configured: boolean;
             /** Onboarding Complete */
             onboarding_complete: boolean;
             /** Basics Complete */
@@ -1741,6 +2018,30 @@ export interface components {
             name: string;
             /** Relation */
             relation?: string | null;
+        };
+        /** OpenRouterModel */
+        OpenRouterModel: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Context Length */
+            context_length: number | null;
+            /** Prompt Price Per Million */
+            prompt_price_per_million: number | null;
+            /** Completion Price Per Million */
+            completion_price_per_million: number | null;
+            /** Is Free */
+            is_free: boolean;
+        };
+        /** OpenRouterModelsResponse */
+        OpenRouterModelsResponse: {
+            /** Models */
+            models: components["schemas"]["OpenRouterModel"][];
+            /** Active */
+            active: boolean;
+            /** Configured Model */
+            configured_model: string | null;
         };
         /** ProjectAttachment */
         ProjectAttachment: {
@@ -1874,6 +2175,14 @@ export interface components {
             planning_template_note_id: string;
             /** Chime Alert Sound Id */
             chime_alert_sound_id: string;
+            /** Openrouter Chat Model */
+            openrouter_chat_model: string;
+            /** Lmstudio Chat Model */
+            lmstudio_chat_model: string;
+            /** Llm Provider */
+            llm_provider: string;
+            /** Openrouter Configured */
+            openrouter_configured: boolean;
             /** Onboarding Complete */
             onboarding_complete: boolean;
             /** Basics Complete */
@@ -1919,6 +2228,12 @@ export interface components {
             planning_template_note_id?: string | null;
             /** Chime Alert Sound Id */
             chime_alert_sound_id?: string | null;
+            /** Openrouter Chat Model */
+            openrouter_chat_model?: string | null;
+            /** Lmstudio Chat Model */
+            lmstudio_chat_model?: string | null;
+            /** Llm Provider */
+            llm_provider?: string | null;
         };
         /** TTSRequest */
         TTSRequest: {
@@ -1937,6 +2252,33 @@ export interface components {
             sample_rate: number;
             /** Generation Time */
             generation_time: number;
+        };
+        /** TaskInput */
+        TaskInput: {
+            /** Task */
+            task: string;
+            /** Minutes */
+            minutes: number;
+        };
+        /** TaskLibraryInput */
+        TaskLibraryInput: {
+            /** Label */
+            label: string;
+            /** Default Minutes */
+            default_minutes: number;
+            /** Group Name */
+            group_name?: string | null;
+        };
+        /** TaskLibraryItem */
+        TaskLibraryItem: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Default Minutes */
+            default_minutes: number;
+            /** Group Name */
+            group_name?: string | null;
         };
         /** TextRequest */
         TextRequest: {
@@ -2710,6 +3052,311 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReflectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_day_plans_day_plans_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DayPlanResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_day_plan_day_plans_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DayPlanCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DayPlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_day_plan_day_plans__plan_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DayPlanDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_day_plan_day_plans__plan_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DayPlanCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DayPlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_day_plan_day_plans__plan_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DayPlanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_task_library_task_library_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskLibraryItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_task_library_item_task_library_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskLibraryInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskLibraryItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_task_library_item_task_library__item_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskLibraryInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskLibraryItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_task_library_item_task_library__item_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -3952,6 +4599,99 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_llm_provider_debug_llm_provider_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmProviderResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_openrouter_models_debug_openrouter_models_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenRouterModelsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_lmstudio_models_debug_lmstudio_models_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LmStudioModelsResponse"];
                 };
             };
             /** @description Validation Error */

@@ -21,8 +21,9 @@ from agent.memory import MemoryStore
 from agent.settings import settings
 from agent.tools.all_tools import get_tools
 from utils import vault
-from utils.llm_client import get_chat_llm, CHAT_PROVIDER
+from utils.llm_client import get_chat_llm
 from utils.lmstudio_client import get_history_budget_tokens
+from utils.openrouter_client import get_history_budget_tokens as get_openrouter_history_budget_tokens
 from utils.recall_log_store import log_recall
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,11 @@ logger = logging.getLogger(__name__)
 # ponytail: static guess at Gemini's usable context — Google doesn't expose a
 # live "loaded context length" like LM Studio's management API does, and
 # building a second discovery mechanism for one hosted model isn't worth it.
-# Bump this if a different Gemini model/context tier is tried.
+# Bump this if a different Gemini model/context tier is tried. OpenRouter
+# doesn't need an equivalent constant: its model catalog is public and
+# already fetched for the dashboard's OpenRouter Models admin page
+# (utils/openrouter_client.py), so its history budget is looked up live
+# from that same catalog instead of guessed.
 GEMINI_HISTORY_BUDGET_TOKENS = 200_000
 
 # Fixed-thread-id prefix for per-project chats (agent/runtime.py's run_agent
@@ -268,14 +273,6 @@ partway. Once done, reply with a short summary of what you did and where to find
 note title(s)), not the full content again."""
 
 def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None):
-    # 0.2, not the 0.7 default other get_chat_llm() call sites use — this
-    # is the only instance with bind_tools() below, so the same call also
-    # decides which tool to call and fills in its arguments (dates, search
-    # queries, note content) alongside writing the final reply. Lower
-    # temperature trades a little conversational warmth for more
-    # consistent tool selection/argument fidelity, which matters more here.
-    llm = get_chat_llm(temperature=0.2)
-
     tools = get_tools(memory)
     if mcp_tools:
         local_names = {t.name for t in tools}
@@ -287,7 +284,29 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
                     mcp_tool.name,
                 )
         tools = tools + mcp_tools
-    llm_with_tools = llm.bind_tools(tools)
+
+    # settings.llm_provider (agent/settings.py) is live-switchable from the
+    # dashboard's Settings page, no restart — so unlike before, the
+    # tool-bound LLM can't be built once here for a single fixed provider.
+    # Each provider actually used gets its own cached client instead (0.2,
+    # not the 0.7 default other get_chat_llm() call sites use — this is the
+    # only instance with bind_tools() below, so the same call also decides
+    # which tool to call and fills in its arguments (dates, search queries,
+    # note content) alongside writing the final reply; lower temperature
+    # trades a little conversational warmth for more consistent tool
+    # selection/argument fidelity, which matters more here). Building a
+    # ChatOpenAI/ChatGoogleGenerativeAI client is pure object construction
+    # (no network call), so caching is just to avoid redoing it every turn,
+    # not a correctness requirement — call_llm below picks the cache entry
+    # for whichever provider settings.llm_provider currently names.
+    llm_with_tools_by_provider = {}
+
+    def get_llm_with_tools(provider: str):
+        if provider not in llm_with_tools_by_provider:
+            llm_with_tools_by_provider[provider] = get_chat_llm(temperature=0.2, provider=provider).bind_tools(
+                tools
+            )
+        return llm_with_tools_by_provider[provider]
 
     # Tool list is fixed for the process lifetime, so this is computed once here
     # rather than every call_llm turn. ponytail: reuses the same chars/4 approximate
@@ -385,6 +404,11 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
         elif settings.learning_mode:
             addendum += LEARNING_ADDENDUM
 
+        # Read once per turn — live-switchable via the dashboard's Settings
+        # page (agent/settings.py's llm_provider), so every branch below
+        # keys off this local rather than a value frozen at graph-build time.
+        provider = settings.llm_provider
+
         system = SystemMessage(content=SYSTEM_PROMPT + addendum + memory_block)
         # "onboarding"/"profile_chat"/"project_<slug>" threads reuse the same
         # thread_id forever and are never swept (see PROJECT_THREAD_PREFIX
@@ -402,8 +426,10 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
         # of the budget before history gets whatever's left. Without this, history
         # alone could grow to fill the full budget and the actual request (system +
         # tools + history) would still overflow the model's real context.
-        if CHAT_PROVIDER == "lmstudio":
+        if provider == "lmstudio":
             budget = await get_history_budget_tokens()
+        elif provider == "openrouter":
+            budget = await get_openrouter_history_budget_tokens()
         else:
             budget = GEMINI_HISTORY_BUDGET_TOKENS
         reserved = count_tokens_approximately([system]) + _tools_token_estimate
@@ -432,9 +458,26 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
             # worst case this slightly overflows the model's real context
             # and fails with a clearer error than a template crash.
             history = state["messages"][-1:]
-        if CHAT_PROVIDER == "lmstudio":
+        llm_with_tools = get_llm_with_tools(provider)
+        # Both lmstudio and openrouter have a dashboard-editable model
+        # (settings.lmstudio_chat_model / settings.openrouter_chat_model, see
+        # their respective Models admin pages), so neither can be baked into
+        # llm_with_tools at cache-build time. .bind() layers the current
+        # model name into this call's request payload without rebuilding the
+        # tool-bound client — langchain_openai merges bound kwargs over the
+        # client's own default_params, so this wins over whatever model
+        # get_chat_llm() constructed the client with when it was cached.
+        # gemini has no such live switch, so it skips straight to the plain
+        # ainvoke below.
+        if provider == "lmstudio":
+            active_llm = llm_with_tools.bind(model=settings.lmstudio_chat_model)
             async with llm_semaphore:
-                response = await llm_with_tools.ainvoke([system] + history)
+                response = await active_llm.ainvoke([system] + history)
+        elif provider == "openrouter":
+            # No concurrency gate here — cloud API, not LM Studio's shared
+            # unified KV cache that llm_semaphore above protects.
+            active_llm = llm_with_tools.bind(model=settings.openrouter_chat_model)
+            response = await active_llm.ainvoke([system] + history)
         else:
             # No concurrency gate — llm_semaphore above exists only to protect
             # LM Studio's shared unified KV cache; a cloud API has no such
