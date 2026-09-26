@@ -133,7 +133,7 @@ from utils import (
 )
 from utils.caldav_client import ensure_collection_exists
 from utils.datetime import parse_local_datetime
-from utils.llm_client import CHAT_PROVIDER, describe_chat_llm
+from utils.llm_client import describe_chat_llm
 from utils.mailer import send_email
 from utils.notify import notify_device_error, notify_error, send_gotify
 
@@ -1198,7 +1198,7 @@ def _onboarding_recap_groups() -> list[list[str]]:
     prompt + tool schemas + onboarding addendum fixed cost, so 4 small
     chunks cost more total input tokens than 1 combined one — exactly
     the kind of thing that blows through Groq's per-minute rate limit."""
-    if CHAT_PROVIDER == "lmstudio":
+    if settings.llm_provider == "lmstudio":
         return _ONBOARDING_RECAP_GROUPS
     return [[key for group in _ONBOARDING_RECAP_GROUPS for key in group]]
 
