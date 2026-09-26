@@ -93,6 +93,7 @@ from agent.scheduler import (
 from agent.settings import (
     apply_persisted,
     is_valid_digest_time,
+    is_valid_llm_provider,
     is_valid_poll_interval_seconds,
     is_valid_max_history_tokens,
     is_valid_recall_max_distance,
@@ -133,8 +134,10 @@ from utils import (
 )
 from utils.caldav_client import ensure_collection_exists
 from utils.datetime import parse_local_datetime
-from utils.llm_client import describe_chat_llm
+from utils.llm_client import describe_chat_llm, openrouter_configured
+from utils.lmstudio_client import LmStudioModel, fetch_models as fetch_lmstudio_models
 from utils.mailer import send_email
+from utils.openrouter_client import OpenRouterModel, fetch_models as fetch_openrouter_models
 from utils.notify import notify_device_error, notify_error, send_gotify
 
 from voice import router as voice_router
@@ -939,6 +942,18 @@ class SettingsUpdate(BaseModel):
     # boundary reminders (agent/settings.py's chime_alert_sound_id).
     # Blank is a valid "no pinned sound" state.
     chime_alert_sound_id: str | None = None
+    # "lmstudio" or "openrouter" (agent/settings.py's llm_provider) — live,
+    # no restart needed (agent/graph.py's call_llm reads it fresh every
+    # turn). "gemini" is intentionally not accepted here — see
+    # agent/settings.py's llm_provider docstring.
+    llm_provider: str | None = None
+    # Which LM Studio model get_chat_llm()/call_llm build when llm_provider
+    # is "lmstudio" (utils/lmstudio_client.py, GET /debug/lmstudio-models).
+    lmstudio_chat_model: str | None = None
+    # Which OpenRouter model get_chat_llm()/call_llm build when
+    # llm_provider is "openrouter" (utils/openrouter_client.py, GET
+    # /debug/openrouter-models).
+    openrouter_chat_model: str | None = None
 
     @model_validator(mode="after")
     def _check_values(self):
@@ -976,6 +991,11 @@ class SettingsUpdate(BaseModel):
             self.max_history_tokens
         ):
             raise ValueError("max_history_tokens must be between 500 and 200000")
+        if self.llm_provider is not None:
+            if not is_valid_llm_provider(self.llm_provider):
+                raise ValueError("llm_provider must be 'lmstudio' or 'openrouter'")
+            if self.llm_provider == "openrouter" and not openrouter_configured():
+                raise ValueError("Cannot switch to 'openrouter': OPENROUTER_API_KEY is not set")
         return self
 
 
@@ -1000,6 +1020,11 @@ class SettingsResponse(BaseModel):
     max_history_tokens: int
     planning_template_note_id: str
     chime_alert_sound_id: str
+    llm_provider: str
+    # Whether OPENROUTER_API_KEY is set — the Settings page's LLM Provider
+    # card disables switching to "openrouter" when this is false, matching
+    # POST /settings' own validation (SettingsUpdate._check_values).
+    openrouter_configured: bool
     onboarding_complete: bool
     basics_complete: bool
 
@@ -1027,6 +1052,8 @@ def _current_settings() -> dict:
         "max_history_tokens": settings.max_history_tokens,
         "planning_template_note_id": settings.planning_template_note_id,
         "chime_alert_sound_id": settings.chime_alert_sound_id,
+        "llm_provider": settings.llm_provider,
+        "openrouter_configured": openrouter_configured(),
         # Read-only here — deliberately not part of SettingsUpdate below, so
         # it can only be set via agent/tools/general.py's
         # mark_onboarding_complete tool, not a direct POST /settings call.
@@ -1112,6 +1139,15 @@ async def _apply_settings_update(update: SettingsUpdate) -> None:
     if update.chime_alert_sound_id is not None:
         settings.chime_alert_sound_id = update.chime_alert_sound_id.strip()
         changed["chime_alert_sound_id"] = settings.chime_alert_sound_id
+    if update.llm_provider is not None:
+        settings.llm_provider = update.llm_provider
+        changed["llm_provider"] = update.llm_provider
+    if update.lmstudio_chat_model is not None:
+        settings.lmstudio_chat_model = update.lmstudio_chat_model.strip()
+        changed["lmstudio_chat_model"] = settings.lmstudio_chat_model
+    if update.openrouter_chat_model is not None:
+        settings.openrouter_chat_model = update.openrouter_chat_model.strip()
+        changed["openrouter_chat_model"] = settings.openrouter_chat_model
 
     if reschedule_digest:
         scheduler.reschedule_job("daily_digest", trigger=digest_trigger())
@@ -1149,6 +1185,61 @@ async def update_settings(
     """
     await _apply_settings_update(update)
     return _current_settings()
+
+
+class LlmProviderResponse(BaseModel):
+    provider: str
+    model: str | None
+    base_url: str | None
+
+
+class LmStudioModelsResponse(BaseModel):
+    models: list[LmStudioModel]
+    management_configured: bool
+    active: bool
+    configured_model: str | None
+
+
+class OpenRouterModelsResponse(BaseModel):
+    models: list[OpenRouterModel]
+    active: bool
+    configured_model: str | None
+
+
+@app.get("/debug/openrouter-models", response_model=OpenRouterModelsResponse)
+async def get_openrouter_models(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """OpenRouter's public model catalog (utils/openrouter_client.py, cached
+    5 minutes) — name/context length/per-token pricing for every model
+    OpenRouter serves, plus whether settings.llm_provider is "openrouter"
+    right now and if so which model settings.openrouter_chat_model
+    currently points at. Backs the dashboard's OpenRouter Models admin
+    page, mainly for finding free-tier (":free") models. No API key needed
+    for this — OpenRouter's /models endpoint is public."""
+    models = await fetch_openrouter_models()
+    return {
+        "models": models,
+        "active": settings.llm_provider == "openrouter",
+        "configured_model": settings.openrouter_chat_model or None,
+    }
+
+
+@app.get("/debug/lmstudio-models", response_model=LmStudioModelsResponse)
+async def get_lmstudio_models(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """Every chat-capable model LM Studio currently has downloaded
+    (utils/lmstudio_client.py, live, uncached — a local LAN call to
+    LMSTUDIO_MANAGEMENT_URL, the same management API surface used for
+    live context-length lookups), plus whether settings.llm_provider is
+    "lmstudio" right now and if so which model settings.lmstudio_chat_model
+    currently points at. Backs the dashboard's LM Studio Models admin
+    card. Empty models list (management_configured: false) if
+    LMSTUDIO_MANAGEMENT_URL isn't set."""
+    models = await fetch_lmstudio_models()
+    return {
+        "models": models,
+        "management_configured": bool(os.environ.get("LMSTUDIO_MANAGEMENT_URL")),
+        "active": settings.llm_provider == "lmstudio",
+        "configured_model": settings.lmstudio_chat_model or None,
+    }
 
 
 class OnboardingPerson(BaseModel):
@@ -1582,13 +1673,14 @@ async def get_device_state(_: Annotated[None, Depends(auth.require_session_or_to
     return state or {}
 
 
-@app.get("/debug/llm-provider")
+@app.get("/debug/llm-provider", response_model=LlmProviderResponse)
 async def get_llm_provider(_: Annotated[None, Depends(auth.require_session_or_token)]):
     """
-    Which LLM_PROVIDER/model/base_url get_chat_llm() actually builds right
-    now — LLM_PROVIDER is env-only (no dashboard field, restart to change),
-    so this is the only place to confirm it without reading container logs
-    or shelling into the box. No credentials included.
+    Which provider/model/base_url get_chat_llm() actually builds right now,
+    derived from the live settings.llm_provider (switchable from the
+    Settings page's LLM Provider card, no restart needed) plus, when
+    that's "openrouter", the live settings.openrouter_chat_model (see the
+    OpenRouter Models admin page). No credentials included.
     """
     return describe_chat_llm()
 

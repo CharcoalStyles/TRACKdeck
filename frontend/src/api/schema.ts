@@ -702,6 +702,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/debug/openrouter-models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Openrouter Models
+         * @description OpenRouter's public model catalog (utils/openrouter_client.py, cached
+         *     5 minutes) — name/context length/per-token pricing for every model
+         *     OpenRouter serves, plus whether settings.llm_provider is "openrouter"
+         *     right now and if so which model settings.openrouter_chat_model
+         *     currently points at. Backs the dashboard's OpenRouter Models admin
+         *     page, mainly for finding free-tier (":free") models. No API key needed
+         *     for this — OpenRouter's /models endpoint is public.
+         */
+        get: operations["get_openrouter_models_debug_openrouter_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/debug/lmstudio-models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Lmstudio Models
+         * @description Every chat-capable model LM Studio currently has downloaded
+         *     (utils/lmstudio_client.py, live, uncached — a local LAN call to
+         *     LMSTUDIO_MANAGEMENT_URL, the same management API surface used for
+         *     live context-length lookups), plus whether settings.llm_provider is
+         *     "lmstudio" right now and if so which model settings.lmstudio_chat_model
+         *     currently points at. Backs the dashboard's LM Studio Models admin
+         *     card. Empty models list (management_configured: false) if
+         *     LMSTUDIO_MANAGEMENT_URL isn't set.
+         */
+        get: operations["get_lmstudio_models_debug_lmstudio_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/onboarding/basics": {
         parameters: {
             query?: never;
@@ -1139,64 +1192,11 @@ export interface paths {
          * Get Llm Provider
          * @description Which provider/model/base_url get_chat_llm() actually builds right now,
          *     derived from the live settings.llm_provider (switchable from the
-         *     Settings page's LLM Provider card, no restart needed) plus, when that's
-         *     "openrouter", the live settings.openrouter_chat_model (see the
+         *     Settings page's LLM Provider card, no restart needed) plus, when
+         *     that's "openrouter", the live settings.openrouter_chat_model (see the
          *     OpenRouter Models admin page). No credentials included.
          */
         get: operations["get_llm_provider_debug_llm_provider_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/debug/openrouter-models": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Openrouter Models
-         * @description OpenRouter's public model catalog (utils/openrouter_client.py, cached
-         *     5 minutes) — name/context length/per-token pricing for every model
-         *     OpenRouter serves, plus whether settings.llm_provider is "openrouter"
-         *     right now and if so which model settings.openrouter_chat_model
-         *     currently points at. Backs the dashboard's OpenRouter Models admin
-         *     page, mainly for finding free-tier (":free") models. No API key needed
-         *     for this — OpenRouter's /models endpoint is public.
-         */
-        get: operations["get_openrouter_models_debug_openrouter_models_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/debug/lmstudio-models": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Lmstudio Models
-         * @description Every chat-capable model LM Studio currently has downloaded
-         *     (utils/lmstudio_client.py, live, uncached — a local LAN call to
-         *     LMSTUDIO_MANAGEMENT_URL, the same management API surface used for
-         *     live context-length lookups), plus whether settings.llm_provider is
-         *     "lmstudio" right now and if so which model settings.lmstudio_chat_model
-         *     currently points at. Backs the dashboard's LM Studio Models admin
-         *     card. Empty models list (management_configured: false) if
-         *     LMSTUDIO_MANAGEMENT_URL isn't set.
-         */
-        get: operations["get_lmstudio_models_debug_lmstudio_models_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1997,10 +1997,6 @@ export interface components {
             planning_template_note_id: string;
             /** Chime Alert Sound Id */
             chime_alert_sound_id: string;
-            /** Openrouter Chat Model */
-            openrouter_chat_model: string;
-            /** Lmstudio Chat Model */
-            lmstudio_chat_model: string;
             /** Llm Provider */
             llm_provider: string;
             /** Openrouter Configured */
@@ -2175,10 +2171,6 @@ export interface components {
             planning_template_note_id: string;
             /** Chime Alert Sound Id */
             chime_alert_sound_id: string;
-            /** Openrouter Chat Model */
-            openrouter_chat_model: string;
-            /** Lmstudio Chat Model */
-            lmstudio_chat_model: string;
             /** Llm Provider */
             llm_provider: string;
             /** Openrouter Configured */
@@ -2228,12 +2220,12 @@ export interface components {
             planning_template_note_id?: string | null;
             /** Chime Alert Sound Id */
             chime_alert_sound_id?: string | null;
-            /** Openrouter Chat Model */
-            openrouter_chat_model?: string | null;
-            /** Lmstudio Chat Model */
-            lmstudio_chat_model?: string | null;
             /** Llm Provider */
             llm_provider?: string | null;
+            /** Lmstudio Chat Model */
+            lmstudio_chat_model?: string | null;
+            /** Openrouter Chat Model */
+            openrouter_chat_model?: string | null;
         };
         /** TTSRequest */
         TTSRequest: {
@@ -4002,6 +3994,68 @@ export interface operations {
             };
         };
     };
+    get_openrouter_models_debug_openrouter_models_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpenRouterModelsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_lmstudio_models_debug_lmstudio_models_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LmStudioModelsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     submit_onboarding_basics_onboarding_basics_post: {
         parameters: {
             query?: never;
@@ -4630,68 +4684,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LlmProviderResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_openrouter_models_debug_openrouter_models_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OpenRouterModelsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_lmstudio_models_debug_lmstudio_models_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LmStudioModelsResponse"];
                 };
             };
             /** @description Validation Error */
