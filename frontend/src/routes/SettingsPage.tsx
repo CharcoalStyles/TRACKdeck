@@ -1,11 +1,16 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
+import type { components } from '../api/schema'
 import Card from '../components/Card'
 import SaveStatus, { type SaveState } from '../components/SaveStatus'
 
 const TIMEZONES =
   typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : []
+
+type Settings = components['schemas']['SettingsResponse']
+type SettingsBody = components['schemas']['SettingsUpdate']
 
 function useSaveStatus() {
   const [state, setState] = useState<SaveState>('idle')
@@ -30,33 +35,21 @@ export default function SettingsPage() {
     <div className="flex flex-col gap-4">
       <ModelsCard data={data} onSaved={invalidate} />
       <LocationTimeCard data={data} onSaved={invalidate} />
+      <MorningCard data={data} onSaved={invalidate} />
       <EveningCard data={data} onSaved={invalidate} />
-      <CheckinWindowCard data={data} onSaved={invalidate} />
-      <BedtimeCard data={data} onSaved={invalidate} />
+      <ReviewsCard data={data} onSaved={invalidate} />
       <NotificationsCard data={data} onSaved={invalidate} />
-      <DeviceSyncCard data={data} onSaved={invalidate} />
-      <ContextBudgetCard data={data} onSaved={invalidate} />
-      <McpServersCard data={data} onSaved={invalidate} />
+      <SyncCard data={data} onSaved={invalidate} />
+      <details className="rounded-xl border border-border bg-card p-4">
+        <summary className="cursor-pointer text-lg font-semibold">Advanced</summary>
+        <div className="mt-4 flex flex-col gap-4">
+          <ContextBudgetCard data={data} onSaved={invalidate} />
+          <McpServersCard data={data} onSaved={invalidate} />
+        </div>
+      </details>
     </div>
   )
 }
-
-type Settings = NonNullable<ReturnType<typeof useQuery<{
-  default_location: string
-  timezone: string
-  evening_time: string
-  email_to: string
-  wake_time: string
-  bedtime: string
-  latest_checkin_time: string
-  gotify_url: string
-  gotify_token_set: boolean
-  public_base_url: string
-  device_poll_interval_seconds: number
-  max_history_tokens: number
-  mcp_servers: string
-  lmstudio_writer_model: string
-}>>['data']>
 
 function ModelsCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
   const status = useSaveStatus()
@@ -210,48 +203,197 @@ function LocationTimeCard({ data, onSaved }: { data?: Settings; onSaved: () => v
   )
 }
 
-function EveningCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
+function useSettingsSave(onSaved: () => void, failMessage?: string) {
   const status = useSaveStatus()
-  const [eveningTime, setEveningTime] = useState('')
-  const [email, setEmail] = useState('')
-
-  useEffect(() => {
-    if (!data) return
-    setEveningTime(data.evening_time || '')
-    setEmail(data.email_to || '')
-  }, [data])
-
   const mutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await api.POST('/settings', {
-        body: { evening_time: eveningTime, email_to: email },
-      })
+    mutationFn: async (body: SettingsBody) => {
+      const { error } = await api.POST('/settings', { body })
       if (error) throw new Error()
     },
     onMutate: () => status.setState('saving'),
     onSuccess: () => {
+      status.setErrorMessage(undefined)
       status.setState('saved')
       onSaved()
     },
-    onError: () => status.setState('error'),
+    onError: () => {
+      if (failMessage) status.setErrorMessage(failMessage)
+      status.setState('error')
+    },
   })
+  return { status, save: (body: SettingsBody) => mutation.mutate(body) }
+}
+
+function MorningCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
+  const { status, save } = useSettingsSave(onSaved)
+  const [wakeTime, setWakeTime] = useState('')
+  const [latest, setLatest] = useState('')
+  const [weather, setWeather] = useState(true)
+
+  useEffect(() => {
+    if (!data) return
+    setWakeTime(data.wake_time || '')
+    setLatest(data.latest_checkin_time || '')
+    setWeather(data.weather_enabled)
+  }, [data])
 
   return (
     <Card>
-      <h2 className="mb-1 text-lg font-semibold">Evening Message</h2>
+      <h2 className="mb-1 text-lg font-semibold">Morning &amp; Check-Ins</h2>
       <p className="mb-3 text-sm text-text-muted">
-        Local time the end-of-day message is pushed (see the Timezone above). The morning,
-        evening, weekly and monthly messages are also emailed to the recipient below
-        (needs the SMTP_* env vars). Takes effect immediately, no restart needed.
+        The day-ahead message (calendar, tasks, forecast for today and tomorrow) goes out at
+        the wake time, and that is also when the day's short check-in prompts may start. They
+        stop by the latest time. Takes effect immediately.
       </p>
-      <FieldRow label="Send time">
-        <input
-          type="time"
-          value={eveningTime}
-          onChange={(e) => setEveningTime(e.target.value)}
-          className={inputClass}
-        />
+      <div className="grid gap-3 md:grid-cols-2">
+        <FieldRow label="Wake time (morning message, first check-in)">
+          <input type="time" value={wakeTime} onChange={(e) => setWakeTime(e.target.value)} className={inputClass} />
+        </FieldRow>
+        <FieldRow label="Latest check-in time">
+          <input type="time" value={latest} onChange={(e) => setLatest(e.target.value)} className={inputClass} />
+        </FieldRow>
+      </div>
+      <CheckRow checked={weather} onChange={setWeather} label="Include the weather forecast in the morning message" />
+      <button
+        type="button"
+        onClick={() => save({ wake_time: wakeTime, latest_checkin_time: latest, weather_enabled: weather })}
+        className={primaryBtnClass}
+      >
+        Save
+      </button>
+      <SaveStatus state={status.state} errorMessage={status.errorMessage} />
+    </Card>
+  )
+}
+
+function EveningCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
+  const { status, save } = useSettingsSave(onSaved)
+  const [eveningTime, setEveningTime] = useState('')
+  const [bedtime, setBedtime] = useState('')
+  const [commentary, setCommentary] = useState(true)
+
+  useEffect(() => {
+    if (!data) return
+    setEveningTime(data.evening_time || '')
+    setBedtime(data.bedtime || '')
+    setCommentary(data.daily_commentary)
+  }, [data])
+
+  return (
+    <Card>
+      <h2 className="mb-1 text-lg font-semibold">Evening &amp; Bedtime</h2>
+      <p className="mb-3 text-sm text-text-muted">
+        The evening message shows the day's check-in answers, a short reading across the last
+        few days, unticked captures and tomorrow's heads-up. The bedtime reminder is a separate
+        wind-down nudge.
+      </p>
+      <div className="grid gap-3 md:grid-cols-2">
+        <FieldRow label="Evening message time">
+          <input type="time" value={eveningTime} onChange={(e) => setEveningTime(e.target.value)} className={inputClass} />
+        </FieldRow>
+        <FieldRow label="Bedtime reminder">
+          <input type="time" value={bedtime} onChange={(e) => setBedtime(e.target.value)} className={inputClass} />
+        </FieldRow>
+      </div>
+      <CheckRow
+        checked={commentary}
+        onChange={setCommentary}
+        label="Save the evening message as a daily commentary under Reviews/Daily/"
+      />
+      <button
+        type="button"
+        onClick={() => save({ evening_time: eveningTime, bedtime, daily_commentary: commentary })}
+        className={primaryBtnClass}
+      >
+        Save
+      </button>
+      <SaveStatus state={status.state} errorMessage={status.errorMessage} />
+    </Card>
+  )
+}
+
+function ReviewsCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
+  const { status, save } = useSettingsSave(onSaved)
+  const [weekly, setWeekly] = useState('')
+  const [timing, setTiming] = useState('last_evening')
+  const [monthlyEvening, setMonthlyEvening] = useState('')
+  const [monthlyMorning, setMonthlyMorning] = useState('')
+
+  useEffect(() => {
+    if (!data) return
+    setWeekly(data.weekly_review_time || '')
+    setTiming(data.monthly_review_timing || 'last_evening')
+    setMonthlyEvening(data.monthly_review_evening_time || '')
+    setMonthlyMorning(data.monthly_review_morning_time || '')
+  }, [data])
+
+  return (
+    <Card>
+      <h2 className="mb-1 text-lg font-semibold">Reviews</h2>
+      <p className="mb-3 text-sm text-text-muted">
+        The weekly review goes out on Sunday; the monthly review either on the evening of the
+        month's last day or on the morning of the 1st (covering the month just ended). Both
+        are saved under Reviews/ in the vault.
+      </p>
+      <FieldRow label="Sunday weekly review time">
+        <input type="time" value={weekly} onChange={(e) => setWeekly(e.target.value)} className={inputClass} />
       </FieldRow>
+      <FieldRow label="Monthly review">
+        <select value={timing} onChange={(e) => setTiming(e.target.value)} className={inputClass}>
+          <option value="last_evening">Evening of the last day of the month</option>
+          <option value="first_morning">Morning of the 1st</option>
+        </select>
+      </FieldRow>
+      <div className="grid gap-3 md:grid-cols-2">
+        <FieldRow label="Last-day evening time">
+          <input type="time" value={monthlyEvening} onChange={(e) => setMonthlyEvening(e.target.value)} className={inputClass} />
+        </FieldRow>
+        <FieldRow label="First-of-month morning time">
+          <input type="time" value={monthlyMorning} onChange={(e) => setMonthlyMorning(e.target.value)} className={inputClass} />
+        </FieldRow>
+      </div>
+      <button
+        type="button"
+        onClick={() =>
+          save({
+            weekly_review_time: weekly,
+            monthly_review_timing: timing,
+            monthly_review_evening_time: monthlyEvening,
+            monthly_review_morning_time: monthlyMorning,
+          })
+        }
+        className={primaryBtnClass}
+      >
+        Save
+      </button>
+      <SaveStatus state={status.state} errorMessage={status.errorMessage} />
+    </Card>
+  )
+}
+
+function NotificationsCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
+  const { status, save } = useSettingsSave(onSaved)
+  const [email, setEmail] = useState('')
+  const [gotifyUrl, setGotifyUrl] = useState('')
+  const [gotifyToken, setGotifyToken] = useState('')
+  const [publicBaseUrl, setPublicBaseUrl] = useState('')
+
+  useEffect(() => {
+    if (!data) return
+    setEmail(data.email_to || '')
+    setGotifyUrl(data.gotify_url || '')
+    setPublicBaseUrl(data.public_base_url || '')
+    setGotifyToken('')
+  }, [data])
+
+  return (
+    <Card>
+      <h2 className="mb-1 text-lg font-semibold">Delivery</h2>
+      <p className="mb-3 text-sm text-text-muted">
+        Every scheduled message goes out by Gotify push and, when a recipient is set, by email
+        too (needs the SMTP_* env vars; test both on the Testing page). The base URL builds
+        the tap-to-open links in check-in pushes.
+      </p>
       <FieldRow label="Email recipient">
         <input
           type="email"
@@ -261,157 +403,6 @@ function EveningCard({ data, onSaved }: { data?: Settings; onSaved: () => void }
           className={inputClass}
         />
       </FieldRow>
-      <button type="button" onClick={() => mutation.mutate()} className={primaryBtnClass}>
-        Save
-      </button>
-      <SaveStatus state={status.state} />
-    </Card>
-  )
-}
-
-function CheckinWindowCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
-  const status = useSaveStatus()
-  const [wakeTime, setWakeTime] = useState('')
-  const [latestCheckinTime, setLatestCheckinTime] = useState('')
-
-  useEffect(() => {
-    if (!data) return
-    setWakeTime(data.wake_time || '')
-    setLatestCheckinTime(data.latest_checkin_time || '')
-  }, [data])
-
-  const mutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await api.POST('/settings', {
-        body: { wake_time: wakeTime, latest_checkin_time: latestCheckinTime },
-      })
-      if (error) throw new Error()
-    },
-    onMutate: () => status.setState('saving'),
-    onSuccess: () => {
-      status.setState('saved')
-      onSaved()
-    },
-    onError: () => status.setState('error'),
-  })
-
-  return (
-    <Card>
-      <h2 className="mb-1 text-lg font-semibold">Mental-Health Check-Ins</h2>
-      <p className="mb-3 text-sm text-text-muted">
-        Local time window short reflective prompts may fire in each day. Takes effect
-        immediately, no restart needed.
-      </p>
-      <FieldRow label="Earliest check-in time">
-        <input
-          type="time"
-          value={wakeTime}
-          onChange={(e) => setWakeTime(e.target.value)}
-          className={inputClass}
-        />
-      </FieldRow>
-      <FieldRow label="Latest check-in time">
-        <input
-          type="time"
-          value={latestCheckinTime}
-          onChange={(e) => setLatestCheckinTime(e.target.value)}
-          className={inputClass}
-        />
-      </FieldRow>
-      <button type="button" onClick={() => mutation.mutate()} className={primaryBtnClass}>
-        Save
-      </button>
-      <SaveStatus state={status.state} />
-    </Card>
-  )
-}
-
-function BedtimeCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
-  const status = useSaveStatus()
-  const [bedtime, setBedtime] = useState('')
-
-  useEffect(() => {
-    if (!data) return
-    setBedtime(data.bedtime || '')
-  }, [data])
-
-  const mutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await api.POST('/settings', { body: { bedtime } })
-      if (error) throw new Error()
-    },
-    onMutate: () => status.setState('saving'),
-    onSuccess: () => {
-      status.setState('saved')
-      onSaved()
-    },
-    onError: () => status.setState('error'),
-  })
-
-  return (
-    <Card>
-      <h2 className="mb-1 text-lg font-semibold">Bedtime Reminder</h2>
-      <p className="mb-3 text-sm text-text-muted">
-        Local time a wind-down nudge is pushed each night (see the Timezone above) — separate
-        from the evening message and from the check-in window's own times. Takes effect
-        immediately, no restart needed.
-      </p>
-      <FieldRow label="Bedtime">
-        <input
-          type="time"
-          value={bedtime}
-          onChange={(e) => setBedtime(e.target.value)}
-          className={inputClass}
-        />
-      </FieldRow>
-      <button type="button" onClick={() => mutation.mutate()} className={primaryBtnClass}>
-        Save
-      </button>
-      <SaveStatus state={status.state} />
-    </Card>
-  )
-}
-
-function NotificationsCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
-  const status = useSaveStatus()
-  const [gotifyUrl, setGotifyUrl] = useState('')
-  const [gotifyToken, setGotifyToken] = useState('')
-  const [publicBaseUrl, setPublicBaseUrl] = useState('')
-
-  useEffect(() => {
-    if (!data) return
-    setGotifyUrl(data.gotify_url || '')
-    setPublicBaseUrl(data.public_base_url || '')
-    setGotifyToken('')
-  }, [data])
-
-  const mutation = useMutation({
-    mutationFn: async () => {
-      const body: { gotify_url: string; public_base_url: string; gotify_token?: string } = {
-        gotify_url: gotifyUrl,
-        public_base_url: publicBaseUrl,
-      }
-      // Leaving the token field blank keeps the currently saved token —
-      // only send it when the user actually typed a new one.
-      if (gotifyToken) body.gotify_token = gotifyToken
-      const { error } = await api.POST('/settings', { body })
-      if (error) throw new Error()
-    },
-    onMutate: () => status.setState('saving'),
-    onSuccess: () => {
-      status.setState('saved')
-      onSaved()
-    },
-    onError: () => status.setState('error'),
-  })
-
-  return (
-    <Card>
-      <h2 className="mb-1 text-lg font-semibold">Notifications</h2>
-      <p className="mb-3 text-sm text-text-muted">
-        Gotify server used for push notifications (reminders, check-ins, errors), and the base
-        URL used to build check-in tap-to-open links in those pushes.
-      </p>
       <FieldRow label="Gotify URL">
         <input
           type="text"
@@ -439,64 +430,104 @@ function NotificationsCard({ data, onSaved }: { data?: Settings; onSaved: () => 
           className={inputClass}
         />
       </FieldRow>
-      <button type="button" onClick={() => mutation.mutate()} className={primaryBtnClass}>
-        Save
-      </button>
-      <SaveStatus state={status.state} />
-    </Card>
-  )
-}
-
-function DeviceSyncCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
-  const status = useSaveStatus()
-  const [pollInterval, setPollInterval] = useState('')
-
-  useEffect(() => {
-    if (!data) return
-    setPollInterval(String(data.device_poll_interval_seconds ?? ''))
-  }, [data])
-
-  const mutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await api.POST('/settings', {
-        body: { device_poll_interval_seconds: parseInt(pollInterval, 10) },
-      })
-      if (error) throw new Error()
-    },
-    onMutate: () => status.setState('saving'),
-    onSuccess: () => {
-      status.setState('saved')
-      onSaved()
-    },
-    onError: () => {
-      status.setErrorMessage('Failed to save — must be between 30 and 86400.')
-      status.setState('error')
-    },
-  })
-
-  return (
-    <Card>
-      <h2 className="mb-1 text-lg font-semibold">Device Sync</h2>
-      <p className="mb-3 text-sm text-text-muted">
-        How often (seconds) the ESP32-S3 wakes from deep sleep to poll for what's coming up.
-        Retunable here without reflashing firmware — the device reads this value on its next sync.
-      </p>
-      <FieldRow label="Poll interval (seconds)">
-        <input
-          type="number"
-          min={30}
-          max={86400}
-          step={1}
-          value={pollInterval}
-          onChange={(e) => setPollInterval(e.target.value)}
-          className={inputClass}
-        />
-      </FieldRow>
-      <button type="button" onClick={() => mutation.mutate()} className={primaryBtnClass}>
+      <button
+        type="button"
+        onClick={() => {
+          const body: SettingsBody = { email_to: email, gotify_url: gotifyUrl, public_base_url: publicBaseUrl }
+          // A blank token field keeps the saved token.
+          if (gotifyToken) body.gotify_token = gotifyToken
+          save(body)
+        }}
+        className={primaryBtnClass}
+      >
         Save
       </button>
       <SaveStatus state={status.state} errorMessage={status.errorMessage} />
     </Card>
+  )
+}
+
+function SyncCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
+  const { status, save } = useSettingsSave(
+    onSaved,
+    'Failed to save — calendar sync is 1–1440 minutes, device poll 30–86400 seconds.',
+  )
+  const [syncMinutes, setSyncMinutes] = useState('')
+  const [pollSeconds, setPollSeconds] = useState('')
+
+  useEffect(() => {
+    if (!data) return
+    setSyncMinutes(String(data.calendar_sync_interval_minutes ?? ''))
+    setPollSeconds(String(data.device_poll_interval_seconds ?? ''))
+  }, [data])
+
+  return (
+    <Card>
+      <h2 className="mb-1 text-lg font-semibold">Sync</h2>
+      <p className="mb-3 text-sm text-text-muted">
+        How often the app polls the calendar for new or moved events, and how often the
+        ESP32-S3 wakes from deep sleep to sync (it reads this on its next sync, no reflash).
+      </p>
+      <div className="grid gap-3 md:grid-cols-2">
+        <FieldRow label="Calendar sync (minutes)">
+          <input
+            type="number"
+            min={1}
+            max={1440}
+            value={syncMinutes}
+            onChange={(e) => setSyncMinutes(e.target.value)}
+            className={inputClass}
+          />
+        </FieldRow>
+        <FieldRow label="Device poll (seconds)">
+          <input
+            type="number"
+            min={30}
+            max={86400}
+            value={pollSeconds}
+            onChange={(e) => setPollSeconds(e.target.value)}
+            className={inputClass}
+          />
+        </FieldRow>
+      </div>
+      <button
+        type="button"
+        onClick={() =>
+          save({
+            calendar_sync_interval_minutes: parseInt(syncMinutes, 10),
+            device_poll_interval_seconds: parseInt(pollSeconds, 10),
+          })
+        }
+        className={primaryBtnClass}
+      >
+        Save
+      </button>
+      <SaveStatus state={status.state} errorMessage={status.errorMessage} />
+      <p className="mt-3 text-sm text-text-muted">
+        Device alert sounds are managed on the{' '}
+        <Link to="/admin/alert-sounds" className="text-accent hover:underline">
+          alert sounds page
+        </Link>
+        .
+      </p>
+    </Card>
+  )
+}
+
+function CheckRow({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean
+  onChange: (value: boolean) => void
+  label: string
+}) {
+  return (
+    <label className="mb-3 flex items-center gap-2 text-sm text-text-primary">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      {label}
+    </label>
   )
 }
 

@@ -240,43 +240,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/day-plans": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Day Plans */
-        get: operations["list_day_plans_day_plans_get"];
-        put?: never;
-        /** Create Day Plan */
-        post: operations["create_day_plan_day_plans_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/day-plans/{plan_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Day Plan */
-        get: operations["get_day_plan_day_plans__plan_id__get"];
-        /** Update Day Plan */
-        put: operations["update_day_plan_day_plans__plan_id__put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/day-plans/{plan_id}/cancel": {
+    "/day-plans/run": {
         parameters: {
             query?: never;
             header?: never;
@@ -285,8 +249,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Cancel Day Plan */
-        post: operations["cancel_day_plan_day_plans__plan_id__cancel_post"];
+        /** Run Day Plan */
+        post: operations["run_day_plan_day_plans_run_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -324,45 +288,6 @@ export interface paths {
         post?: never;
         /** Delete Task Library Item */
         delete: operations["delete_task_library_item_task_library__item_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/laya-playground/tools": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Laya Tool Candidates
-         * @description The live tool list "tool" mode actually tests against — shown
-         *     read-only in the Playground so it's clear what candidates Laya is
-         *     choosing between, straight from agent/tools/all_tools.py.
-         */
-        get: operations["list_laya_tool_candidates_laya_playground_tools_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/laya-playground/ask": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Ask Laya */
-        post: operations["ask_laya_laya_playground_ask_post"];
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -516,165 +441,12 @@ export interface paths {
          * Todays Checkins
          * @description Today's check-in activity — answered, skipped, and expired — for
          *     the dashboard's Check-Ins page. 'Today' is the user's local calendar
-         *     day (settings.timezone), the same bounds jobs/digest.py uses for the
+         *     day (settings.timezone), the same bounds the scheduled jobs uses for the
          *     nightly recap — not the waking-hours window jobs/checkin.py itself
          *     schedules within, so a check-in resolved right before midnight still
          *     counts as today rather than being cut off early.
          */
         get: operations["todays_checkins_checkins_today_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/activity-log": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Activity Log
-         * @description Raw entries for the dashboard's Activity Log page, most recent
-         *     first, over the trailing `days` local-calendar days (default 30).
-         *     Optional activity_type filter for the page's type dropdown.
-         */
-        get: operations["list_activity_log_activity_log_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/activity-log/summary": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Activity Log Summary
-         * @description Pre-aggregated data for the dashboard's two charts, over the
-         *     trailing `days` local-calendar days — mood/energy averaged per day,
-         *     and total duration per activity type (entries with an unparseable
-         *     duration, e.g. "All Day", are excluded from the duration aggregate
-         *     but still appear in GET /activity-log's raw list).
-         */
-        get: operations["activity_log_summary_activity_log_summary_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/vault/notes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Vault Notes Route
-         * @description Every processed note in the vault (excludes Inbox — unprocessed
-         *     scratch, not "what's accumulated"), most recently updated first.
-         *     Backs the read-only vault-browse dashboard page; filtering/searching
-         *     happens client-side since a personal vault is small enough not to
-         *     need query-param plumbing for it.
-         */
-        get: operations["list_vault_notes_route_vault_notes_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/projects": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Projects Route
-         * @description Project names, derived from vault-root subfolders (see
-         *     utils.vault.list_project_dirs) — used by the Projects page instead of
-         *     fetching every note and grouping by its project field client-side.
-         */
-        get: operations["list_projects_route_projects_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/vault/notes/{note_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Vault Note Route
-         * @description Full single note (including body) for the vault-browse page's
-         *     detail view.
-         */
-        get: operations["get_vault_note_route_vault_notes__note_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/vault/projects/{project}/attachments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Project Attachments Route
-         * @description Image attachments for one project — backs the Projects page's image
-         *     gallery. Attachments can arrive either via the upload route below or by
-         *     being dropped directly into <project>/attachments/ via Obsidian/Syncthing.
-         */
-        get: operations["list_project_attachments_route_vault_projects__project__attachments_get"];
-        put?: never;
-        /** Upload Project Attachment Route */
-        post: operations["upload_project_attachment_route_vault_projects__project__attachments_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/vault/projects/{project}/attachments/{filename}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Project Attachment Route */
-        get: operations["get_project_attachment_route_vault_projects__project__attachments__filename__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -722,7 +494,7 @@ export interface paths {
          *     field is also write-through persisted to settings.db
          *     (utils/settings_store.py) so it survives a restart.
          *
-         *     timezone/digest_time/bedtime/calendar_sync_interval_minutes/wake_time
+         *     timezone/evening_time/bedtime/calendar_sync_interval_minutes/wake_time
          *     also live-reschedule their APScheduler jobs, since they're registered
          *     as fixed triggers rather than being read fresh like the other settings.
          *     latest_checkin_time needs no reschedule — jobs/checkin.py reads it
@@ -741,32 +513,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/debug/openrouter-models": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Openrouter Models
-         * @description OpenRouter's public model catalog (utils/openrouter_client.py, cached
-         *     5 minutes) — name/context length/per-token pricing for every model
-         *     OpenRouter serves, plus whether settings.llm_provider is "openrouter"
-         *     right now and if so which model settings.openrouter_chat_model
-         *     currently points at. Backs the dashboard's OpenRouter Models admin
-         *     page, mainly for finding free-tier (":free") models. No API key needed
-         *     for this — OpenRouter's /models endpoint is public.
-         */
-        get: operations["get_openrouter_models_debug_openrouter_models_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/debug/lmstudio-models": {
         parameters: {
             query?: never;
@@ -779,9 +525,8 @@ export interface paths {
          * @description Every chat-capable model LM Studio currently has downloaded
          *     (utils/lmstudio_client.py, live, uncached — a local LAN call to
          *     LMSTUDIO_MANAGEMENT_URL, the same management API surface used for
-         *     live context-length lookups), plus whether settings.llm_provider is
-         *     "lmstudio" right now and if so which model settings.lmstudio_chat_model
-         *     currently points at. Backs the dashboard's LM Studio Models admin
+         *     live context-length lookups), plus which model
+         *     settings.lmstudio_chat_model currently points at. Backs the dashboard's LM Studio Models admin
          *     card. Empty models list (management_configured: false) if
          *     LMSTUDIO_MANAGEMENT_URL isn't set.
          */
@@ -794,7 +539,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/onboarding/basics": {
+    "/debug/morning": {
         parameters: {
             query?: never;
             header?: never;
@@ -804,29 +549,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Submit Onboarding Basics
-         * @description One-time submission from the onboarding basics form (the first step
-         *     of /profile, before the guided chat interview takes over). Every field
-         *     is optional. Location/wake_time/bedtime go through the same settings
-         *     write path as POST /settings (not About Me — that separation is
-         *     deliberate, see agent/tools/general.py's set_home_location). Everything
-         *     else is handed to the agent as a handful of real turns in the
-         *     "onboarding" thread, run in the background after this responds (see
-         *     _process_onboarding_recap) — its own tools (remember_about_me,
-         *     get_or_create_linked_note) do the actual About Me writing, so the
-         *     content gets written up properly (with a dedicated note per person)
-         *     instead of dumped in verbatim, and its replies — likely follow-up
-         *     questions — land in the thread for the chat view to pick up on next
-         *     load.
+         * Trigger Morning Now
+         * @description Fires the morning day-ahead message now (a real Gotify push).
          */
-        post: operations["submit_onboarding_basics_onboarding_basics_post"];
+        post: operations["trigger_morning_now_debug_morning_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/onboarding/complete": {
+    "/debug/evening": {
         parameters: {
             query?: never;
             header?: never;
@@ -836,20 +569,18 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Complete Onboarding
-         * @description Explicit "Finished" action from the onboarding chat step's UI — the
-         *     manual, user-triggered counterpart to the mark_onboarding_complete
-         *     agent tool (agent/tools/general.py), which sets the same flag when the
-         *     model itself decides the interview has covered enough.
+         * Trigger Evening Now
+         * @description Fires the evening message now: a real push, the daily commentary file
+         *     when that setting is on, and the nightly thread/keyword sweep.
          */
-        post: operations["complete_onboarding_onboarding_complete_post"];
+        post: operations["trigger_evening_now_debug_evening_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/onboarding/reset": {
+    "/debug/weekly-review": {
         parameters: {
             query?: never;
             header?: never;
@@ -859,21 +590,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Reset Onboarding
-         * @description Deletes About Me and restarts the onboarding wizard from the basics
-         *     form. Also clears the onboarding/profile_chat conversation threads,
-         *     since their history is all about a profile that no longer exists.
-         *     Scoped to About Me only — notes linked from it (individual people) and
-         *     Settings (location/timezone/schedule) are left untouched.
+         * Trigger Weekly Review Now
+         * @description Writes this week's review to Reviews/Weekly/ now and pushes it.
          */
-        post: operations["reset_onboarding_onboarding_reset_post"];
+        post: operations["trigger_weekly_review_now_debug_weekly_review_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/debug/digest": {
+    "/debug/monthly-review": {
         parameters: {
             query?: never;
             header?: never;
@@ -883,12 +610,30 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Trigger Digest Now
-         * @description Manually fires today's digest immediately, without waiting for the
-         *     20:45 schedule. Sends a real email on every call — remove or comment
-         *     this out once you're done testing the pipeline end to end.
+         * Trigger Monthly Review Now
+         * @description Writes the monthly review (month per monthly_review_timing) to Reviews/Monthly/ now and pushes it.
          */
-        post: operations["trigger_digest_now_debug_digest_post"];
+        post: operations["trigger_monthly_review_now_debug_monthly_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/debug/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trigger Test Email
+         * @description Sends a one-off test email to the email_to setting — confirms the SMTP_* env vars work.
+         */
+        post: operations["trigger_test_email_debug_email_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -940,28 +685,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/debug/reconcile-vault": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Trigger Reconcile Now
-         * @description Manually forces a full vault reconciliation sweep — useful for
-         *     confirming the notes index actually matches the vault on disk without
-         *     waiting for the live watcher or an app restart.
-         */
-        post: operations["trigger_reconcile_now_debug_reconcile_vault_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/debug/bedtime": {
         parameters: {
             query?: never;
@@ -1006,57 +729,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/debug/checkin/prompts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Checkin Prompts
-         * @description The full built-in prompt bank (agent/checkin_prompts.PROMPTS), for the
-         *     Testing page's personalization preview to build its "which prompt"
-         *     picker from, rather than duplicating the list in the frontend.
-         */
-        get: operations["list_checkin_prompts_debug_checkin_prompts_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/debug/checkin/preview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Preview Checkin Personalization
-         * @description Runs one check-in personalization level on demand and returns the raw
-         *     LLM output, for testing prompt quality without creating a real check-in
-         *     or waiting for the live none/select/light rotation to happen to land on
-         *     the level you want to inspect. "moderate" is only reachable here — see
-         *     jobs/checkin.py's PERSONALIZATION_LEVELS for why it's excluded from
-         *     live check-ins.
-         *
-         *     base_prompt (optional, ignored for "select") pins "light"/"moderate" to
-         *     a specific bank prompt instead of each grabbing their own random one,
-         *     so the two rewrites can be compared against the same input.
-         */
-        get: operations["preview_checkin_personalization_debug_checkin_preview_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/debug/notify": {
         parameters: {
             query?: never;
@@ -1073,27 +745,6 @@ export interface paths {
          *     a real job.
          */
         post: operations["trigger_test_notification_debug_notify_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/debug/email": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Trigger Test Email
-         * @description Sends a one-off test email — useful for confirming the SMTP_* env
-         *     vars are configured correctly without waiting for the daily digest.
-         */
-        post: operations["trigger_test_email_debug_email_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1229,11 +880,7 @@ export interface paths {
         };
         /**
          * Get Llm Provider
-         * @description Which provider/model/base_url get_chat_llm() actually builds right now,
-         *     derived from the live settings.llm_provider (switchable from the
-         *     Settings page's LLM Provider card, no restart needed) plus, when
-         *     that's "openrouter", the live settings.openrouter_chat_model (see the
-         *     OpenRouter Models admin page). No credentials included.
+         * @description Model and base_url get_chat_llm() builds right now. No credentials included.
          */
         get: operations["get_llm_provider_debug_llm_provider_get"];
         put?: never;
@@ -1280,36 +927,12 @@ export interface paths {
          * @description Full, unfiltered per-thread trace for the thread-debug dashboard page:
          *     the opening message, every turn including tool calls and their
          *     results (GET /threads/{id}/messages filters these out for chat
-         *     rendering — this doesn't), and what agent/graph.py's
-         *     search_conversations recalled/injected on each turn (recall_log.db,
-         *     see utils/recall_log_store.py) — the direct visibility this was built
-         *     for, into the cross-thread recall leak documented in UPCOMING.md.
+         *     rendering — this doesn't).
          *     Note: there's no reasoning trace here — the model never emits
          *     reasoning separate from tool calls or its final reply, so that part
          *     isn't satisfiable without a reasoning-capable model swap.
          */
         get: operations["debug_thread_debug_thread__thread_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/settings/model-assignments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Model Assignments
-         * @description Which model does tool calling and which writes replies, for every mode
-         *     (agent/model_assignments.py) — effective values plus the stored overrides.
-         */
-        get: operations["get_model_assignments_settings_model_assignments_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1332,31 +955,6 @@ export interface paths {
          *     kept or the writer model's text used, why, both texts, and latency.
          */
         get: operations["debug_writer_log_debug_writer_log_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/agent-activity/{thread_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Agent Activity
-         * @description Polled by a project page while a "Run as agent" turn is in flight —
-         *     {"steps": [...], "done": bool}, populated live by run_agent's
-         *     agent_run path (agent/runtime.py's _run_graph_streamed). Returns
-         *     done=True with no steps for any thread that isn't currently running
-         *     one, so polling a thread that already finished (or never started) is
-         *     always a safe no-op rather than an error.
-         */
-        get: operations["agent_activity_agent_activity__thread_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1542,33 +1140,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/checkin/{checkin_id}/rate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Rate Checkin
-         * @description Magic-link thumbs-up/down from the daily digest email (jobs/digest.py's
-         *     rating block). GET, not POST — a plain-text email link has no JS/form to
-         *     issue a POST. Same trust model as the other magic-link check-in routes
-         *     above (the id itself is the capability token), but scoped to
-         *     status == "answered" rather than "pending" — only a check-in the user
-         *     actually engaged with makes sense to rate. No expiry window: unlike the
-         *     pending-to-fired CHECKIN_EXPIRY clock, a digest email is a standing
-         *     record and a rating given days later is still real data.
-         */
-        get: operations["rate_checkin_checkin__checkin_id__rate_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/{full_path}": {
         parameters: {
             query?: never;
@@ -1590,57 +1161,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** ActivityLogEntry */
-        ActivityLogEntry: {
-            /** Id */
-            id: string;
-            /** Occurred At */
-            occurred_at: number;
-            /** Activity Type */
-            activity_type: string;
-            /** Subject */
-            subject: string;
-            /** Duration */
-            duration: string | null;
-            /** Mood Energy */
-            mood_energy: number | null;
-            /** Reflection */
-            reflection: string | null;
-            /** Created At */
-            created_at: number;
-        };
-        /** ActivityLogResponse */
-        ActivityLogResponse: {
-            /** Entries */
-            entries: components["schemas"]["ActivityLogEntry"][];
-        };
-        /** ActivityLogSummaryResponse */
-        ActivityLogSummaryResponse: {
-            /** Mood By Day */
-            mood_by_day: components["schemas"]["MoodByDay"][];
-            /** Duration By Type */
-            duration_by_type: components["schemas"]["DurationByType"][];
-        };
-        /** AgentActivityResponse */
-        AgentActivityResponse: {
-            /** Steps */
-            steps: components["schemas"]["AgentActivityStep"][];
-            /** Done */
-            done: boolean;
-        };
-        /** AgentActivityStep */
-        AgentActivityStep: {
-            /** Type */
-            type: string;
-            /** Tool */
-            tool?: string | null;
-            /** Args */
-            args?: {
-                [key: string]: unknown;
-            } | null;
-            /** Content */
-            content?: string | null;
-        };
         /** AlertSound */
         AlertSound: {
             /** Id */
@@ -1709,11 +1229,6 @@ export interface components {
             /** File */
             file: string;
         };
-        /** Body_upload_project_attachment_route_vault_projects__project__attachments_post */
-        Body_upload_project_attachment_route_vault_projects__project__attachments_post: {
-            /** File */
-            file: string;
-        };
         /** CheckinRecord */
         CheckinRecord: {
             /** Id */
@@ -1747,8 +1262,8 @@ export interface components {
             /** Checkins */
             checkins: components["schemas"]["CheckinRecord"][];
         };
-        /** DayPlanCreate */
-        DayPlanCreate: {
+        /** DayPlanRun */
+        DayPlanRun: {
             /** Date */
             date: string;
             /**
@@ -1768,47 +1283,10 @@ export interface components {
             /** End Time */
             end_time?: string | null;
         };
-        /** DayPlanDetail */
-        DayPlanDetail: {
-            /** Id */
-            id: string;
-            /** Date */
-            date: string;
-            /** Start Time */
-            start_time: string | null;
-            /** End Time */
-            end_time: string | null;
-            /** Notes */
-            notes: string | null;
-            /** Status */
-            status: string;
+        /** DayPlanRunResponse */
+        DayPlanRunResponse: {
             /** Reply */
-            reply?: string | null;
-            /** Trigger At */
-            trigger_at?: string | null;
-            /** Tasks */
-            tasks: components["schemas"]["TaskInput"][];
-            /** Fixed Blocks */
-            fixed_blocks: components["schemas"]["FixedBlockInput"][];
-        };
-        /** DayPlanResponse */
-        DayPlanResponse: {
-            /** Id */
-            id: string;
-            /** Date */
-            date: string;
-            /** Start Time */
-            start_time: string | null;
-            /** End Time */
-            end_time: string | null;
-            /** Notes */
-            notes: string | null;
-            /** Status */
-            status: string;
-            /** Reply */
-            reply?: string | null;
-            /** Trigger At */
-            trigger_at?: string | null;
+            reply: string;
         };
         /** DebugThreadEntry */
         DebugThreadEntry: {
@@ -1890,15 +1368,6 @@ export interface components {
             /** Reset Reason */
             reset_reason?: string | null;
         };
-        /** DurationByType */
-        DurationByType: {
-            /** Activity Type */
-            activity_type: string;
-            /** Total Minutes */
-            total_minutes: number;
-            /** Entry Count */
-            entry_count: number;
-        };
         /** FixedBlockInput */
         FixedBlockInput: {
             /** Name */
@@ -1912,75 +1381,6 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
-        };
-        /** LayaAnswerOption */
-        LayaAnswerOption: {
-            /** Name */
-            name: string;
-            /** Probability */
-            probability: number;
-        };
-        /** LayaCandidate */
-        LayaCandidate: {
-            /** Name */
-            name: string;
-            /** Description */
-            description?: string | null;
-        };
-        /** LayaPlaygroundRequest */
-        LayaPlaygroundRequest: {
-            /** Text */
-            text: string;
-            /**
-             * Question Type
-             * @enum {string}
-             */
-            question_type: "yes_no" | "choose_one" | "choose_multiple" | "scale" | "tool";
-            /** Instructions */
-            instructions?: string | null;
-            /** Candidates */
-            candidates?: components["schemas"]["LayaCandidate"][] | null;
-            /** Yes Label */
-            yes_label?: string | null;
-            /** No Label */
-            no_label?: string | null;
-            /**
-             * Multi Threshold
-             * @default 0.5
-             */
-            multi_threshold: number;
-        };
-        /** LayaPlaygroundResponse */
-        LayaPlaygroundResponse: {
-            /** Question Type */
-            question_type: string;
-            /** Choice */
-            choice?: string | null;
-            /** Yes Probability */
-            yes_probability?: number | null;
-            /** Score */
-            score?: number | null;
-            /** Levels */
-            levels?: string[] | null;
-            /** Selected */
-            selected?: string[] | null;
-            /** Options */
-            options?: components["schemas"]["LayaAnswerOption"][] | null;
-            /** Backend */
-            backend: string;
-            /** Model */
-            model: string | null;
-            /** Latency Ms */
-            latency_ms: number;
-            /** Route */
-            route: string[];
-        };
-        /** LayaToolCandidate */
-        LayaToolCandidate: {
-            /** Name */
-            name: string;
-            /** Description */
-            description: string;
         };
         /** LlmProviderResponse */
         LlmProviderResponse: {
@@ -2008,8 +1408,6 @@ export interface components {
             models: components["schemas"]["LmStudioModel"][];
             /** Management Configured */
             management_configured: boolean;
-            /** Active */
-            active: boolean;
             /** Configured Model */
             configured_model: string | null;
         };
@@ -2018,236 +1416,12 @@ export interface components {
             /** Password */
             password: string;
         };
-        /** ModelAssignmentRow */
-        ModelAssignmentRow: {
-            /** Key */
-            key: string;
-            /** Label */
-            label: string;
-            /** Tool Calls */
-            tool_calls: boolean;
-            /** Reply Rule */
-            reply_rule: string;
-            /** Tool Model */
-            tool_model: string | null;
-            /** Tool Override */
-            tool_override: string;
-            /** Writer Model */
-            writer_model: string | null;
-            /** Writer Override */
-            writer_override: string;
-            /** Reply Model */
-            reply_model: string;
-        };
-        /** ModelAssignmentsResponse */
-        ModelAssignmentsResponse: {
-            /** Provider */
-            provider: string;
-            /** Split Applies */
-            split_applies: boolean;
-            /** Default Tool Model */
-            default_tool_model: string;
-            /** Default Writer Model */
-            default_writer_model: string;
-            /** No Writer Value */
-            no_writer_value: string;
-            /** Rows */
-            rows: components["schemas"]["ModelAssignmentRow"][];
-        };
-        /** MoodByDay */
-        MoodByDay: {
-            /** Date */
-            date: string;
-            /** Avg Mood */
-            avg_mood: number;
-            /** Count */
-            count: number;
-        };
         /** NewThreadResponse */
         NewThreadResponse: {
             /** Thread Id */
             thread_id: string;
             /** Keyword */
             keyword: string;
-        };
-        /** NoteDetail */
-        NoteDetail: {
-            /** Id */
-            id: string;
-            /** Title */
-            title: string;
-            /** Tags */
-            tags: string[];
-            /** Aliases */
-            aliases: string[];
-            /** Project */
-            project: string | null;
-            /** Source */
-            source: string;
-            /** Created */
-            created: string;
-            /** Updated */
-            updated: string;
-            /** Body */
-            body: string;
-        };
-        /** NoteSummary */
-        NoteSummary: {
-            /** Id */
-            id: string;
-            /** Title */
-            title: string;
-            /** Tags */
-            tags: string[];
-            /** Project */
-            project: string | null;
-            /** Source */
-            source: string;
-            /** Created */
-            created: string;
-            /** Updated */
-            updated: string;
-            /** Excerpt */
-            excerpt: string;
-        };
-        /** OnboardingBasicsRequest */
-        OnboardingBasicsRequest: {
-            /** Name */
-            name?: string | null;
-            /** Birthday */
-            birthday?: string | null;
-            /** Location */
-            location?: string | null;
-            /** Occupation */
-            occupation?: string | null;
-            /** Current Job */
-            current_job?: string | null;
-            /**
-             * People
-             * @default []
-             */
-            people: components["schemas"]["OnboardingPerson"][];
-            /** Preferences */
-            preferences?: string | null;
-            /** Routine */
-            routine?: string | null;
-            /** Interests */
-            interests?: string | null;
-            /** Values */
-            values?: string | null;
-            /** Health Goals */
-            health_goals?: string | null;
-            /** Important Dates */
-            important_dates?: string | null;
-            /** Wake Time */
-            wake_time?: string | null;
-            /** Bedtime */
-            bedtime?: string | null;
-        };
-        /** OnboardingBasicsResponse */
-        OnboardingBasicsResponse: {
-            /** Learning Mode */
-            learning_mode: boolean;
-            /** Default Location */
-            default_location: string;
-            /** Timezone */
-            timezone: string;
-            /** Digest Time */
-            digest_time: string;
-            /** Bedtime */
-            bedtime: string;
-            /** Calendar Sync Interval Minutes */
-            calendar_sync_interval_minutes: number;
-            /** Wake Time */
-            wake_time: string;
-            /** Latest Checkin Time */
-            latest_checkin_time: string;
-            /** Device Poll Interval Seconds */
-            device_poll_interval_seconds: number;
-            /** Digest Email To */
-            digest_email_to: string;
-            /** Public Base Url */
-            public_base_url: string;
-            /** Gotify Url */
-            gotify_url: string;
-            /** Gotify Token Set */
-            gotify_token_set: boolean;
-            /** Mcp Servers */
-            mcp_servers: string;
-            /** Recall Max Distance */
-            recall_max_distance: number;
-            /** Recall Recency Days */
-            recall_recency_days: number;
-            /** Max History Tokens */
-            max_history_tokens: number;
-            /** Planning Template Note Id */
-            planning_template_note_id: string;
-            /** Chime Alert Sound Id */
-            chime_alert_sound_id: string;
-            /** Llm Provider */
-            llm_provider: string;
-            /** Openrouter Configured */
-            openrouter_configured: boolean;
-            /** Lmstudio Writer Model */
-            lmstudio_writer_model: string;
-            /** Tool Router Enabled */
-            tool_router_enabled: boolean;
-            /** Tool Suggestion Enabled */
-            tool_suggestion_enabled: boolean;
-            /** Onboarding Complete */
-            onboarding_complete: boolean;
-            /** Basics Complete */
-            basics_complete: boolean;
-            /** Location Resolved */
-            location_resolved: boolean;
-        };
-        /** OnboardingPerson */
-        OnboardingPerson: {
-            /** Name */
-            name: string;
-            /** Relation */
-            relation?: string | null;
-        };
-        /** OpenRouterModel */
-        OpenRouterModel: {
-            /** Id */
-            id: string;
-            /** Name */
-            name: string;
-            /** Context Length */
-            context_length: number | null;
-            /** Prompt Price Per Million */
-            prompt_price_per_million: number | null;
-            /** Completion Price Per Million */
-            completion_price_per_million: number | null;
-            /** Is Free */
-            is_free: boolean;
-        };
-        /** OpenRouterModelsResponse */
-        OpenRouterModelsResponse: {
-            /** Models */
-            models: components["schemas"]["OpenRouterModel"][];
-            /** Active */
-            active: boolean;
-            /** Configured Model */
-            configured_model: string | null;
-        };
-        /** ProjectAttachment */
-        ProjectAttachment: {
-            /** Filename */
-            filename: string;
-            /** Url */
-            url: string;
-        };
-        /** ProjectAttachmentsResponse */
-        ProjectAttachmentsResponse: {
-            /** Attachments */
-            attachments: components["schemas"]["ProjectAttachment"][];
-        };
-        /** ProjectsResponse */
-        ProjectsResponse: {
-            /** Projects */
-            projects: string[];
         };
         /** ReflectionHistoryItem */
         ReflectionHistoryItem: {
@@ -2326,14 +1500,26 @@ export interface components {
         };
         /** SettingsResponse */
         SettingsResponse: {
-            /** Learning Mode */
-            learning_mode: boolean;
             /** Default Location */
             default_location: string;
             /** Timezone */
             timezone: string;
-            /** Digest Time */
-            digest_time: string;
+            /** Evening Time */
+            evening_time: string;
+            /** Weekly Review Time */
+            weekly_review_time: string;
+            /** Monthly Review Timing */
+            monthly_review_timing: string;
+            /** Monthly Review Evening Time */
+            monthly_review_evening_time: string;
+            /** Monthly Review Morning Time */
+            monthly_review_morning_time: string;
+            /** Email To */
+            email_to: string;
+            /** Daily Commentary */
+            daily_commentary: boolean;
+            /** Weather Enabled */
+            weather_enabled: boolean;
             /** Bedtime */
             bedtime: string;
             /** Calendar Sync Interval Minutes */
@@ -2344,8 +1530,6 @@ export interface components {
             latest_checkin_time: string;
             /** Device Poll Interval Seconds */
             device_poll_interval_seconds: number;
-            /** Digest Email To */
-            digest_email_to: string;
             /** Public Base Url */
             public_base_url: string;
             /** Gotify Url */
@@ -2354,41 +1538,37 @@ export interface components {
             gotify_token_set: boolean;
             /** Mcp Servers */
             mcp_servers: string;
-            /** Recall Max Distance */
-            recall_max_distance: number;
-            /** Recall Recency Days */
-            recall_recency_days: number;
             /** Max History Tokens */
             max_history_tokens: number;
             /** Planning Template Note Id */
             planning_template_note_id: string;
             /** Chime Alert Sound Id */
             chime_alert_sound_id: string;
-            /** Llm Provider */
-            llm_provider: string;
-            /** Openrouter Configured */
-            openrouter_configured: boolean;
             /** Lmstudio Writer Model */
             lmstudio_writer_model: string;
-            /** Tool Router Enabled */
-            tool_router_enabled: boolean;
-            /** Tool Suggestion Enabled */
-            tool_suggestion_enabled: boolean;
-            /** Onboarding Complete */
-            onboarding_complete: boolean;
-            /** Basics Complete */
-            basics_complete: boolean;
         };
         /** SettingsUpdate */
         SettingsUpdate: {
-            /** Learning Mode */
-            learning_mode?: boolean | null;
             /** Default Location */
             default_location?: string | null;
             /** Timezone */
             timezone?: string | null;
-            /** Digest Time */
-            digest_time?: string | null;
+            /** Evening Time */
+            evening_time?: string | null;
+            /** Weekly Review Time */
+            weekly_review_time?: string | null;
+            /** Monthly Review Timing */
+            monthly_review_timing?: string | null;
+            /** Monthly Review Evening Time */
+            monthly_review_evening_time?: string | null;
+            /** Monthly Review Morning Time */
+            monthly_review_morning_time?: string | null;
+            /** Email To */
+            email_to?: string | null;
+            /** Daily Commentary */
+            daily_commentary?: boolean | null;
+            /** Weather Enabled */
+            weather_enabled?: boolean | null;
             /** Bedtime */
             bedtime?: string | null;
             /** Calendar Sync Interval Minutes */
@@ -2399,8 +1579,6 @@ export interface components {
             latest_checkin_time?: string | null;
             /** Device Poll Interval Seconds */
             device_poll_interval_seconds?: number | null;
-            /** Digest Email To */
-            digest_email_to?: string | null;
             /** Public Base Url */
             public_base_url?: string | null;
             /** Gotify Url */
@@ -2409,34 +1587,16 @@ export interface components {
             gotify_token?: string | null;
             /** Mcp Servers */
             mcp_servers?: string | null;
-            /** Recall Max Distance */
-            recall_max_distance?: number | null;
-            /** Recall Recency Days */
-            recall_recency_days?: number | null;
             /** Max History Tokens */
             max_history_tokens?: number | null;
             /** Planning Template Note Id */
             planning_template_note_id?: string | null;
             /** Chime Alert Sound Id */
             chime_alert_sound_id?: string | null;
-            /** Llm Provider */
-            llm_provider?: string | null;
             /** Lmstudio Chat Model */
             lmstudio_chat_model?: string | null;
             /** Lmstudio Writer Model */
             lmstudio_writer_model?: string | null;
-            /** Model Assignments */
-            model_assignments?: {
-                [key: string]: {
-                    [key: string]: string;
-                };
-            } | null;
-            /** Openrouter Chat Model */
-            openrouter_chat_model?: string | null;
-            /** Tool Router Enabled */
-            tool_router_enabled?: boolean | null;
-            /** Tool Suggestion Enabled */
-            tool_suggestion_enabled?: boolean | null;
         };
         /** TTSRequest */
         TTSRequest: {
@@ -2471,6 +1631,8 @@ export interface components {
             default_minutes: number;
             /** Group Name */
             group_name?: string | null;
+            /** Order Hint */
+            order_hint?: string | null;
         };
         /** TaskLibraryItem */
         TaskLibraryItem: {
@@ -2482,6 +1644,8 @@ export interface components {
             default_minutes: number;
             /** Group Name */
             group_name?: string | null;
+            /** Order Hint */
+            order_hint?: string | null;
         };
         /** TextRequest */
         TextRequest: {
@@ -2496,11 +1660,6 @@ export interface components {
             one_shot: boolean;
             /** Mode */
             mode?: string | null;
-            /**
-             * Agent Run
-             * @default false
-             */
-            agent_run: boolean;
         };
         /** ThreadMessage */
         ThreadMessage: {
@@ -2549,11 +1708,6 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
-        };
-        /** VaultNotesResponse */
-        VaultNotesResponse: {
-            /** Notes */
-            notes: components["schemas"]["NoteSummary"][];
         };
     };
     responses: never;
@@ -3268,38 +2422,7 @@ export interface operations {
             };
         };
     };
-    list_day_plans_day_plans_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DayPlanResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_day_plan_day_plans_post: {
+    run_day_plan_day_plans_run_post: {
         parameters: {
             query?: never;
             header?: {
@@ -3310,7 +2433,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["DayPlanCreate"];
+                "application/json": components["schemas"]["DayPlanRun"];
             };
         };
         responses: {
@@ -3320,110 +2443,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DayPlanResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_day_plan_day_plans__plan_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path: {
-                plan_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DayPlanDetail"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_day_plan_day_plans__plan_id__put: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path: {
-                plan_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DayPlanCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DayPlanResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    cancel_day_plan_day_plans__plan_id__cancel_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path: {
-                plan_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DayPlanResponse"];
+                    "application/json": components["schemas"]["DayPlanRunResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3560,72 +2580,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_laya_tool_candidates_laya_playground_tools_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LayaToolCandidate"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    ask_laya_laya_playground_ask_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LayaPlaygroundRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LayaPlaygroundResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3919,272 +2873,6 @@ export interface operations {
             };
         };
     };
-    list_activity_log_activity_log_get: {
-        parameters: {
-            query?: {
-                days?: number;
-                activity_type?: string | null;
-            };
-            header?: {
-                auth?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ActivityLogResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    activity_log_summary_activity_log_summary_get: {
-        parameters: {
-            query?: {
-                days?: number;
-            };
-            header?: {
-                auth?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ActivityLogSummaryResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_vault_notes_route_vault_notes_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VaultNotesResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_projects_route_projects_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_vault_note_route_vault_notes__note_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path: {
-                note_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NoteDetail"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_project_attachments_route_vault_projects__project__attachments_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path: {
-                project: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectAttachmentsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    upload_project_attachment_route_vault_projects__project__attachments_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path: {
-                project: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["Body_upload_project_attachment_route_vault_projects__project__attachments_post"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectAttachment"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_project_attachment_route_vault_projects__project__attachments__filename__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path: {
-                project: string;
-                filename: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     health_health_get: {
         parameters: {
             query?: never;
@@ -4271,37 +2959,6 @@ export interface operations {
             };
         };
     };
-    get_openrouter_models_debug_openrouter_models_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OpenRouterModelsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_lmstudio_models_debug_lmstudio_models_get: {
         parameters: {
             query?: never;
@@ -4333,42 +2990,7 @@ export interface operations {
             };
         };
     };
-    submit_onboarding_basics_onboarding_basics_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OnboardingBasicsRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OnboardingBasicsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    complete_onboarding_onboarding_complete_post: {
+    trigger_morning_now_debug_morning_post: {
         parameters: {
             query?: never;
             header?: {
@@ -4385,7 +3007,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SettingsResponse"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -4399,7 +3021,7 @@ export interface operations {
             };
         };
     };
-    reset_onboarding_onboarding_reset_post: {
+    trigger_evening_now_debug_evening_post: {
         parameters: {
             query?: never;
             header?: {
@@ -4416,7 +3038,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SettingsResponse"];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -4430,7 +3052,69 @@ export interface operations {
             };
         };
     };
-    trigger_digest_now_debug_digest_post: {
+    trigger_weekly_review_now_debug_weekly_review_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trigger_monthly_review_now_debug_monthly_review_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trigger_test_email_debug_email_post: {
         parameters: {
             query?: never;
             header?: {
@@ -4525,37 +3209,6 @@ export interface operations {
             };
         };
     };
-    trigger_reconcile_now_debug_reconcile_vault_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     trigger_bedtime_reminder_now_debug_bedtime_post: {
         parameters: {
             query?: never;
@@ -4618,104 +3271,7 @@ export interface operations {
             };
         };
     };
-    list_checkin_prompts_debug_checkin_prompts_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    preview_checkin_personalization_debug_checkin_preview_get: {
-        parameters: {
-            query: {
-                category: "low" | "medium" | "high";
-                level: "select" | "light" | "moderate";
-                base_prompt?: string | null;
-            };
-            header?: {
-                auth?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     trigger_test_notification_debug_notify_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    trigger_test_email_debug_email_post: {
         parameters: {
             query?: never;
             header?: {
@@ -5038,37 +3594,6 @@ export interface operations {
             };
         };
     };
-    get_model_assignments_settings_model_assignments_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ModelAssignmentsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     debug_writer_log_debug_writer_log_get: {
         parameters: {
             query?: {
@@ -5090,39 +3615,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    agent_activity_agent_activity__thread_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                auth?: string | null;
-            };
-            path: {
-                thread_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentActivityResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5346,39 +3838,6 @@ export interface operations {
                 "application/json": components["schemas"]["CheckinReplyRequest"];
             };
         };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    rate_checkin_checkin__checkin_id__rate_get: {
-        parameters: {
-            query: {
-                helpful: "yes" | "no";
-            };
-            header?: never;
-            path: {
-                checkin_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
