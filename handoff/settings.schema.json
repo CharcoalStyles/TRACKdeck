@@ -1,0 +1,123 @@
+{
+  "properties": {
+    "default_location": {
+      "title": "Default Location",
+      "type": "string"
+    },
+    "timezone": {
+      "title": "Timezone",
+      "type": "string"
+    },
+    "evening_time": {
+      "title": "Evening Time",
+      "type": "string"
+    },
+    "weekly_review_time": {
+      "title": "Weekly Review Time",
+      "type": "string"
+    },
+    "monthly_review_timing": {
+      "title": "Monthly Review Timing",
+      "type": "string"
+    },
+    "monthly_review_evening_time": {
+      "title": "Monthly Review Evening Time",
+      "type": "string"
+    },
+    "monthly_review_morning_time": {
+      "title": "Monthly Review Morning Time",
+      "type": "string"
+    },
+    "email_to": {
+      "title": "Email To",
+      "type": "string"
+    },
+    "daily_commentary": {
+      "title": "Daily Commentary",
+      "type": "boolean"
+    },
+    "weather_enabled": {
+      "title": "Weather Enabled",
+      "type": "boolean"
+    },
+    "bedtime": {
+      "title": "Bedtime",
+      "type": "string"
+    },
+    "calendar_sync_interval_minutes": {
+      "title": "Calendar Sync Interval Minutes",
+      "type": "integer"
+    },
+    "wake_time": {
+      "title": "Wake Time",
+      "type": "string"
+    },
+    "latest_checkin_time": {
+      "title": "Latest Checkin Time",
+      "type": "string"
+    },
+    "device_poll_interval_seconds": {
+      "title": "Device Poll Interval Seconds",
+      "type": "integer"
+    },
+    "public_base_url": {
+      "title": "Public Base Url",
+      "type": "string"
+    },
+    "gotify_url": {
+      "title": "Gotify Url",
+      "type": "string"
+    },
+    "gotify_token_set": {
+      "title": "Gotify Token Set",
+      "type": "boolean"
+    },
+    "mcp_servers": {
+      "title": "Mcp Servers",
+      "type": "string"
+    },
+    "max_history_tokens": {
+      "title": "Max History Tokens",
+      "type": "integer"
+    },
+    "planning_template_note_id": {
+      "title": "Planning Template Note Id",
+      "type": "string"
+    },
+    "chime_alert_sound_id": {
+      "title": "Chime Alert Sound Id",
+      "type": "string"
+    },
+    "lmstudio_writer_model": {
+      "title": "Lmstudio Writer Model",
+      "type": "string"
+    }
+  },
+  "required": [
+    "default_location",
+    "timezone",
+    "evening_time",
+    "weekly_review_time",
+    "monthly_review_timing",
+    "monthly_review_evening_time",
+    "monthly_review_morning_time",
+    "email_to",
+    "daily_commentary",
+    "weather_enabled",
+    "bedtime",
+    "calendar_sync_interval_minutes",
+    "wake_time",
+    "latest_checkin_time",
+    "device_poll_interval_seconds",
+    "public_base_url",
+    "gotify_url",
+    "gotify_token_set",
+    "mcp_servers",
+    "max_history_tokens",
+    "planning_template_note_id",
+    "chime_alert_sound_id",
+    "lmstudio_writer_model"
+  ],
+  "title": "SettingsResponse",
+  "type": "object"
+}

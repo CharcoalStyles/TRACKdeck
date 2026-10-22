@@ -20,3 +20,11 @@ def test_local_registry_is_exactly_the_v2_tools():
 def test_mode_tool_sets_only_name_registered_tools():
     for names in graph_mod.MODE_TOOL_NAMES.values():
         assert set(names) <= V2_LOCAL_TOOLS
+
+
+def test_mcp_tools_are_filtered_to_search_web():
+    from types import SimpleNamespace as T
+    from agent.tools.all_tools import filter_mcp_tools
+
+    loaded = [T(name=n) for n in ("search_web", "search_images", "search_videos", "search_news", "fetch_url")]
+    assert [t.name for t in filter_mcp_tools(loaded)] == ["search_web"]

@@ -1,0 +1,145 @@
+{
+  "name": "search_web",
+  "description": "Search the web using SearxNG.",
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Search query string"
+      },
+      "language": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Language code for results (e.g., 'en', 'en-US', 'fr', 'de').\n     Use None for no language preference."
+      },
+      "time_range": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Time range filter ('day', 'week', 'month', 'year').\n       Use None for no time filtering."
+      },
+      "safesearch": {
+        "default": false,
+        "type": "boolean",
+        "description": "Safe search filtering (True to enable, False to disable)"
+      },
+      "max_results": {
+        "default": 10,
+        "type": "integer",
+        "description": "Maximum number of results to return (default: 10)"
+      }
+    },
+    "required": [
+      "query"
+    ],
+    "type": "object"
+  },
+  "outputSchema": {
+    "description": "Base model for web search responses.",
+    "properties": {
+      "query": {
+        "description": "The search query that was executed",
+        "type": "string"
+      },
+      "total_results": {
+        "description": "Total number of results found",
+        "type": "integer"
+      },
+      "results": {
+        "description": "List of web search results",
+        "items": {
+          "description": "Model for web search results.",
+          "properties": {
+            "title": {
+              "description": "The title of the search result",
+              "type": "string"
+            },
+            "url": {
+              "description": "The URL of the search result",
+              "type": "string"
+            },
+            "content": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "The content/description of the result"
+            },
+            "engine": {
+              "description": "The search engine that provided this result",
+              "type": "string"
+            },
+            "score": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "The relevance score"
+            },
+            "published_date": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Publication date if available"
+            }
+          },
+          "required": [
+            "title",
+            "url",
+            "engine"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "error": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "description": "Error message if search failed"
+      }
+    },
+    "required": [
+      "query",
+      "total_results",
+      "results"
+    ],
+    "type": "object"
+  }
+}

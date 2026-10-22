@@ -3,12 +3,6 @@
 Ideas and follow-ups that came up during other work, not yet scheduled. The v1 backlog (profile
 system, vault watcher, digest-era items) was retired with v2; what remains is what still applies.
 
-- **Check whether the model ever calls `fetch_url`.** The MCP SearXNG server exposes
-  `search_web`, `search_images`, `search_videos`, `search_news` and `fetch_url`. The v2 tool set is
-  `search_web` plus the local `fetch_webpage` (trafilatura, real content extraction), but
-  `get_mcp_tools()` has no way to exclude a single MCP tool, so `fetch_url` and the others may still
-  be bound. Use the event log to see whether any turn calls them; if so, add tool-level filtering
-  or switch to a search-only MCP server.
 - **Per-alert-type sound control and a wake-up alert.** The alert-sound library is flat: the device
   picks any sound for any nudge. Wanted: an audio on/off toggle and a curated subset per alert type
   (reminders, bedtime, check-ins), carried in the `/device/sync` payload, plus a wake-up alert on

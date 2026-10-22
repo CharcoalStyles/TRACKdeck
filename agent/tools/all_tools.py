@@ -68,6 +68,14 @@ def get_tools():
     return tools
 
 
+# searxng-mcp-server also exposes search_images/videos/news and fetch_url; v2 binds only search_web.
+MCP_TOOL_ALLOWLIST = {"search_web"}
+
+
+def filter_mcp_tools(tools: list) -> list:
+    return [t for t in tools if t.name in MCP_TOOL_ALLOWLIST]
+
+
 async def get_mcp_tools() -> list:
     """Fetches tools from every enabled server in settings.mcp_servers
     (see agent/settings.py). Each server is loaded independently — one
@@ -84,7 +92,8 @@ async def get_mcp_tools() -> list:
     tools = []
     for name in configs:
         try:
-            tools.extend(await client.get_tools(server_name=name))
+            loaded = await client.get_tools(server_name=name)
+            tools.extend(filter_mcp_tools(loaded))
         except Exception:
             logger.exception("Could not load tools from MCP server '%s' — skipping it.", name)
     return tools
