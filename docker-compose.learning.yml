@@ -30,7 +30,6 @@ services:
       - ./data-learning/alert_sounds.db:/app/data/alert_sounds.db
       - ./data-learning/alert_sounds:/app/data/alert_sounds
       - ./data-learning/device_errors.db:/app/data/device_errors.db
-      - ./data-learning/recall_log.db:/app/data/recall_log.db
       - ./data-learning/device_state.db:/app/data/device_state.db
       - ./data-learning/activity_log.db:/app/data/activity_log.db
       - ./data-learning/onboarding_complete.flag:/app/data/onboarding_complete.flag

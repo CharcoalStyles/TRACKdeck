@@ -47,7 +47,6 @@ services:
       - ./data/alert_sounds.db:/app/data/alert_sounds.db
       - ./data/alert_sounds:/app/data/alert_sounds
       - ./data/device_errors.db:/app/data/device_errors.db
-      - ./data/recall_log.db:/app/data/recall_log.db
       - ./data/device_state.db:/app/data/device_state.db
       # Split-model decision log and planning stores: without these a
       # rebuild silently erases the evidence for why a turn went the way

@@ -7,10 +7,8 @@ LLM connection is configured via environment variables.
 
 import asyncio
 import json
-import re
 from datetime import datetime
 import logging
-import time
 
 from langchain_core.messages import SystemMessage, trim_messages
 from langchain_core.messages.utils import count_tokens_approximately
@@ -23,14 +21,12 @@ from langchain_core.messages import AIMessage, ToolMessage
 
 from agent import model_assignments, writer
 from agent.date_guard import clean_search_queries, fix_relative_dates
-from agent.memory import MemoryStore
 from agent.settings import settings
 from agent.tools.all_tools import get_tools
 from utils.datetime import format_now_human
 from utils.llm_client import get_chat_llm
 from utils.lmstudio_client import get_history_budget_tokens
 from utils.openrouter_client import get_history_budget_tokens as get_openrouter_history_budget_tokens
-from utils.recall_log_store import log_recall
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +104,7 @@ _tools_token_estimate: int = 0
 
 def get_fixed_overhead_tokens() -> int:
     """Base system prompt + bound tool schemas, no mode addendum/datetime
-    block/memory block (those vary per turn and aren't known outside
+    block (those vary per turn and aren't known outside
     call_llm) — a lower-bound
     estimate of the fixed cost every turn pays, for readouts like
     agent/runtime.py's get_thread_size that need a number before any request
@@ -169,14 +165,6 @@ MODE_TOOL_NAMES = {
 }
 
 
-_SCHEDULING_RE = re.compile(
-    r"\b(remind\w*|timer|events?|calendar|schedul\w*|appointments?|meetings?|book|cancel|move|add|delete|"
-    r"tonight|today|tomorrow|yesterday|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b"
-    r"|\b\d{1,2}[:.]\d{2}\b|\b\d{1,2}\s?[ap]\.?m\b",
-    re.IGNORECASE,
-)
-
-
 # A lookup and a write in one batch run together, so the write can't use what
 # the lookup found. The 1.2B tool model does this; the write waits a step.
 LOOKUP_TOOLS = {"search_web", "search_news", "search_images", "search_videos", "fetch_url", "fetch_webpage"}
@@ -206,15 +194,7 @@ def _held_back_message(call: dict) -> ToolMessage:
     )
 
 
-def skip_recall(message: str) -> bool:
-    """A request that names a day or time, or is about the calendar/reminders,
-    gets no cross-thread recall: old turns carry other dates and times, and
-    the small tool model copies them into new events instead of resolving
-    "tonight" against the date it was given."""
-    return bool(_SCHEDULING_RE.search(str(message or "")))
-
-
-def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None):
+def build_graph(checkpointer, mcp_tools: list | None = None):
     tools = get_tools()
     if mcp_tools:
         local_names = {t.name for t in tools}
@@ -299,31 +279,6 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
         one_shot = (config or {}).get("configurable", {}).get("one_shot", False)
         mode = (config or {}).get("configurable", {}).get("mode")
 
-        memory_block = ""
-        # Never recall from the thread currently running — its own history is
-        # already in state["messages"], so recalling it here would just be a
-        # redundant duplicate.
-        exclude_thread_ids = {thread_id} if thread_id else set()
-        min_timestamp = int(time.time()) - settings.recall_recency_days * 86400
-
-        # MemoryStore/Chroma has no async client, so this still blocks — but
-        # to_thread keeps it off the event loop instead of freezing every
-        # other concurrent request for the duration of the search.
-        recalled = [] if skip_recall(last_user_msg) else await asyncio.to_thread(
-            memory.search_conversations,
-            last_user_msg,
-            n_results=3,
-            exclude_thread_ids=exclude_thread_ids,
-            max_distance=settings.recall_max_distance,
-            min_timestamp=min_timestamp,
-        )
-        if recalled:
-            memory_block = "\n\nRELEVANT PAST CONTEXT:\n" + "\n---\n".join(
-                r["document"] for r in recalled
-            )
-        if thread_id:
-            await asyncio.to_thread(log_recall, thread_id, last_user_msg, recalled)
-
         addendum = ONE_SHOT_ADDENDUM if one_shot else ""
         if mode == "day_planning":
             addendum += DAY_PLANNING_ADDENDUM
@@ -333,14 +288,13 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
         # keys off this local rather than a value frozen at graph-build time.
         provider = settings.llm_provider
 
-        # Computed fresh every turn, same reasoning as memory_block above —
-        # local models were unreliable calling get_current_datetime
+        # Computed fresh every turn — local models were unreliable calling get_current_datetime
         # themselves for relative-date grounding (see SYSTEM_PROMPT's "Date
         # and Time Grounding" section), so the real value is just always
         # present instead of depending on a tool call actually happening.
         datetime_block = f"\n\nCURRENT DATE AND TIME: {format_now_human(settings.zoneinfo())}"
 
-        system = SystemMessage(content=SYSTEM_PROMPT + addendum + datetime_block + memory_block)
+        system = SystemMessage(content=SYSTEM_PROMPT + addendum + datetime_block)
         # A fixed-id thread (e.g. "day_planning:<date>") reuses the same
         # thread_id across visits and is never swept, so unlike normal
         # threads its history can grow until it exceeds whatever context

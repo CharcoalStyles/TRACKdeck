@@ -7,12 +7,6 @@ import Card from '../components/Card'
 // (optional fields vary by message type) — typed locally here rather
 // than via a backend response_model, matching the plan's call to leave
 // debug endpoints as light casts rather than fully modeling every shape.
-interface RecallMatch {
-  distance: number
-  thread_id: string
-  timestamp: number | null
-  document: string
-}
 interface ToolCall {
   name: string
   args: Record<string, unknown>
@@ -22,8 +16,6 @@ interface Turn {
   content: string | null
   tool_calls?: ToolCall[]
   tool_name?: string | null
-  recall_query?: string
-  recalled?: RecallMatch[]
 }
 interface ThreadDebugData {
   thread_id: string
@@ -32,11 +24,6 @@ interface ThreadDebugData {
 }
 
 const ROLE_LABEL: Record<string, string> = { human: 'User', ai: 'Assistant', tool: 'Tool result' }
-
-function formatTime(epochSeconds: number | null) {
-  if (epochSeconds == null) return '—'
-  return new Date(epochSeconds * 1000).toLocaleString()
-}
 
 export default function ThreadDebugPage() {
   const [selectedThread, setSelectedThread] = useState('')
@@ -73,8 +60,7 @@ export default function ThreadDebugPage() {
         <p className="mb-3 text-sm text-text-muted">
           Full trace for one thread, straight from memory.db's checkpoint — including threads
           swept from the sidebar by the nightly digest, or from before the last restart. Shows
-          every turn (tool calls and their results included, unlike the Chat page), with each
-          assistant reply annotated by what cross-thread recall actually pulled in for it.
+          every turn (tool calls and their results included, unlike the Chat page).
           There's no reasoning trace — the model never emits reasoning separate from tool calls
           or its final reply.
         </p>
@@ -131,28 +117,6 @@ export default function ThreadDebugPage() {
                   {`${call.name}(${JSON.stringify(call.args, null, 2)})`}
                 </pre>
               ))}
-              {turn.recalled !== undefined && (
-                <>
-                  <p className="mb-1 mt-3 text-xs font-semibold text-text-muted">
-                    Cross-thread recall for this turn:
-                  </p>
-                  {turn.recalled.length === 0 ? (
-                    <p className="text-sm text-text-muted">
-                      Nothing recalled — no match cleared the distance/recency/thread-exclusion
-                      filters.
-                    </p>
-                  ) : (
-                    turn.recalled.map((match, k) => (
-                      <pre
-                        key={k}
-                        className="mt-2 whitespace-pre-wrap break-words rounded-lg border border-[#2a2a2a] bg-header p-3 text-sm"
-                      >
-                        {`distance=${match.distance.toFixed(3)}  thread=${match.thread_id}  ${formatTime(match.timestamp)}\n${match.document}`}
-                      </pre>
-                    ))
-                  )}
-                </>
-              )}
             </Card>
           ))}
         </>

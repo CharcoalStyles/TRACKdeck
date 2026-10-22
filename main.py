@@ -92,8 +92,6 @@ from agent.settings import (
     is_valid_llm_provider,
     is_valid_poll_interval_seconds,
     is_valid_max_history_tokens,
-    is_valid_recall_max_distance,
-    is_valid_recall_recency_days,
     is_valid_sync_interval_minutes,
     is_valid_timezone,
     parse_mcp_servers,
@@ -118,7 +116,6 @@ from utils import (
     day_plans_store,
     device_errors_store,
     device_state,
-    recall_log_store,
     reminders_store,
     settings_store,
     task_library_store,
@@ -194,7 +191,7 @@ async def lifespan(app: FastAPI):
         logger.info("Loaded %d tool(s) from MCP servers: %s", len(mcp_tools), [t.name for t in mcp_tools])
 
     async with AsyncSqliteSaver.from_conn_string("data/memory.db") as checkpointer:
-        app_state.graph = build_graph(checkpointer, app_state.memory, mcp_tools=mcp_tools)
+        app_state.graph = build_graph(checkpointer, mcp_tools=mcp_tools)
 
         # Dashboard sidebar (GET /threads) is sourced from app_state.threads/
         # keywords, which are in-process dicts wiped by every restart even
@@ -238,7 +235,6 @@ async def lifespan(app: FastAPI):
         await asyncio.to_thread(device_state.init_db)
         await asyncio.to_thread(alert_sounds_store.init_db)
         await asyncio.to_thread(device_errors_store.init_db)
-        await asyncio.to_thread(recall_log_store.init_db)
         await asyncio.to_thread(writer_log.init_db)
         await asyncio.to_thread(day_plans_store.init_db)
         await asyncio.to_thread(task_library_store.init_db)
@@ -661,13 +657,6 @@ class SettingsUpdate(BaseModel):
     # here, this only takes effect on the next app restart — the tool
     # list is fetched once at startup, not read fresh per request.
     mcp_servers: str | None = None
-    # Cosine distance cutoff for cross-thread conversation recall
-    # (agent/graph.py, agent/memory.py's search_conversations). No
-    # rescheduling — read fresh on every agent turn.
-    recall_max_distance: float | None = None
-    # How many days back cross-thread conversation recall is allowed to
-    # reach. Same "read fresh every turn" behavior as recall_max_distance.
-    recall_recency_days: int | None = None
     # Approximate token budget for message history sent to the LLM each
     # turn (agent/graph.py's call_llm, via trim_messages). No rescheduling
     # — read fresh on every agent turn.
@@ -721,14 +710,6 @@ class SettingsUpdate(BaseModel):
             raise ValueError("default_location cannot be blank")
         if self.mcp_servers is not None:
             parse_mcp_servers(self.mcp_servers)  # raises ValueError on anything malformed
-        if self.recall_max_distance is not None and not is_valid_recall_max_distance(
-            self.recall_max_distance
-        ):
-            raise ValueError("recall_max_distance must be greater than 0 and at most 2.0")
-        if self.recall_recency_days is not None and not is_valid_recall_recency_days(
-            self.recall_recency_days
-        ):
-            raise ValueError("recall_recency_days must be between 1 and 3650")
         if self.max_history_tokens is not None and not is_valid_max_history_tokens(
             self.max_history_tokens
         ):
@@ -758,8 +739,6 @@ class SettingsResponse(BaseModel):
     # Never the raw token — see _current_settings()'s comment.
     gotify_token_set: bool
     mcp_servers: str
-    recall_max_distance: float
-    recall_recency_days: int
     max_history_tokens: int
     planning_template_note_id: str
     chime_alert_sound_id: str
@@ -788,8 +767,6 @@ def _current_settings() -> dict:
         # is configured, enough for the Settings page's placeholder text.
         "gotify_token_set": bool(settings.gotify_token),
         "mcp_servers": settings.mcp_servers,
-        "recall_max_distance": settings.recall_max_distance,
-        "recall_recency_days": settings.recall_recency_days,
         "max_history_tokens": settings.max_history_tokens,
         "planning_template_note_id": settings.planning_template_note_id,
         "chime_alert_sound_id": settings.chime_alert_sound_id,
@@ -856,12 +833,6 @@ async def _apply_settings_update(update: SettingsUpdate) -> None:
     if update.mcp_servers is not None:
         settings.mcp_servers = update.mcp_servers
         changed["mcp_servers"] = update.mcp_servers
-    if update.recall_max_distance is not None:
-        settings.recall_max_distance = update.recall_max_distance
-        changed["recall_max_distance"] = str(update.recall_max_distance)
-    if update.recall_recency_days is not None:
-        settings.recall_recency_days = update.recall_recency_days
-        changed["recall_recency_days"] = str(update.recall_recency_days)
     if update.max_history_tokens is not None:
         settings.max_history_tokens = update.max_history_tokens
         changed["max_history_tokens"] = str(update.max_history_tokens)
@@ -1208,10 +1179,7 @@ async def debug_thread(
     Full, unfiltered per-thread trace for the thread-debug dashboard page:
     the opening message, every turn including tool calls and their
     results (GET /threads/{id}/messages filters these out for chat
-    rendering — this doesn't), and what agent/graph.py's
-    search_conversations recalled/injected on each turn (recall_log.db,
-    see utils/recall_log_store.py) — the direct visibility this was built
-    for, into the cross-thread recall leak documented in UPCOMING.md.
+    rendering — this doesn't).
     Note: there's no reasoning trace here — the model never emits
     reasoning separate from tool calls or its final reply, so that part
     isn't satisfiable without a reasoning-capable model swap.

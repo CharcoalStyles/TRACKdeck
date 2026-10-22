@@ -1,6 +1,5 @@
 """build_graph + a scripted fake tool model + a mocked writer model."""
 import asyncio
-from unittest.mock import MagicMock
 
 import pytest
 from langchain_core.messages import AIMessage
@@ -50,11 +49,8 @@ def env(monkeypatch, tmp_path):
         return 16000
 
     monkeypatch.setattr(graph_mod, "get_history_budget_tokens", budget)
-    monkeypatch.setattr(graph_mod, "log_recall", lambda *a, **k: None)
-    memory = MagicMock()
-    memory.search_conversations.return_value = []
 
-    state = {"writer_calls": [], "writer_reply": "Gemma says hello, at some length.", "memory": memory}
+    state = {"writer_calls": [], "writer_reply": "Gemma says hello, at some length."}
 
     async def fake_writer(messages, temperature, timeout, surface=None):
         state["writer_calls"].append(messages)
@@ -65,7 +61,7 @@ def env(monkeypatch, tmp_path):
     def make(replies, mcp_tools=None):
         fake = FakeToolModel(replies)
         monkeypatch.setattr(graph_mod, "get_chat_llm", lambda temperature=0.7, provider=None: fake)
-        return fake, graph_mod.build_graph(MemorySaver(), memory, mcp_tools=mcp_tools)
+        return fake, graph_mod.build_graph(MemorySaver(), mcp_tools=mcp_tools)
 
     return make, state
 
@@ -154,7 +150,7 @@ def test_mode_tool_names_exist():
         assert not missing, f"{mode_key}: unknown tools {missing}"
 
 
-def test_tonight_event_skips_recall_fixes_copied_date_and_replies_from_the_result(env, monkeypatch):
+def test_tonight_event_fixes_copied_date_and_replies_from_the_result(env, monkeypatch):
     import freezegun
     from agent.tools import calendar as cal
 
@@ -169,7 +165,6 @@ def test_tonight_event_skips_recall_fixes_copied_date_and_replies_from_the_resul
     _, g = make([bad_call, AIMessage(content="Added, tonight at 9pm")])
     with freezegun.freeze_time("2026-10-15 07:41:00"):
         result = invoke(g, "landed at the courtyard studio tonight at 8.15", one_shot=True)
-    assert state["memory"].search_conversations.call_count == 0
     assert puts[0]["start_iso"] == "20261015T091500Z"
     assert result["messages"][-1].content == "Added 'Landed at the courtyard studio' for today, Thursday 15 October, 8:15 PM to 9:15 PM."
     assert state["writer_calls"] == []

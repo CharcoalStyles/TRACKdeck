@@ -42,7 +42,6 @@ from utils.llm_client import stringify_content
 from utils.lmstudio_client import get_history_budget_tokens
 
 from utils.notify import send_gotify, notify_error
-from utils.recall_log_store import get_recall_for_thread
 
 logger = logging.getLogger(__name__)
 
@@ -266,17 +265,7 @@ async def get_thread_debug(thread_id: str) -> dict:
     Unfiltered per-thread history for the thread-debug dashboard page —
     unlike get_thread_messages (which drops tool-call/tool-result messages
     since they don't render as chat bubbles), this keeps every message so
-    tool calls and their results are visible. Also attaches this thread's
-    recall log (utils/recall_log_store.py) — what agent/graph.py's
-    search_conversations actually recalled — directly onto the "ai" turn
-    it belongs to, not as a separate trailing section: agent/graph.py's
-    call_llm logs exactly one recall_log row per invocation, and every
-    invocation produces exactly one "ai" message in state, in the same
-    order — including the tool-calling loop's intermediate steps, which
-    re-run search_conversations against the same last_user_msg each time
-    since no new human message arrives mid-loop. So the two lists are
-    reliably 1:1 orderable by simple zip, no timestamp matching needed.
-
+    tool calls and their results are visible.
     """
     if app_state.graph is None:
         raise HTTPException(status_code=503, detail="Agent not initialised")
@@ -300,19 +289,6 @@ async def get_thread_debug(thread_id: str) -> dict:
         turns.append(entry)
         if opening_message is None and msg_type == "human":
             opening_message = entry["content"]
-
-    recall_log = await asyncio.to_thread(get_recall_for_thread, thread_id)
-    recall_iter = iter(recall_log)
-    for entry in turns:
-        if entry["type"] != "ai":
-            continue
-        recalled = next(recall_iter, None)
-        if recalled is not None:
-            entry["recall_query"] = recalled["query"]
-            entry["recalled"] = recalled["recalled"]
-        # else: this thread predates recall_log.db, or has more "ai" turns
-        # than logged recalls for some other reason — leave unannotated
-        # rather than mismatching a later turn's recall onto this one.
 
     return {
         "thread_id": thread_id,

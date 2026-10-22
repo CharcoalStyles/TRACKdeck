@@ -36,7 +36,6 @@ export default function SettingsPage() {
       <BedtimeCard data={data} onSaved={invalidate} />
       <NotificationsCard data={data} onSaved={invalidate} />
       <DeviceSyncCard data={data} onSaved={invalidate} />
-      <RecallCard data={data} onSaved={invalidate} />
       <ContextBudgetCard data={data} onSaved={invalidate} />
       <McpServersCard data={data} onSaved={invalidate} />
     </div>
@@ -55,8 +54,6 @@ type Settings = NonNullable<ReturnType<typeof useQuery<{
   gotify_token_set: boolean
   public_base_url: string
   device_poll_interval_seconds: number
-  recall_max_distance: number
-  recall_recency_days: number
   max_history_tokens: number
   mcp_servers: string
   llm_provider: string
@@ -778,77 +775,6 @@ function DeviceSyncCard({ data, onSaved }: { data?: Settings; onSaved: () => voi
           step={1}
           value={pollInterval}
           onChange={(e) => setPollInterval(e.target.value)}
-          className={inputClass}
-        />
-      </FieldRow>
-      <button type="button" onClick={() => mutation.mutate()} className={primaryBtnClass}>
-        Save
-      </button>
-      <SaveStatus state={status.state} errorMessage={status.errorMessage} />
-    </Card>
-  )
-}
-
-function RecallCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
-  const status = useSaveStatus()
-  const [maxDistance, setMaxDistance] = useState('')
-  const [recencyDays, setRecencyDays] = useState('')
-
-  useEffect(() => {
-    if (!data) return
-    setMaxDistance(String(data.recall_max_distance ?? ''))
-    setRecencyDays(String(data.recall_recency_days ?? ''))
-  }, [data])
-
-  const mutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await api.POST('/settings', {
-        body: {
-          recall_max_distance: parseFloat(maxDistance),
-          recall_recency_days: parseInt(recencyDays, 10),
-        },
-      })
-      if (error) throw new Error()
-    },
-    onMutate: () => status.setState('saving'),
-    onSuccess: () => {
-      status.setState('saved')
-      onSaved()
-    },
-    onError: () => {
-      status.setErrorMessage('Failed to save — distance must be 0–2, recency 1–3650 days.')
-      status.setState('error')
-    },
-  })
-
-  return (
-    <Card>
-      <h2 className="mb-1 text-lg font-semibold">Cross-Thread Recall</h2>
-      <p className="mb-3 text-sm text-text-muted">
-        How the assistant pulls "relevant past context" from other conversations into a reply. A
-        match farther than the distance cutoff is dropped, and anything older than the recency
-        window is never considered — see the Thread Debug page to see what's actually being
-        recalled and tune these from real data.
-      </p>
-      <FieldRow label="Distance cutoff (0–2, lower = stricter)">
-        <input
-          type="number"
-          min={0.01}
-          max={2}
-          step={0.01}
-          value={maxDistance}
-          onChange={(e) => setMaxDistance(e.target.value)}
-          className={inputClass}
-        />
-      </FieldRow>
-      <FieldRow label="Recency window (days)">
-        <input
-          type="number"
-          min={1}
-          max={3650}
-          step={1}
-          value={recencyDays}
-          onChange={(e) => setRecencyDays(e.target.value)}
           className={inputClass}
         />
       </FieldRow>

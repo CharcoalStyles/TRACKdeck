@@ -8,7 +8,6 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from agent import writer
-from agent.graph import skip_recall
 from agent.settings import settings
 from agent.tools import alerts, calendar
 from utils import writer_log
@@ -118,23 +117,6 @@ def test_move_event_to_the_past_is_refused(monkeypatch, saved):
     monkeypatch.setattr(calendar, "get_event", lambda uid: {"success": True, "event": _event()})
     out = calendar.move_calendar_event.invoke({"event": "2ad5046c", "new_start": "2026-10-14 20:15:00"})
     assert out.startswith("Failed") and saved == []
-
-
-@pytest.mark.parametrize("msg", [
-    "I should have an event tonight at 8.15",
-    "landed at the courtyard studio tonight at 815 pm",
-    "what do I have on tomorrow",
-    "remind me to call mum",
-    "move it to 9pm",
-    "add dinner with Joel",
-])
-def test_scheduling_turns_skip_recall(msg):
-    assert skip_recall(msg)
-
-
-@pytest.mark.parametrize("msg", ["how are you feeling about the garden", "tell me about my son", ""])
-def test_other_turns_still_recall(msg):
-    assert not skip_recall(msg)
 
 
 def _turn(calls, results):
