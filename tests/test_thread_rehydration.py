@@ -14,7 +14,7 @@ from agent.settings import settings
 @pytest.fixture(autouse=True)
 def clean_app_state(monkeypatch):
     monkeypatch.setattr(settings, "timezone", "UTC")
-    monkeypatch.setattr(settings, "digest_time", "20:45")
+    monkeypatch.setattr(settings, "evening_time", "20:45")
     app_state.threads = {}
     app_state.keywords = {}
     app_state.default_thread_id = None
@@ -30,13 +30,13 @@ def _utc_ts(y, m, d, hh, mm):
     return datetime(y, m, d, hh, mm, tzinfo=timezone.utc).timestamp()
 
 
-def test_last_digest_boundary_uses_yesterday_before_todays_digest_time():
+def test_last_digest_boundary_uses_yesterday_before_todays_evening_time():
     now = _utc_ts(2026, 8, 6, 10, 0)  # before 20:45 today
     boundary = _last_digest_boundary(now)
     assert boundary == _utc_ts(2026, 8, 5, 20, 45)
 
 
-def test_last_digest_boundary_uses_today_after_todays_digest_time():
+def test_last_digest_boundary_uses_today_after_todays_evening_time():
     now = _utc_ts(2026, 8, 6, 21, 0)  # after 20:45 today
     boundary = _last_digest_boundary(now)
     assert boundary == _utc_ts(2026, 8, 6, 20, 45)

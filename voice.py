@@ -17,8 +17,8 @@ that's not the only way you find out what happened:
     via Gotify at high priority — see utils/notify.py.
   - Successes push a low-priority Gotify notification too (see
     agent.runtime.run_agent), tagged with that turn's thread keyword —
-    e.g. "Copper Wolf, ..." — and are surfaced again in the end-of-day
-    digest email (jobs/digest.py).
+    e.g. "Copper Wolf, ..." — and are recorded in the event log
+    (utils/event_log.py), which the evening message reads back.
 
 Every reply belongs to a thread, addressable later by a two-word keyword
 ("Copper Wolf, actually make that 3pm") regardless of how long ago the

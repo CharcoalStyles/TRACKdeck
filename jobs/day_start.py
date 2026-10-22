@@ -1,15 +1,13 @@
 """
 jobs/day_start.py
 -------------------
-Beginning-of-day setup — the symmetric counterpart to jobs/digest.py's
-end-of-day recap. Scheduled (see main.py) via agent/scheduler.py's
+Beginning-of-day setup — the symmetric counterpart to jobs/evening.py's
+end-of-day message. Scheduled (see main.py) via agent/scheduler.py's
 wake_trigger() at settings.wake_time.
 
 Right now this only decides today's mental-health check-in target (3-5,
 randomized, persisted so a restart doesn't reroll it — see jobs/checkin.py)
-and schedules the first prompt of the day. Expected to grow the same way
-jobs/digest.py did (recap -> +email -> +vault write -> +thread sweep ->
-+received-notes prune), not meant to stay single-purpose.
+and schedules the first prompt of the day. Not meant to stay single-purpose.
 """
 from __future__ import annotations
 

@@ -14,7 +14,7 @@ root logger.
 
 Every other module gets its own logger via `logging.getLogger(__name__)`
 rather than calling print() directly — that's what makes this greppable
-by module (`agent.vault_watcher`, `jobs.digest`, ...) and filterable by
+by module (`agent.vault_watcher`, `jobs.evening`, ...) and filterable by
 level.
 """
 from __future__ import annotations

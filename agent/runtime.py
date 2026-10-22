@@ -13,7 +13,7 @@ Thread resolution has two layers:
      reopens that specific thread, regardless of how long ago it was
      last used. Keywords are generated (not chosen) when a new thread
      starts, and stay addressable until the daily digest sweeps them at
-     end of day (see jobs/digest.py).
+     end of day (see jobs/evening.py).
   2. Recency — with no keyword prefix, falls back to the original
      inactivity rule: continue the most recent thread if used within
      SESSION_TIMEOUT_SECONDS, otherwise start a new one.
@@ -82,7 +82,7 @@ def get_thread_lock(thread_id: str) -> asyncio.Lock:
 def prune_thread_locks() -> int:
     """Drop lock entries that aren't currently held. thread_ids are unique
     per session and never reused, so once a thread is gone (swept nightly,
-    per jobs/digest.py) its lock entry is pure garbage — this dict is
+    per jobs/evening.py) its lock entry is pure garbage — this dict is
     otherwise never cleaned up and grows for the life of the process.
     Skips anything currently locked so an in-flight turn can't have its
     lock object pulled out from under it (a new get_thread_lock call for
@@ -143,12 +143,12 @@ def list_threads() -> list[ThreadInfo]:
 
 
 def _last_digest_boundary(now: float) -> float:
-    """The most recent moment jobs/digest.py's nightly sweep would have
-    fired (today's settings.digest_time, or yesterday's if that hasn't
+    """The most recent moment jobs/evening.py's nightly sweep would have
+    fired (today's settings.evening_time, or yesterday's if that hasn't
     happened yet today) — mirrors CronTrigger's own daily-firing logic."""
     tz = settings.zoneinfo()
     now_local = datetime.fromtimestamp(now, tz)
-    hour, minute = (int(p) for p in settings.digest_time.split(":"))
+    hour, minute = (int(p) for p in settings.evening_time.split(":"))
     boundary = now_local.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if boundary > now_local:
         boundary -= timedelta(days=1)
@@ -163,7 +163,7 @@ async def rehydrate_threads_from_checkpoints() -> int:
     though memory.db itself is untouched (see CLAUDE.md's known
     limitations note). Only restores threads created after the most recent
     digest sweep boundary, since that sweep unconditionally clears
-    app_state.threads/keywords once a day (jobs/digest.py) and memory.db's
+    app_state.threads/keywords once a day (jobs/evening.py) and memory.db's
     checkpoint rows are never deleted — this reproduces exactly what the
     in-memory dict would still hold had the process never restarted,
     rather than resurrecting the entire history every restart.
@@ -253,7 +253,7 @@ async def list_checkpoint_thread_ids() -> list[dict]:
     Every thread_id that has ever run a turn through the graph, straight
     from memory.db's checkpoints table — independent of app_state.threads,
     which only holds currently-addressable threads and is swept nightly
-    (jobs/digest.py). Used by the thread-debug dashboard page so a thread
+    (jobs/evening.py). Used by the thread-debug dashboard page so a thread
     from before today's sweep (or before the last app restart) is still
     reachable, not just what GET /threads shows. Most recently active
     first (checkpoint_id is monotonically increasing per thread).

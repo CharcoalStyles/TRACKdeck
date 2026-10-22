@@ -2,9 +2,9 @@
 jobs/bedtime.py
 ----------------
 A fixed nightly nudge at settings.bedtime (default 21:20) — separate from
-the passive daily digest (jobs/digest.py, ~20:45 by default, deliberately
-a bit earlier). Distinct trigger, distinct purpose: the digest recaps the
-day, this just says it's time to wind down.
+the evening message (jobs/evening.py, ~20:45 by default, deliberately
+a bit earlier). Distinct trigger, distinct purpose: the evening message
+recaps the day, this just says it's time to wind down.
 """
 from __future__ import annotations
 

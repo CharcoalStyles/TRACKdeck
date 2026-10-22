@@ -64,7 +64,7 @@ services:
       # containers see the same files. Must match VAULT_PATH in .env.
       - ./data/vault:/app/vault
       # Raw voice recordings (see voice.py's UPLOAD_DIR) — without this
-      # they vanish on every container recreation. jobs/digest.py's nightly
+      # they vanish on every container recreation. jobs/evening.py's nightly
       # sweep prunes anything older than 24h, so this shouldn't grow large.
       - ./received_notes:/app/received_notes
       # Hugging Face cache (the faster-whisper model utils/transcription.py

@@ -7,7 +7,10 @@ register/cancel per-reminder jobs without main.py and agent.tools.* ending
 up importing each other.
 
 Jobs currently registered against this scheduler (see main.py's lifespan):
-  - "daily_digest" — jobs/digest.py, cron via digest_trigger()
+  - "morning_message" — jobs/morning.py, cron via wake_trigger()
+  - "evening_message" — jobs/evening.py, cron via evening_trigger()
+  - "weekly_review" — jobs/reviews.py, Sundays via weekly_trigger()
+  - "monthly_review" — jobs/reviews.py, day-of-month via monthly_trigger()
   - "bedtime_reminder" — jobs/bedtime.py, cron via bedtime_trigger()
   - "calendar_reminder_sync" — jobs/calendar_sync.py, interval via
     calendar_sync_trigger()
@@ -29,9 +32,21 @@ from agent.settings import settings
 scheduler = AsyncIOScheduler(timezone=settings.zoneinfo())
 
 
-def digest_trigger() -> CronTrigger:
-    hour, minute = (int(p) for p in settings.digest_time.split(":"))
+def evening_trigger() -> CronTrigger:
+    hour, minute = (int(p) for p in settings.evening_time.split(":"))
     return CronTrigger(hour=hour, minute=minute, timezone=settings.zoneinfo())
+
+
+def weekly_trigger() -> CronTrigger:
+    hour, minute = (int(p) for p in settings.weekly_review_time.split(":"))
+    return CronTrigger(day_of_week="sun", hour=hour, minute=minute, timezone=settings.zoneinfo())
+
+
+def monthly_trigger() -> CronTrigger:
+    hour, minute = (int(p) for p in settings.weekly_review_time.split(":"))
+    return CronTrigger(
+        day=settings.monthly_review_day, hour=hour, minute=minute, timezone=settings.zoneinfo()
+    )
 
 
 def bedtime_trigger() -> CronTrigger:
@@ -46,3 +61,21 @@ def calendar_sync_trigger() -> IntervalTrigger:
 def wake_trigger() -> CronTrigger:
     hour, minute = (int(p) for p in settings.wake_time.split(":"))
     return CronTrigger(hour=hour, minute=minute, timezone=settings.zoneinfo())
+
+
+_TIME_JOB_TRIGGERS = {
+    "morning_message": wake_trigger,
+    "evening_message": evening_trigger,
+    "weekly_review": weekly_trigger,
+    "monthly_review": monthly_trigger,
+    "bedtime_reminder": bedtime_trigger,
+    "day_start": wake_trigger,
+}
+
+
+def reschedule_time_jobs(*job_ids: str) -> None:
+    """Rebuild the cron triggers of the named fixed-time jobs from current
+    settings (all of them if none named). Jobs not registered yet are skipped."""
+    for job_id in job_ids or _TIME_JOB_TRIGGERS:
+        if scheduler.get_job(job_id) is not None:
+            scheduler.reschedule_job(job_id, trigger=_TIME_JOB_TRIGGERS[job_id]())

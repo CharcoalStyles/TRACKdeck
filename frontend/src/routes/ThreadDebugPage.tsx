@@ -59,7 +59,7 @@ export default function ThreadDebugPage() {
         <h2 className="mb-1 text-lg font-semibold">Thread Debug</h2>
         <p className="mb-3 text-sm text-text-muted">
           Full trace for one thread, straight from memory.db's checkpoint — including threads
-          swept from the sidebar by the nightly digest, or from before the last restart. Shows
+          swept from the sidebar by the nightly sweep, or from before the last restart. Shows
           every turn (tool calls and their results included, unlike the Chat page).
           There's no reasoning trace — the model never emits reasoning separate from tool calls
           or its final reply.

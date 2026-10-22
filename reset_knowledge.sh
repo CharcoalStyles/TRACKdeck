@@ -25,7 +25,7 @@
 # disposable state like memory.db is.
 #
 # settings.db (standing app-level toggles, see utils/settings_store.py) is
-# likewise NOT touched — it's durable configuration (timezone, digest
+# likewise NOT touched — it's durable configuration (timezone, evening
 # time, Gotify credentials, etc.), not accumulated memory.
 #
 # The bundled Radicale calendar data (./data/radicale) is likewise NOT

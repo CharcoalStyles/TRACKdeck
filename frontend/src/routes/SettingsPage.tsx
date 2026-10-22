@@ -30,7 +30,7 @@ export default function SettingsPage() {
     <div className="flex flex-col gap-4">
       <ModelsCard data={data} onSaved={invalidate} />
       <LocationTimeCard data={data} onSaved={invalidate} />
-      <DigestCard data={data} onSaved={invalidate} />
+      <EveningCard data={data} onSaved={invalidate} />
       <CheckinWindowCard data={data} onSaved={invalidate} />
       <BedtimeCard data={data} onSaved={invalidate} />
       <NotificationsCard data={data} onSaved={invalidate} />
@@ -44,8 +44,7 @@ export default function SettingsPage() {
 type Settings = NonNullable<ReturnType<typeof useQuery<{
   default_location: string
   timezone: string
-  digest_time: string
-  digest_email_to: string
+  evening_time: string
   wake_time: string
   bedtime: string
   latest_checkin_time: string
@@ -167,7 +166,7 @@ function LocationTimeCard({ data, onSaved }: { data?: Settings; onSaved: () => v
       <h2 className="mb-1 text-lg font-semibold">Location &amp; Time</h2>
       <p className="mb-3 text-sm text-text-muted">
         Used for weather lookups when you don't name a place, and for grounding the assistant's
-        sense of "today"/"now" (calendar day boundaries, the daily digest).
+        sense of "today"/"now" (calendar day boundaries, the scheduled messages).
       </p>
       <FieldRow label="Default location">
         <input
@@ -210,21 +209,19 @@ function LocationTimeCard({ data, onSaved }: { data?: Settings; onSaved: () => v
   )
 }
 
-function DigestCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
+function EveningCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
   const status = useSaveStatus()
-  const [digestTime, setDigestTime] = useState('')
-  const [email, setEmail] = useState('')
+  const [eveningTime, setEveningTime] = useState('')
 
   useEffect(() => {
     if (!data) return
-    setDigestTime(data.digest_time || '')
-    setEmail(data.digest_email_to || '')
+    setEveningTime(data.evening_time || '')
   }, [data])
 
   const mutation = useMutation({
     mutationFn: async () => {
       const { error } = await api.POST('/settings', {
-        body: { digest_time: digestTime, digest_email_to: email },
+        body: { evening_time: eveningTime },
       })
       if (error) throw new Error()
     },
@@ -238,25 +235,16 @@ function DigestCard({ data, onSaved }: { data?: Settings; onSaved: () => void })
 
   return (
     <Card>
-      <h2 className="mb-1 text-lg font-semibold">Daily Digest</h2>
+      <h2 className="mb-1 text-lg font-semibold">Evening Message</h2>
       <p className="mb-3 text-sm text-text-muted">
-        Local time the end-of-day recap email is sent (see the Timezone above). Takes effect
+        Local time the end-of-day message is pushed (see the Timezone above). Takes effect
         immediately, no restart needed.
       </p>
       <FieldRow label="Send time">
         <input
           type="time"
-          value={digestTime}
-          onChange={(e) => setDigestTime(e.target.value)}
-          className={inputClass}
-        />
-      </FieldRow>
-      <FieldRow label="Recipient email">
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="e.g. you@example.com"
+          value={eveningTime}
+          onChange={(e) => setEveningTime(e.target.value)}
           className={inputClass}
         />
       </FieldRow>
@@ -352,7 +340,7 @@ function BedtimeCard({ data, onSaved }: { data?: Settings; onSaved: () => void }
       <h2 className="mb-1 text-lg font-semibold">Bedtime Reminder</h2>
       <p className="mb-3 text-sm text-text-muted">
         Local time a wind-down nudge is pushed each night (see the Timezone above) — separate
-        from the daily digest and from the check-in window's own times. Takes effect
+        from the evening message and from the check-in window's own times. Takes effect
         immediately, no restart needed.
       </p>
       <FieldRow label="Bedtime">

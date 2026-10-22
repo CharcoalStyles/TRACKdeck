@@ -96,18 +96,6 @@ def mark_resolved(checkin_id: str, status: str, resolved_at: int) -> None:
         )
 
 
-def record_helpfulness(checkin_id: str, helpful: bool) -> None:
-    """Idempotent — last click wins, no history kept. Existence/status
-    validation is the caller's job (main.py's rating route), matching this
-    store's existing convention that store functions are thin SQL wrappers
-    (see resolve_checkin/answer_checkin, which validate one layer up)."""
-    with _connect() as conn:
-        conn.execute(
-            "UPDATE checkins SET helpfulness = ? WHERE id = ?",
-            ("up" if helpful else "down", checkin_id),
-        )
-
-
 def get_checkin(checkin_id: str) -> Optional[dict]:
     with _connect() as conn:
         row = conn.execute("SELECT * FROM checkins WHERE id = ?", (checkin_id,)).fetchone()

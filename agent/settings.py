@@ -29,12 +29,17 @@ def is_valid_timezone(name: str) -> bool:
     return name in available_timezones()
 
 
-def is_valid_digest_time(value: str) -> bool:
+def is_valid_clock_time(value: str) -> bool:
     try:
         hour, minute = value.split(":")
         return 0 <= int(hour) <= 23 and 0 <= int(minute) <= 59
     except (ValueError, AttributeError):
         return False
+
+
+def is_valid_monthly_review_day(value: int) -> bool:
+    # 1-28 so the day exists in every month.
+    return 1 <= value <= 28
 
 
 def is_valid_sync_interval_minutes(value: int) -> bool:
@@ -92,7 +97,7 @@ def parse_mcp_servers(value: str) -> dict:
 
 def _default_mcp_servers() -> str:
     """Seeded once from SEARXNG_URL at first run, same "env var default,
-    dashboard source of truth after that" pattern as digest_email_to/
+    dashboard source of truth after that" pattern as
     gotify_url below — otherwise upgrading this app would silently drop
     web search (previously a plain tool, now the third-party
     searxng-mcp-server run over MCP) until someone notices and re-adds it
@@ -146,34 +151,49 @@ class Settings:
 
     # IANA timezone name. Used for "what time is it" grounding
     # (agent/tools/general.py, utils/datetime.py), calendar day boundaries,
-    # and the daily digest schedule (jobs/digest.py, main.py). Must be a
+    # and the scheduled jobs (agent/scheduler.py). Must be a
     # valid zoneinfo key — validated on write in main.py's /settings
     # handler. No env var, same reasoning as default_location above.
     timezone: str = "Australia/Canberra"
 
-    # "HH:MM" 24-hour local time the daily digest email fires. Changing
-    # this at runtime requires rescheduling the APScheduler job — handled
-    # in main.py's /settings handler, not here. No env var, same reasoning
-    # as default_location above.
-    digest_time: str = "20:45"
+    # "HH:MM" 24-hour local time the evening message fires (jobs/evening.py).
+    # Changing this at runtime requires rescheduling the APScheduler job —
+    # handled in main.py's /settings handler, not here. No env var, same
+    # reasoning as default_location above.
+    evening_time: str = "20:45"
+
+    # "HH:MM" 24-hour local time the Sunday weekly review fires (jobs/reviews.py).
+    # The monthly review fires at this same time on `monthly_review_day`.
+    weekly_review_time: str = "18:00"
+
+    # Day of the month (1-28) the monthly review fires — it covers the
+    # previous calendar month.
+    monthly_review_day: int = 1
+
+    # Trial: also write the evening message into Reviews/Daily/ as a
+    # daily commentary file.
+    daily_commentary: bool = False
+
+    # Include the today+tomorrow forecast in the morning message.
+    weather_enabled: bool = True
 
     # "HH:MM" 24-hour local time the bedtime reminder push fires (see
-    # jobs/bedtime.py) — a distinct nudge from the digest, timed close to
+    # jobs/bedtime.py) — a distinct nudge from the evening message, timed close to
     # it but not the same trigger. Same rescheduling/validation pattern as
-    # digest_time. No env var, same reasoning as default_location above.
+    # evening_time. No env var, same reasoning as default_location above.
     bedtime: str = "21:20"
 
     # How often (minutes) jobs/calendar_sync.py polls the CalDAV server for
     # manually added/changed/removed calendar events — CalDAV has no push
     # mechanism, so this is the only way it notices. Same
-    # rescheduling/validation pattern as digest_time/bedtime. No env var,
+    # rescheduling/validation pattern as evening_time/bedtime. No env var,
     # same reasoning as default_location above.
     calendar_sync_interval_minutes: int = 30
 
     # "HH:MM" 24-hour local time check-in prompts may start firing (see
     # jobs/checkin.py, jobs/day_start.py) — paired with `latest_checkin_time`
     # as the end of the waking-hours window. Same rescheduling/validation
-    # pattern as digest_time/bedtime. No env var, same reasoning as
+    # pattern as evening_time/bedtime. No env var, same reasoning as
     # default_location above.
     wake_time: str = "07:00"
 
@@ -183,7 +203,7 @@ class Settings:
     # two can be tuned separately. Default matches bedtime's own default so
     # upgrading is a no-op until explicitly changed. No rescheduling needed
     # (read fresh at schedule-time, not baked into a registered cron
-    # trigger) — same validation pattern as digest_time/bedtime/wake_time.
+    # trigger) — same validation pattern as evening_time/bedtime/wake_time.
     # No env var, same reasoning as default_location above.
     latest_checkin_time: str = "21:20"
 
@@ -225,13 +245,6 @@ class Settings:
     # for a small local model. No env var, same reasoning as
     # default_location above.
     max_history_tokens: int = 6000
-
-    # Recipient address for the daily digest email (jobs/digest.py,
-    # utils/mailer.py). Seeded from DIGEST_EMAIL_TO at startup so an
-    # existing deployment keeps working unchanged, but editable live from
-    # here afterward — same "one source of truth once configured" pattern
-    # as the fields above.
-    digest_email_to: str = os.environ.get("DIGEST_EMAIL_TO", "")
 
     # Base URL used to build check-in magic-link URLs (jobs/checkin.py's
     # _checkin_click_url) for Gotify's tap-to-open extras. Seeded from
@@ -301,7 +314,7 @@ def apply_persisted(values: dict[str, str]) -> None:
     """Overlay settings.db (utils/settings_store.py) onto the class
     defaults/env fallbacks above. Called once at startup (main.py's
     lifespan), before any field is read to build a live APScheduler
-    trigger, so a persisted digest_time/bedtime/wake_time takes effect
+    trigger, so a persisted evening_time/bedtime/wake_time takes effect
     from the very first job registration, not just on the next edit.
 
     sqlite3 only stores strings, so each field is parsed back to its real
@@ -311,8 +324,16 @@ def apply_persisted(values: dict[str, str]) -> None:
         settings.default_location = values["default_location"]
     if "timezone" in values:
         settings.timezone = values["timezone"]
-    if "digest_time" in values:
-        settings.digest_time = values["digest_time"]
+    if "evening_time" in values:
+        settings.evening_time = values["evening_time"]
+    if "weekly_review_time" in values:
+        settings.weekly_review_time = values["weekly_review_time"]
+    if "monthly_review_day" in values:
+        settings.monthly_review_day = int(values["monthly_review_day"])
+    if "daily_commentary" in values:
+        settings.daily_commentary = values["daily_commentary"] == "1"
+    if "weather_enabled" in values:
+        settings.weather_enabled = values["weather_enabled"] == "1"
     if "bedtime" in values:
         settings.bedtime = values["bedtime"]
     if "calendar_sync_interval_minutes" in values:
@@ -329,8 +350,6 @@ def apply_persisted(values: dict[str, str]) -> None:
         settings.planning_template_note_id = values["planning_template_note_id"]
     if "chime_alert_sound_id" in values:
         settings.chime_alert_sound_id = values["chime_alert_sound_id"]
-    if "digest_email_to" in values:
-        settings.digest_email_to = values["digest_email_to"]
     if "public_base_url" in values:
         settings.public_base_url = values["public_base_url"]
     if "lmstudio_chat_model" in values:

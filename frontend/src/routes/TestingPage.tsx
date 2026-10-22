@@ -123,12 +123,36 @@ export default function TestingPage() {
   return (
     <div className="flex flex-col gap-4">
       <TriggerCard
-        title="Daily Digest"
-        description="Manually sends today's digest immediately, without waiting for the scheduled time. Sends a real email every time you click."
-        path="/debug/digest"
-        buttonLabel="Send digest now"
-        pendingText="Sending..."
-        successText="Sent."
+        title="Morning Message"
+        description="Fires the day-ahead message immediately. Sends a real Gotify push every time you click."
+        path="/debug/morning"
+        buttonLabel="Send morning message now"
+        pendingText="Working..."
+        successText="Done."
+      />
+      <TriggerCard
+        title="Evening Message"
+        description="Fires the evening message immediately: a real push, the daily commentary file if that setting is on, and the nightly thread sweep."
+        path="/debug/evening"
+        buttonLabel="Send evening message now"
+        pendingText="Working..."
+        successText="Done."
+      />
+      <TriggerCard
+        title="Weekly Review"
+        description="Writes this week's review to Reviews/Weekly/ and pushes it."
+        path="/debug/weekly-review"
+        buttonLabel="Run weekly review now"
+        pendingText="Working..."
+        successText="Done."
+      />
+      <TriggerCard
+        title="Monthly Review"
+        description="Writes last month's review to Reviews/Monthly/ and pushes it."
+        path="/debug/monthly-review"
+        buttonLabel="Run monthly review now"
+        pendingText="Working..."
+        successText="Done."
       />
       <TriggerCard
         title="Bedtime Reminder"
@@ -159,14 +183,6 @@ export default function TestingPage() {
         description="Sends a one-off test push — confirms GOTIFY_URL/GOTIFY_TOKEN are configured correctly."
         path="/debug/notify"
         buttonLabel="Send test notification"
-        pendingText="Sending..."
-        successText="Sent."
-      />
-      <TriggerCard
-        title="Email"
-        description="Sends a one-off test email — confirms the SMTP_* env vars are configured correctly."
-        path="/debug/email"
-        buttonLabel="Send test email"
         pendingText="Sending..."
         successText="Sent."
       />

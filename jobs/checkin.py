@@ -82,8 +82,8 @@ def waking_day_bounds(now_local: datetime) -> tuple[int, int]:
     """UTC epoch (start, end) for today's check-in window ([wake_time,
     latest_checkin_time) on now_local's calendar date) — the day-boundary
     concept this feature uses for its 3-5/day cap and once/day 'high'
-    rule. Deliberately separate from jobs/digest.py's midnight-anchored
-    _todays_utc_bounds: the whole feature lives inside this window, not
+    rule. Deliberately separate from a midnight-anchored
+    calendar-day window: the whole feature lives inside this window, not
     the calendar day."""
     wake_dt, checkin_end_dt = _local_checkin_window(now_local)
     return (
@@ -145,18 +145,6 @@ async def _personalize_prompt(category: str) -> tuple[str, str]:
     personalize against. Keeps the (prompt_text, level) shape callers
     expect; level is always "none"."""
     return random.choice(PROMPTS[category]), "none"
-
-
-def _rate_urls(checkin_id: str) -> tuple[str, str] | None:
-    """(up_url, down_url) for the daily digest's thumbs-up/down links. None
-    if public_base_url isn't set — same degrade-gracefully contract as
-    _checkin_click_url below; the digest omits the rating block entirely
-    rather than emailing a broken link."""
-    base = settings.public_base_url
-    if not base:
-        return None
-    root = f"{base.rstrip('/')}/checkin/{checkin_id}/rate"
-    return f"{root}?helpful=yes", f"{root}?helpful=no"
 
 
 async def _create_and_schedule(

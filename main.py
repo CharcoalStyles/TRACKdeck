@@ -79,13 +79,17 @@ from agent.runtime import (
 from agent.scheduler import (
     bedtime_trigger,
     calendar_sync_trigger,
-    digest_trigger,
+    evening_trigger,
+    monthly_trigger,
+    reschedule_time_jobs,
     scheduler,
     wake_trigger,
+    weekly_trigger,
 )
 from agent.settings import (
     apply_persisted,
-    is_valid_digest_time,
+    is_valid_clock_time,
+    is_valid_monthly_review_day,
     is_valid_poll_interval_seconds,
     is_valid_max_history_tokens,
     is_valid_sync_interval_minutes,
@@ -102,7 +106,9 @@ from jobs.calendar_sync import sync_calendar_reminders
 from jobs.day_start import start_of_day_setup
 from jobs.day_plan_trigger import schedule_or_run
 from jobs.device_sync import build_sync_payload
-from jobs.digest import send_daily_digest
+from jobs.evening import send_evening_message
+from jobs.morning import send_morning_message
+from jobs.reviews import send_monthly_review, send_weekly_review
 from jobs.reminders import create_test_reminder, fire_reminder
 
 from utils import (
@@ -121,7 +127,6 @@ from utils.caldav_client import ensure_collection_exists
 from utils.datetime import parse_local_datetime
 from utils.llm_client import describe_chat_llm
 from utils.lmstudio_client import LmStudioModel, fetch_models as fetch_lmstudio_models
-from utils.mailer import send_email
 from utils.notify import notify_device_error, notify_error, send_gotify
 
 from voice import router as voice_router
@@ -146,9 +151,8 @@ async def lifespan(app: FastAPI):
     Path("data").mkdir(exist_ok=True)
 
     # Load settings.db before anything below reads a setting — in
-    # particular before the daily_digest/bedtime_reminder jobs are
-    # registered further down, since digest_trigger()/bedtime_trigger()
-    # bake settings.digest_time/bedtime in at add_job() time.
+    # particular before the cron jobs are registered further down, since
+    # the trigger builders bake the configured times in at add_job() time.
     await asyncio.to_thread(settings_store.init_db)
     apply_persisted(await asyncio.to_thread(settings_store.load_all))
 
@@ -192,9 +196,27 @@ async def lifespan(app: FastAPI):
             logger.info("Rehydrated %d thread(s) from memory.db after restart.", restored)
 
         scheduler.add_job(
-            send_daily_digest,
-            trigger=digest_trigger(),
-            id="daily_digest",
+            send_morning_message,
+            trigger=wake_trigger(),
+            id="morning_message",
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            send_evening_message,
+            trigger=evening_trigger(),
+            id="evening_message",
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            send_weekly_review,
+            trigger=weekly_trigger(),
+            id="weekly_review",
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            send_monthly_review,
+            trigger=monthly_trigger(),
+            id="monthly_review",
             replace_existing=True,
         )
         scheduler.add_job(
@@ -557,7 +579,7 @@ async def clear_thread_route(
 async def todays_checkins(_: Annotated[None, Depends(auth.require_session_or_token)]):
     """Today's check-in activity — answered, skipped, and expired — for
     the dashboard's Check-Ins page. 'Today' is the user's local calendar
-    day (settings.timezone), the same bounds jobs/digest.py uses for the
+    day (settings.timezone), the same bounds the scheduled jobs uses for the
     nightly recap — not the waking-hours window jobs/checkin.py itself
     schedules within, so a check-in resolved right before midnight still
     counts as today rather than being cut off early.
@@ -586,18 +608,26 @@ class SettingsUpdate(BaseModel):
     default_location: str | None = None
     # IANA timezone name — must be a valid zoneinfo key.
     timezone: str | None = None
-    # "HH:MM" 24-hour local time the daily digest fires. Changing this
+    # "HH:MM" 24-hour local time the evening message fires. Changing this
     # reschedules the live APScheduler job, no restart needed.
-    digest_time: str | None = None
+    evening_time: str | None = None
+    # "HH:MM" local time of the Sunday weekly review (also the monthly review's time).
+    weekly_review_time: str | None = None
+    # Day of month (1-28) the monthly review of the previous month fires.
+    monthly_review_day: int | None = None
+    # Also save the evening message under Reviews/Daily/ (trial).
+    daily_commentary: bool | None = None
+    # Include the forecast in the morning message.
+    weather_enabled: bool | None = None
     # "HH:MM" 24-hour local time the bedtime reminder fires. Same
-    # rescheduling behavior as digest_time, separate job.
+    # rescheduling behavior as evening_time, separate job.
     bedtime: str | None = None
     # Minutes between calendar reminder-sync polls (jobs/calendar_sync.py).
-    # Same rescheduling behavior as digest_time/bedtime, separate job.
+    # Same rescheduling behavior as evening_time/bedtime, separate job.
     calendar_sync_interval_minutes: int | None = None
     # "HH:MM" 24-hour local time check-in prompts may start firing (see
     # jobs/checkin.py, jobs/day_start.py). Same rescheduling behavior as
-    # digest_time/bedtime, separate job.
+    # evening_time/bedtime, separate job.
     wake_time: str | None = None
     # "HH:MM" 24-hour local time check-in prompts must stop firing by (see
     # jobs/checkin.py) — independent from bedtime, read fresh at
@@ -608,9 +638,6 @@ class SettingsUpdate(BaseModel):
     # the device reads this on its next sync and self-schedules its own
     # sleep duration.
     device_poll_interval_seconds: int | None = None
-    # Daily digest recipient (utils/mailer.py). Blank is a valid
-    # "not configured yet" state, same as the unset env var today.
-    digest_email_to: str | None = None
     # Base URL for check-in magic links (jobs/checkin.py). Blank is a
     # valid "no click-through link" state, same as today.
     public_base_url: str | None = None
@@ -642,23 +669,29 @@ class SettingsUpdate(BaseModel):
     # Which LM Studio model get_chat_llm()/call_llm build
     # (utils/lmstudio_client.py, GET /debug/lmstudio-models).
     lmstudio_chat_model: str | None = None
-    # LM Studio model for user-read prose (digest first); blank = same as chat model.
+    # LM Studio model for user-read prose (morning/evening messages and reviews); blank = same as chat model.
     lmstudio_writer_model: str | None = None
     @model_validator(mode="after")
     def _check_values(self):
         if self.timezone is not None and not is_valid_timezone(self.timezone):
             raise ValueError(f"'{self.timezone}' is not a recognized IANA timezone name")
-        if self.digest_time is not None and not is_valid_digest_time(self.digest_time):
-            raise ValueError(f"'{self.digest_time}' is not a valid HH:MM 24-hour time")
-        if self.bedtime is not None and not is_valid_digest_time(self.bedtime):
+        for name in ("evening_time", "weekly_review_time"):
+            value = getattr(self, name)
+            if value is not None and not is_valid_clock_time(value):
+                raise ValueError(f"'{value}' is not a valid HH:MM 24-hour time")
+        if self.monthly_review_day is not None and not is_valid_monthly_review_day(
+            self.monthly_review_day
+        ):
+            raise ValueError("monthly_review_day must be between 1 and 28")
+        if self.bedtime is not None and not is_valid_clock_time(self.bedtime):
             raise ValueError(f"'{self.bedtime}' is not a valid HH:MM 24-hour time")
         if self.calendar_sync_interval_minutes is not None and not is_valid_sync_interval_minutes(
             self.calendar_sync_interval_minutes
         ):
             raise ValueError("calendar_sync_interval_minutes must be between 1 and 1440")
-        if self.wake_time is not None and not is_valid_digest_time(self.wake_time):
+        if self.wake_time is not None and not is_valid_clock_time(self.wake_time):
             raise ValueError(f"'{self.wake_time}' is not a valid HH:MM 24-hour time")
-        if self.latest_checkin_time is not None and not is_valid_digest_time(self.latest_checkin_time):
+        if self.latest_checkin_time is not None and not is_valid_clock_time(self.latest_checkin_time):
             raise ValueError(f"'{self.latest_checkin_time}' is not a valid HH:MM 24-hour time")
         if self.device_poll_interval_seconds is not None and not is_valid_poll_interval_seconds(
             self.device_poll_interval_seconds
@@ -678,13 +711,16 @@ class SettingsUpdate(BaseModel):
 class SettingsResponse(BaseModel):
     default_location: str
     timezone: str
-    digest_time: str
+    evening_time: str
+    weekly_review_time: str
+    monthly_review_day: int
+    daily_commentary: bool
+    weather_enabled: bool
     bedtime: str
     calendar_sync_interval_minutes: int
     wake_time: str
     latest_checkin_time: str
     device_poll_interval_seconds: int
-    digest_email_to: str
     public_base_url: str
     gotify_url: str
     # Never the raw token — see _current_settings()'s comment.
@@ -700,13 +736,16 @@ def _current_settings() -> dict:
     return {
         "default_location": settings.default_location,
         "timezone": settings.timezone,
-        "digest_time": settings.digest_time,
+        "evening_time": settings.evening_time,
+        "weekly_review_time": settings.weekly_review_time,
+        "monthly_review_day": settings.monthly_review_day,
+        "daily_commentary": settings.daily_commentary,
+        "weather_enabled": settings.weather_enabled,
         "bedtime": settings.bedtime,
         "calendar_sync_interval_minutes": settings.calendar_sync_interval_minutes,
         "wake_time": settings.wake_time,
         "latest_checkin_time": settings.latest_checkin_time,
         "device_poll_interval_seconds": settings.device_poll_interval_seconds,
-        "digest_email_to": settings.digest_email_to,
         "public_base_url": settings.public_base_url,
         "gotify_url": settings.gotify_url,
         # Never echo the raw token back to the browser — just whether one
@@ -737,34 +776,51 @@ async def _apply_settings_update(update: SettingsUpdate) -> None:
         settings.default_location = update.default_location.strip()
         changed["default_location"] = settings.default_location
 
-    reschedule_digest = update.timezone is not None or update.digest_time is not None
-    reschedule_bedtime = update.timezone is not None or update.bedtime is not None
+    reschedule_ids: set[str] = set()
+    if update.timezone is not None:
+        reschedule_ids.update(
+            ["morning_message", "evening_message", "weekly_review", "monthly_review",
+             "bedtime_reminder", "day_start"]
+        )
     reschedule_calendar_sync = update.calendar_sync_interval_minutes is not None
-    reschedule_day_start = update.timezone is not None or update.wake_time is not None
     if update.timezone is not None:
         settings.timezone = update.timezone
         changed["timezone"] = update.timezone
-    if update.digest_time is not None:
-        settings.digest_time = update.digest_time
-        changed["digest_time"] = update.digest_time
+    if update.evening_time is not None:
+        settings.evening_time = update.evening_time
+        changed["evening_time"] = update.evening_time
+        reschedule_ids.add("evening_message")
+    if update.weekly_review_time is not None:
+        settings.weekly_review_time = update.weekly_review_time
+        changed["weekly_review_time"] = update.weekly_review_time
+        reschedule_ids.update(["weekly_review", "monthly_review"])
+    if update.monthly_review_day is not None:
+        settings.monthly_review_day = update.monthly_review_day
+        changed["monthly_review_day"] = str(update.monthly_review_day)
+        reschedule_ids.add("monthly_review")
+    if update.daily_commentary is not None:
+        settings.daily_commentary = update.daily_commentary
+        changed["daily_commentary"] = "1" if update.daily_commentary else "0"
+    if update.weather_enabled is not None:
+        settings.weather_enabled = update.weather_enabled
+        changed["weather_enabled"] = "1" if update.weather_enabled else "0"
     if update.bedtime is not None:
         settings.bedtime = update.bedtime
         changed["bedtime"] = update.bedtime
+        reschedule_ids.add("bedtime_reminder")
     if update.calendar_sync_interval_minutes is not None:
         settings.calendar_sync_interval_minutes = update.calendar_sync_interval_minutes
         changed["calendar_sync_interval_minutes"] = str(update.calendar_sync_interval_minutes)
     if update.wake_time is not None:
         settings.wake_time = update.wake_time
         changed["wake_time"] = update.wake_time
+        reschedule_ids.update(["morning_message", "day_start"])
     if update.latest_checkin_time is not None:
         settings.latest_checkin_time = update.latest_checkin_time
         changed["latest_checkin_time"] = update.latest_checkin_time
     if update.device_poll_interval_seconds is not None:
         settings.device_poll_interval_seconds = update.device_poll_interval_seconds
         changed["device_poll_interval_seconds"] = str(update.device_poll_interval_seconds)
-    if update.digest_email_to is not None:
-        settings.digest_email_to = update.digest_email_to.strip()
-        changed["digest_email_to"] = settings.digest_email_to
     if update.public_base_url is not None:
         settings.public_base_url = update.public_base_url.strip()
         changed["public_base_url"] = settings.public_base_url
@@ -793,14 +849,10 @@ async def _apply_settings_update(update: SettingsUpdate) -> None:
         settings.lmstudio_writer_model = update.lmstudio_writer_model.strip()
         changed["lmstudio_writer_model"] = settings.lmstudio_writer_model
 
-    if reschedule_digest:
-        scheduler.reschedule_job("daily_digest", trigger=digest_trigger())
-    if reschedule_bedtime:
-        scheduler.reschedule_job("bedtime_reminder", trigger=bedtime_trigger())
+    if reschedule_ids:
+        reschedule_time_jobs(*sorted(reschedule_ids))
     if reschedule_calendar_sync:
         scheduler.reschedule_job("calendar_reminder_sync", trigger=calendar_sync_trigger())
-    if reschedule_day_start:
-        scheduler.reschedule_job("day_start", trigger=wake_trigger())
     if changed:
         await asyncio.to_thread(settings_store.set_many, changed)
 
@@ -815,7 +867,7 @@ async def update_settings(
     field is also write-through persisted to settings.db
     (utils/settings_store.py) so it survives a restart.
 
-    timezone/digest_time/bedtime/calendar_sync_interval_minutes/wake_time
+    timezone/evening_time/bedtime/calendar_sync_interval_minutes/wake_time
     also live-reschedule their APScheduler jobs, since they're registered
     as fixed triggers rather than being read fresh like the other settings.
     latest_checkin_time needs no reschedule — jobs/checkin.py reads it
@@ -860,14 +912,32 @@ async def get_lmstudio_models(_: Annotated[None, Depends(auth.require_session_or
     }
 
 
-@app.post("/debug/digest")
-async def trigger_digest_now(_: Annotated[None, Depends(auth.require_session_or_token)]):
-    """
-    Manually fires today's digest immediately, without waiting for the
-    20:45 schedule. Sends a real email on every call — remove or comment
-    this out once you're done testing the pipeline end to end.
-    """
-    await send_daily_digest()
+@app.post("/debug/morning")
+async def trigger_morning_now(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """Fires the morning day-ahead message now (a real Gotify push)."""
+    await send_morning_message()
+    return {"status": "sent"}
+
+
+@app.post("/debug/evening")
+async def trigger_evening_now(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """Fires the evening message now: a real push, the daily commentary file
+    when that setting is on, and the nightly thread/keyword sweep."""
+    await send_evening_message()
+    return {"status": "sent"}
+
+
+@app.post("/debug/weekly-review")
+async def trigger_weekly_review_now(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """Writes this week's review to Reviews/Weekly/ now and pushes it."""
+    await send_weekly_review()
+    return {"status": "sent"}
+
+
+@app.post("/debug/monthly-review")
+async def trigger_monthly_review_now(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """Writes last month's review to Reviews/Monthly/ now and pushes it."""
+    await send_monthly_review()
     return {"status": "sent"}
 
 
@@ -928,16 +998,6 @@ async def trigger_test_notification(_: Annotated[None, Depends(auth.require_sess
     await asyncio.to_thread(
         send_gotify, "Test Notification", "This is a test notification from the dashboard.", 5
     )
-    return {"status": "sent"}
-
-
-@app.post("/debug/email")
-async def trigger_test_email(_: Annotated[None, Depends(auth.require_session_or_token)]):
-    """
-    Sends a one-off test email — useful for confirming the SMTP_* env
-    vars are configured correctly without waiting for the daily digest.
-    """
-    await asyncio.to_thread(send_email, "Test email", "This is a test email from the dashboard.")
     return {"status": "sent"}
 
 
@@ -1299,27 +1359,6 @@ async def reply_checkin(checkin_id: str, request: CheckinReplyRequest):
     if not await checkin_jobs.answer_checkin(checkin_id, request.text):
         raise HTTPException(status_code=409, detail="Check-in is no longer awaiting a reply")
     return {"reply": "Saved."}
-
-
-@app.get("/checkin/{checkin_id}/rate")
-async def rate_checkin(checkin_id: str, helpful: Literal["yes", "no"]):
-    """
-    Magic-link thumbs-up/down from the daily digest email (jobs/digest.py's
-    rating block). GET, not POST — a plain-text email link has no JS/form to
-    issue a POST. Same trust model as the other magic-link check-in routes
-    above (the id itself is the capability token), but scoped to
-    status == "answered" rather than "pending" — only a check-in the user
-    actually engaged with makes sense to rate. No expiry window: unlike the
-    pending-to-fired CHECKIN_EXPIRY clock, a digest email is a standing
-    record and a rating given days later is still real data.
-    """
-    checkin = await asyncio.to_thread(checkins_store.get_checkin, checkin_id)
-    if checkin is None:
-        raise HTTPException(status_code=404, detail="Unknown check-in")
-    if checkin["status"] != "answered":
-        raise HTTPException(status_code=409, detail="Only answered check-ins can be rated")
-    await asyncio.to_thread(checkins_store.record_helpfulness, checkin_id, helpful == "yes")
-    return HTMLResponse("<p>Thanks — got it. You can close this tab.</p>")
 
 
 # ---------------------------------------------------------------------------

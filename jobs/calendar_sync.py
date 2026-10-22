@@ -12,8 +12,8 @@ alarm are none of this job's business, exactly like before.
 Runs on an APScheduler IntervalTrigger — agent/scheduler.py's
 calendar_sync_trigger(), interval controlled by
 settings.calendar_sync_interval_minutes (live-reschedulable via
-/settings, same as digest_time/bedtime), not tied to a fixed time of day
-the way the digest/bedtime jobs are.
+/settings, same as the evening/bedtime times), not tied to a fixed time of day
+the way those jobs are.
 """
 from __future__ import annotations
 

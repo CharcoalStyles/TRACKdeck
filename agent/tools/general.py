@@ -5,7 +5,7 @@ from langchain_core.tools import tool
 import requests
 import trafilatura
 
-from agent.scheduler import scheduler, bedtime_trigger, digest_trigger, wake_trigger
+from agent.scheduler import reschedule_time_jobs
 from agent.settings import is_valid_timezone, settings
 from agent.tools.weather import call_open_meteo_search
 from utils.datetime import format_now_human
@@ -67,10 +67,8 @@ def set_home_location(location: str) -> str:
     settings.default_location = resolved_name
     settings.timezone = tz_name
     # Same rescheduling main.py's POST /settings does on a timezone change —
-    # these three jobs are registered as fixed cron triggers, not read fresh.
-    scheduler.reschedule_job("daily_digest", trigger=digest_trigger())
-    scheduler.reschedule_job("bedtime_reminder", trigger=bedtime_trigger())
-    scheduler.reschedule_job("day_start", trigger=wake_trigger())
+    # the fixed-time jobs are registered as cron triggers, not read fresh.
+    reschedule_time_jobs()
 
     logger.info("Onboarding set default_location=%s timezone=%s", resolved_name, tz_name)
     return f"Set default location to '{resolved_name}' and timezone to '{tz_name}'."
