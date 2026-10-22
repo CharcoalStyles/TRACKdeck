@@ -3,7 +3,7 @@ jobs/morning.py
 ----------------
 The wake-up day-ahead message: today's and tomorrow's weather, today's
 calendar and reminders, what's left unticked from yesterday's captures.
-Pushed through Gotify at settings.wake_time. All context is gathered by
+Pushed through Gotify (and emailed when email_to is set) at settings.wake_time. All context is gathered by
 plain code (utils/day_context.py) and handed to the writer model.
 """
 from __future__ import annotations
@@ -13,9 +13,9 @@ import logging
 from datetime import date, datetime, timedelta
 
 from agent.settings import settings
-from jobs.common import WRITING_RULES, or_none, write
+from jobs.common import WRITING_RULES, deliver, or_none, write
 from utils import day_context
-from utils.notify import notify_error, send_gotify
+from utils.notify import notify_error
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ def compose_morning_message(today: date | None = None) -> str:
 async def send_morning_message() -> None:
     try:
         text = await asyncio.to_thread(compose_morning_message)
-        await asyncio.to_thread(send_gotify, "Good morning", text, MORNING_PRIORITY)
+        await asyncio.to_thread(deliver, "Good morning", text, MORNING_PRIORITY)
         logger.info("Morning message sent.")
     except Exception as e:
         logger.error("Morning message failed: %s", e)

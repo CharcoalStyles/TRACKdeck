@@ -10,7 +10,7 @@ Jobs currently registered against this scheduler (see main.py's lifespan):
   - "morning_message" — jobs/morning.py, cron via wake_trigger()
   - "evening_message" — jobs/evening.py, cron via evening_trigger()
   - "weekly_review" — jobs/reviews.py, Sundays via weekly_trigger()
-  - "monthly_review" — jobs/reviews.py, day-of-month via monthly_trigger()
+  - "monthly_review" — jobs/reviews.py, last evening or first morning via monthly_trigger()
   - "bedtime_reminder" — jobs/bedtime.py, cron via bedtime_trigger()
   - "calendar_reminder_sync" — jobs/calendar_sync.py, interval via
     calendar_sync_trigger()
@@ -43,10 +43,13 @@ def weekly_trigger() -> CronTrigger:
 
 
 def monthly_trigger() -> CronTrigger:
-    hour, minute = (int(p) for p in settings.weekly_review_time.split(":"))
-    return CronTrigger(
-        day=settings.monthly_review_day, hour=hour, minute=minute, timezone=settings.zoneinfo()
-    )
+    """Last day of the month at the evening time, or the 1st at the morning time."""
+    if settings.monthly_review_timing == "first_morning":
+        day, clock = "1", settings.monthly_review_morning_time
+    else:
+        day, clock = "last", settings.monthly_review_evening_time
+    hour, minute = (int(p) for p in clock.split(":"))
+    return CronTrigger(day=day, hour=hour, minute=minute, timezone=settings.zoneinfo())
 
 
 def bedtime_trigger() -> CronTrigger:

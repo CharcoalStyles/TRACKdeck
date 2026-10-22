@@ -23,7 +23,6 @@ from utils import checkin_log, daily_notes, event_log, reviews
 logger = logging.getLogger(__name__)
 
 _ICS_FORMAT = "%Y%m%dT%H%M%SZ"
-_REPLY_CHARS = 200
 _ANSWER_CHARS = 300
 
 
@@ -41,7 +40,7 @@ def interactions_for(day: date) -> list[dict]:
     return event_log.events_between(start, start + timedelta(days=1), kind="interaction")
 
 
-def render_day(day: date, *, with_replies: bool = False, max_chars: int = 3000) -> str:
+def render_day(day: date, *, max_chars: int = 3000) -> str:
     """One local day as text: captures (with done state), check-in answers,
     and what was asked of the assistant. Empty string if nothing happened."""
     date_str = day.isoformat()
@@ -71,8 +70,6 @@ def render_day(day: date, *, with_replies: bool = False, max_chars: int = 3000) 
         tools = [t.get("name") for t in e.get("tools", []) if t.get("name")]
         if tools:
             line += f" [tools: {', '.join(tools)}]"
-        if with_replies and e.get("reply"):
-            line += f"\n  Assistant: {_clip(e['reply'], _REPLY_CHARS)}"
         asked.append(line)
     if asked:
         sections.append("Asked the assistant:\n" + "\n".join(asked))
@@ -94,6 +91,24 @@ def render_days(first: date, last: date, *, per_day_chars: int = 1200, total_cha
         day += timedelta(days=1)
     text = "\n\n".join(blocks)
     return text if len(text) <= total_chars else text[: total_chars - 3].rstrip() + "..."
+
+
+def render_checkin_answers(first: date, last: date) -> str:
+    """The user's check-in answers for first..last, oldest first, verbatim
+    (prompt and answer, unclipped). Days or check-ins without an answer are
+    left out."""
+    blocks = []
+    day = first
+    while day <= last:
+        rows = []
+        for e in checkin_log.read_entries(day.isoformat()):
+            if e["answer"]:
+                answer = "\n".join(f"  {line}" for line in e["answer"].strip().splitlines())
+                rows.append(f'- {e["time"]} Prompt: {e["prompt"]}\n  Answer:\n{answer}')
+        if rows:
+            blocks.append(f"[{day.strftime('%A %d %B')}]\n" + "\n".join(rows))
+        day += timedelta(days=1)
+    return "\n\n".join(blocks)
 
 
 def leftover_captures(day: date) -> list[dict]:

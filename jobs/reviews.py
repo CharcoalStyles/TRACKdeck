@@ -1,15 +1,16 @@
 """
 jobs/reviews.py
 ----------------
-Sunday weekly review and the monthly review of the previous month. Both
-are written by the writer model from files read by date range
-(utils/day_context.py), saved to the vault under Reviews/Weekly/ and
-Reviews/Monthly/, and announced through Gotify.
+Sunday weekly review and the monthly review. Both are written by the writer
+model from files read by date range (utils/day_context.py), saved to the
+vault under Reviews/Weekly/ and Reviews/Monthly/, pushed through Gotify
+(shortened) and emailed in full when email_to is set.
 
-The weekly review covers the ISO week containing the run date; the monthly
-review covers the previous calendar month and leans on that month's weekly
-reviews (and daily commentary files, when the trial setting is on) rather
-than re-reading every day in full.
+The weekly review covers the ISO week containing the run date. The monthly
+review covers the month the run date is in when it fires on the last evening
+of the month, or the previous month when it fires on the first morning
+(settings.monthly_review_timing); it leans on that month's weekly reviews and
+daily commentary files rather than re-reading every day in full.
 """
 from __future__ import annotations
 
@@ -19,9 +20,9 @@ import logging
 from datetime import date, datetime, timedelta
 
 from agent.settings import settings
-from jobs.common import WRITING_RULES, or_none, write
+from jobs.common import WRITING_RULES, deliver, or_none, write
 from utils import day_context, reviews
-from utils.notify import notify_error, send_gotify
+from utils.notify import notify_error
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +69,11 @@ def week_bounds(on: date) -> tuple[date, date]:
     return monday, monday + timedelta(days=6)
 
 
-def previous_month_bounds(on: date) -> tuple[date, date]:
-    last = on.replace(day=1) - timedelta(days=1)
+def review_month_bounds(on: date) -> tuple[date, date]:
+    if settings.monthly_review_timing == "first_morning":
+        last = on.replace(day=1) - timedelta(days=1)
+    else:
+        last = on.replace(day=calendar.monthrange(on.year, on.month)[1])
     return last.replace(day=1), last
 
 
@@ -88,7 +92,7 @@ def build_weekly_prompt(on: date) -> tuple[str, str]:
 
 
 def build_monthly_prompt(on: date) -> tuple[str, str]:
-    first, last = previous_month_bounds(on)
+    first, last = review_month_bounds(on)
     key = reviews.period_key("monthly", first)
     week_keys = []
     day = first
@@ -123,7 +127,7 @@ def compose_monthly_review(on: date | None = None):
     on = on or datetime.now(settings.zoneinfo()).date()
     key, prompt = build_monthly_prompt(on)
     text = write(prompt, temperature=0.6)
-    first, _ = previous_month_bounds(on)
+    first, _ = review_month_bounds(on)
     title = f"Monthly review — {calendar.month_name[first.month]} {first.year}"
     return reviews.write_review("monthly", key, title, text), text
 
@@ -135,7 +139,9 @@ def _push_text(text: str) -> str:
 async def send_weekly_review() -> None:
     try:
         path, text = await asyncio.to_thread(compose_weekly_review)
-        await asyncio.to_thread(send_gotify, "Weekly review", _push_text(text), REVIEW_PRIORITY)
+        await asyncio.to_thread(
+            deliver, "Weekly review", text, REVIEW_PRIORITY, push_text=_push_text(text)
+        )
         logger.info("Weekly review written to %s.", path.name)
     except Exception as e:
         logger.error("Weekly review failed: %s", e)
@@ -145,7 +151,9 @@ async def send_weekly_review() -> None:
 async def send_monthly_review() -> None:
     try:
         path, text = await asyncio.to_thread(compose_monthly_review)
-        await asyncio.to_thread(send_gotify, "Monthly review", _push_text(text), REVIEW_PRIORITY)
+        await asyncio.to_thread(
+            deliver, "Monthly review", text, REVIEW_PRIORITY, push_text=_push_text(text)
+        )
         logger.info("Monthly review written to %s.", path.name)
     except Exception as e:
         logger.error("Monthly review failed: %s", e)

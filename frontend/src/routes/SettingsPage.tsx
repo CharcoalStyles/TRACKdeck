@@ -45,6 +45,7 @@ type Settings = NonNullable<ReturnType<typeof useQuery<{
   default_location: string
   timezone: string
   evening_time: string
+  email_to: string
   wake_time: string
   bedtime: string
   latest_checkin_time: string
@@ -212,16 +213,18 @@ function LocationTimeCard({ data, onSaved }: { data?: Settings; onSaved: () => v
 function EveningCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
   const status = useSaveStatus()
   const [eveningTime, setEveningTime] = useState('')
+  const [email, setEmail] = useState('')
 
   useEffect(() => {
     if (!data) return
     setEveningTime(data.evening_time || '')
+    setEmail(data.email_to || '')
   }, [data])
 
   const mutation = useMutation({
     mutationFn: async () => {
       const { error } = await api.POST('/settings', {
-        body: { evening_time: eveningTime },
+        body: { evening_time: eveningTime, email_to: email },
       })
       if (error) throw new Error()
     },
@@ -237,14 +240,24 @@ function EveningCard({ data, onSaved }: { data?: Settings; onSaved: () => void }
     <Card>
       <h2 className="mb-1 text-lg font-semibold">Evening Message</h2>
       <p className="mb-3 text-sm text-text-muted">
-        Local time the end-of-day message is pushed (see the Timezone above). Takes effect
-        immediately, no restart needed.
+        Local time the end-of-day message is pushed (see the Timezone above). The morning,
+        evening, weekly and monthly messages are also emailed to the recipient below
+        (needs the SMTP_* env vars). Takes effect immediately, no restart needed.
       </p>
       <FieldRow label="Send time">
         <input
           type="time"
           value={eveningTime}
           onChange={(e) => setEveningTime(e.target.value)}
+          className={inputClass}
+        />
+      </FieldRow>
+      <FieldRow label="Email recipient">
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="blank = push only"
           className={inputClass}
         />
       </FieldRow>

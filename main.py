@@ -89,7 +89,7 @@ from agent.scheduler import (
 from agent.settings import (
     apply_persisted,
     is_valid_clock_time,
-    is_valid_monthly_review_day,
+    is_valid_monthly_review_timing,
     is_valid_poll_interval_seconds,
     is_valid_max_history_tokens,
     is_valid_sync_interval_minutes,
@@ -127,6 +127,7 @@ from utils.caldav_client import ensure_collection_exists
 from utils.datetime import parse_local_datetime
 from utils.llm_client import describe_chat_llm
 from utils.lmstudio_client import LmStudioModel, fetch_models as fetch_lmstudio_models
+from utils.mailer import send_email
 from utils.notify import notify_device_error, notify_error, send_gotify
 
 from voice import router as voice_router
@@ -613,8 +614,13 @@ class SettingsUpdate(BaseModel):
     evening_time: str | None = None
     # "HH:MM" local time of the Sunday weekly review (also the monthly review's time).
     weekly_review_time: str | None = None
-    # Day of month (1-28) the monthly review of the previous month fires.
-    monthly_review_day: int | None = None
+    # "last_evening" (evening of the month's last day) or "first_morning"
+    # (morning of the 1st, covering the month just ended), each with its own time.
+    monthly_review_timing: str | None = None
+    monthly_review_evening_time: str | None = None
+    monthly_review_morning_time: str | None = None
+    # Recipient for the morning/evening/weekly/monthly emails (blank = none).
+    email_to: str | None = None
     # Also save the evening message under Reviews/Daily/ (trial).
     daily_commentary: bool | None = None
     # Include the forecast in the morning message.
@@ -675,14 +681,17 @@ class SettingsUpdate(BaseModel):
     def _check_values(self):
         if self.timezone is not None and not is_valid_timezone(self.timezone):
             raise ValueError(f"'{self.timezone}' is not a recognized IANA timezone name")
-        for name in ("evening_time", "weekly_review_time"):
+        for name in (
+            "evening_time", "weekly_review_time",
+            "monthly_review_evening_time", "monthly_review_morning_time",
+        ):
             value = getattr(self, name)
             if value is not None and not is_valid_clock_time(value):
                 raise ValueError(f"'{value}' is not a valid HH:MM 24-hour time")
-        if self.monthly_review_day is not None and not is_valid_monthly_review_day(
-            self.monthly_review_day
+        if self.monthly_review_timing is not None and not is_valid_monthly_review_timing(
+            self.monthly_review_timing
         ):
-            raise ValueError("monthly_review_day must be between 1 and 28")
+            raise ValueError("monthly_review_timing must be 'last_evening' or 'first_morning'")
         if self.bedtime is not None and not is_valid_clock_time(self.bedtime):
             raise ValueError(f"'{self.bedtime}' is not a valid HH:MM 24-hour time")
         if self.calendar_sync_interval_minutes is not None and not is_valid_sync_interval_minutes(
@@ -713,7 +722,10 @@ class SettingsResponse(BaseModel):
     timezone: str
     evening_time: str
     weekly_review_time: str
-    monthly_review_day: int
+    monthly_review_timing: str
+    monthly_review_evening_time: str
+    monthly_review_morning_time: str
+    email_to: str
     daily_commentary: bool
     weather_enabled: bool
     bedtime: str
@@ -738,7 +750,10 @@ def _current_settings() -> dict:
         "timezone": settings.timezone,
         "evening_time": settings.evening_time,
         "weekly_review_time": settings.weekly_review_time,
-        "monthly_review_day": settings.monthly_review_day,
+        "monthly_review_timing": settings.monthly_review_timing,
+        "monthly_review_evening_time": settings.monthly_review_evening_time,
+        "monthly_review_morning_time": settings.monthly_review_morning_time,
+        "email_to": settings.email_to,
         "daily_commentary": settings.daily_commentary,
         "weather_enabled": settings.weather_enabled,
         "bedtime": settings.bedtime,
@@ -793,11 +808,16 @@ async def _apply_settings_update(update: SettingsUpdate) -> None:
     if update.weekly_review_time is not None:
         settings.weekly_review_time = update.weekly_review_time
         changed["weekly_review_time"] = update.weekly_review_time
-        reschedule_ids.update(["weekly_review", "monthly_review"])
-    if update.monthly_review_day is not None:
-        settings.monthly_review_day = update.monthly_review_day
-        changed["monthly_review_day"] = str(update.monthly_review_day)
-        reschedule_ids.add("monthly_review")
+        reschedule_ids.add("weekly_review")
+    for name in ("monthly_review_timing", "monthly_review_evening_time", "monthly_review_morning_time"):
+        value = getattr(update, name)
+        if value is not None:
+            setattr(settings, name, value)
+            changed[name] = value
+            reschedule_ids.add("monthly_review")
+    if update.email_to is not None:
+        settings.email_to = update.email_to.strip()
+        changed["email_to"] = settings.email_to
     if update.daily_commentary is not None:
         settings.daily_commentary = update.daily_commentary
         changed["daily_commentary"] = "1" if update.daily_commentary else "0"
@@ -936,8 +956,15 @@ async def trigger_weekly_review_now(_: Annotated[None, Depends(auth.require_sess
 
 @app.post("/debug/monthly-review")
 async def trigger_monthly_review_now(_: Annotated[None, Depends(auth.require_session_or_token)]):
-    """Writes last month's review to Reviews/Monthly/ now and pushes it."""
+    """Writes the monthly review (month per monthly_review_timing) to Reviews/Monthly/ now and pushes it."""
     await send_monthly_review()
+    return {"status": "sent"}
+
+
+@app.post("/debug/email")
+async def trigger_test_email(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """Sends a one-off test email to the email_to setting — confirms the SMTP_* env vars work."""
+    await asyncio.to_thread(send_email, "Test email", "This is a test email from the dashboard.")
     return {"status": "sent"}
 
 

@@ -132,7 +132,7 @@ export default function TestingPage() {
       />
       <TriggerCard
         title="Evening Message"
-        description="Fires the evening message immediately: a real push, the daily commentary file if that setting is on, and the nightly thread sweep."
+        description="Fires the evening message immediately: a real push (and email if set), the daily commentary file if that setting is on, and the nightly thread sweep."
         path="/debug/evening"
         buttonLabel="Send evening message now"
         pendingText="Working..."
@@ -148,7 +148,7 @@ export default function TestingPage() {
       />
       <TriggerCard
         title="Monthly Review"
-        description="Writes last month's review to Reviews/Monthly/ and pushes it."
+        description="Writes the monthly review to Reviews/Monthly/ and pushes it (the month follows the Settings page timing)."
         path="/debug/monthly-review"
         buttonLabel="Run monthly review now"
         pendingText="Working..."
@@ -177,6 +177,14 @@ export default function TestingPage() {
         buttonLabel="Sync calendar now"
         pendingText="Syncing..."
         successText="Synced."
+      />
+      <TriggerCard
+        title="Email"
+        description="Sends a one-off test email to the recipient set on the Settings page — confirms the SMTP_* env vars are configured correctly."
+        path="/debug/email"
+        buttonLabel="Send test email"
+        pendingText="Sending..."
+        successText="Sent."
       />
       <TriggerCard
         title="Gotify Notification"

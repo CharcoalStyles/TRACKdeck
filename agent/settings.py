@@ -37,9 +37,11 @@ def is_valid_clock_time(value: str) -> bool:
         return False
 
 
-def is_valid_monthly_review_day(value: int) -> bool:
-    # 1-28 so the day exists in every month.
-    return 1 <= value <= 28
+MONTHLY_REVIEW_TIMINGS = ("last_evening", "first_morning")
+
+
+def is_valid_monthly_review_timing(value: str) -> bool:
+    return value in MONTHLY_REVIEW_TIMINGS
 
 
 def is_valid_sync_interval_minutes(value: int) -> bool:
@@ -163,16 +165,18 @@ class Settings:
     evening_time: str = "20:45"
 
     # "HH:MM" 24-hour local time the Sunday weekly review fires (jobs/reviews.py).
-    # The monthly review fires at this same time on `monthly_review_day`.
     weekly_review_time: str = "18:00"
 
-    # Day of the month (1-28) the monthly review fires — it covers the
-    # previous calendar month.
-    monthly_review_day: int = 1
+    # When the monthly review fires: "last_evening" = the evening of the last
+    # day of the month (covers that month), "first_morning" = the morning of
+    # the 1st (covers the month just ended). Each has its own configurable time.
+    monthly_review_timing: str = "last_evening"
+    monthly_review_evening_time: str = "20:30"
+    monthly_review_morning_time: str = "08:00"
 
-    # Trial: also write the evening message into Reviews/Daily/ as a
-    # daily commentary file.
-    daily_commentary: bool = False
+    # Also write the evening message into Reviews/Daily/ as a daily
+    # commentary file (trial: switch it off if it adds nothing).
+    daily_commentary: bool = True
 
     # Include the today+tomorrow forecast in the morning message.
     weather_enabled: bool = True
@@ -245,6 +249,12 @@ class Settings:
     # for a small local model. No env var, same reasoning as
     # default_location above.
     max_history_tokens: int = 6000
+
+    # Recipient for the morning/evening/weekly/monthly messages sent by email
+    # as well as Gotify (utils/mailer.py; SMTP_* env vars hold the server).
+    # Blank = no email. Seeded from EMAIL_TO, or the older DIGEST_EMAIL_TO so
+    # an existing deployment keeps working.
+    email_to: str = os.environ.get("EMAIL_TO") or os.environ.get("DIGEST_EMAIL_TO", "")
 
     # Base URL used to build check-in magic-link URLs (jobs/checkin.py's
     # _checkin_click_url) for Gotify's tap-to-open extras. Seeded from
@@ -328,8 +338,9 @@ def apply_persisted(values: dict[str, str]) -> None:
         settings.evening_time = values["evening_time"]
     if "weekly_review_time" in values:
         settings.weekly_review_time = values["weekly_review_time"]
-    if "monthly_review_day" in values:
-        settings.monthly_review_day = int(values["monthly_review_day"])
+    for name in ("monthly_review_timing", "monthly_review_evening_time", "monthly_review_morning_time"):
+        if name in values:
+            setattr(settings, name, values[name])
     if "daily_commentary" in values:
         settings.daily_commentary = values["daily_commentary"] == "1"
     if "weather_enabled" in values:
@@ -350,6 +361,10 @@ def apply_persisted(values: dict[str, str]) -> None:
         settings.planning_template_note_id = values["planning_template_note_id"]
     if "chime_alert_sound_id" in values:
         settings.chime_alert_sound_id = values["chime_alert_sound_id"]
+    if "email_to" in values:
+        settings.email_to = values["email_to"]
+    elif "digest_email_to" in values:
+        settings.email_to = values["digest_email_to"]
     if "public_base_url" in values:
         settings.public_base_url = values["public_base_url"]
     if "lmstudio_chat_model" in values:

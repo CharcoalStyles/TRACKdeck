@@ -64,7 +64,7 @@ setup_env_file() {
     rm -f "${target}.bak"
 
     echo "  Generated $target with random API_TOKEN/DASHBOARD_PASSWORD/SESSION_SECRET_KEY."
-    echo "  Fill in CalDAV/Gotify values yourself if/when you need those features."
+    echo "  Fill in CalDAV/Gotify/SMTP values yourself if/when you need those features."
 }
 
 setup_env_file ".env" "./data/vault"
@@ -212,7 +212,7 @@ fi
 
 echo
 echo "All set. Next steps:"
-echo "  - Fill in CalDAV/Gotify values in .env / .env.docker if you want those features."
+echo "  - Fill in CalDAV/Gotify/SMTP values in .env / .env.docker if you want those features."
 echo "  - Full stack (primary):  GIT_SHA=\$(git rev-parse --short HEAD) docker compose --env-file .env.docker up --build"
 echo "    (GIT_SHA is optional; it labels the event log's prompt_version with the code revision)"
 echo "  - Local dev (needs uv):  uv run uvicorn main:app --reload"

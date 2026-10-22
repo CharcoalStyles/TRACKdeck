@@ -19,6 +19,10 @@ def env(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "timezone", "UTC")
     monkeypatch.setattr(settings, "weather_enabled", True)
     monkeypatch.setattr(settings, "daily_commentary", False)
+    monkeypatch.setattr(settings, "bedtime", "21:20")
+    monkeypatch.setattr(settings, "public_base_url", "")
+    monkeypatch.setattr(settings, "email_to", "")
+    monkeypatch.setattr(settings, "monthly_review_timing", "last_evening")
     return tmp_path
 
 
@@ -76,15 +80,14 @@ def test_render_day_combines_captures_checkins_and_interactions(env):
         )
         event_log.log_event("interaction", user_text="call the dentist", fallback_capture=True)
 
-    text = day_context.render_day(DAY, with_replies=True)
+    text = day_context.render_day(DAY)
     assert "- [ ] 09:05 buy oat milk" in text
     assert "Finished the draft" in text
     assert "How is your energy?" not in text  # unanswered check-ins are left out
     assert "12:30 what is on tomorrow [tools: get_calendar_events]" in text
-    assert "Assistant: Nothing much." in text
+    assert "Nothing much." not in text  # replies are never part of the record
     # The fallback capture appears once, under Captures only.
     assert text.count("call the dentist") == 1
-    assert "Assistant:" not in day_context.render_day(DAY)
 
 
 def test_render_day_empty_and_clipped(env):
@@ -214,12 +217,103 @@ def test_compose_morning_uses_writer(env, monkeypatch):
     assert "Thursday 22 October 2026" in prompts[0]
 
 
-def test_evening_prompt_has_record_leftovers_and_tomorrow(env, monkeypatch):
+def test_checkins_today_listed_verbatim_with_unanswered(env):
+    checkin_log.append_entry("c1", _at(10), "answered", "What went well?", "Finished the draft\nand slept ok")
+    checkin_log.append_entry("c2", _at(15), "skipped", "How is your energy?")
+    assert evening.render_checkins_today(DAY) == (
+        "- 10:00 What went well?\n"
+        "  > Finished the draft\n"
+        "  > and slept ok\n"
+        "- 15:00 How is your energy?\n"
+        "  (no answer)"
+    )
+    assert evening.render_checkins_today(date(2026, 10, 21)) == "No check-ins today."
+
+
+def test_render_checkin_answers_is_verbatim_and_skips_unanswered(env):
+    checkin_log.append_entry("c1", _at(10, day=date(2026, 10, 21)), "answered", "A very long prompt " * 20, "tired " * 100)
+    checkin_log.append_entry("c2", _at(15), "skipped", "Skipped one")
+    text = day_context.render_checkin_answers(date(2026, 10, 20), DAY)
+    assert "[Wednesday 21 October]" in text and "Skipped one" not in text
+    assert ("tired " * 100).strip() in text and "..." not in text
+
+
+def test_captures_line_counts_and_links(env, monkeypatch):
+    assert evening.captures_line(DAY) == "No unticked captures."
+    daily_notes.append_capture(_at(9), "one")
+    assert evening.captures_line(DAY) == "1 unticked capture."
+    daily_notes.append_capture(_at(10), "two")
+    monkeypatch.setattr(settings, "public_base_url", "https://pa.example.com/")
+    assert evening.captures_line(DAY) == "2 unticked captures. https://pa.example.com/captures"
+
+
+def test_evening_message_structure_and_order(env, monkeypatch):
     _stub_context(monkeypatch)
+    monkeypatch.setattr(day_context, "render_calendar", lambda a, b: "- Fri 23 Oct 09:00-10:00 Dentist")
+    monkeypatch.setattr(day_context, "render_reminders", lambda a, b: "")
+    checkin_log.append_entry("c1", _at(10), "answered", "What went well?", "Finished the draft")
     daily_notes.append_capture(_at(9), "write report")
-    prompt = evening.build_prompt(DAY)
-    assert "write report" in prompt
-    assert "CAL 2026-10-23..2026-10-23" in prompt
+    prompts = []
+    monkeypatch.setattr(evening, "write", lambda p, **k: prompts.append(p) or "You wrote \"Finished the draft\".")
+    text, day = evening.compose_evening_message(DAY)
+    assert day == DAY
+    order = [
+        text.index("Bedtime tonight: 21:20."),
+        text.index("Today's check-ins:"),
+        text.index("- 10:00 What went well?\n  > Finished the draft"),
+        text.index("A reading across the last few days:"),
+        text.index("1 unticked capture."),
+        text.index("Tomorrow:\n- Fri 23 Oct 09:00-10:00 Dentist"),
+    ]
+    assert order == sorted(order)
+    # The writer only ever sees the check-in answers, never captures or the calendar.
+    assert len(prompts) == 1
+    assert "Finished the draft" in prompts[0] and "write report" not in prompts[0] and "Dentist" not in prompts[0]
+
+
+def test_evening_prompt_forbids_recap_and_motives():
+    prompt = evening.build_reading_prompt("[Thursday 22 October]\n- 10:00 ...")
+    assert "Do not summarise what the user did" in prompt
+    assert "Never state why the user feels or does something" in prompt
+    assert "Quote the user's own words" in prompt
+    assert "recap" not in prompt.lower()
+
+
+def test_evening_without_checkin_answers_skips_the_writer(env, monkeypatch):
+    monkeypatch.setattr(day_context, "render_calendar", lambda a, b: "")
+    monkeypatch.setattr(day_context, "render_reminders", lambda a, b: "")
+
+    def never(p, **k):
+        raise AssertionError("writer must not be called")
+
+    monkeypatch.setattr(evening, "write", never)
+    text, _ = evening.compose_evening_message(DAY)
+    assert "reading" not in text
+    assert "No check-ins today." in text and "Nothing on the calendar or reminders yet." in text
+
+
+def test_evening_reading_uses_last_five_days_only(env, monkeypatch):
+    monkeypatch.setattr(day_context, "render_calendar", lambda a, b: "")
+    monkeypatch.setattr(day_context, "render_reminders", lambda a, b: "")
+    checkin_log.append_entry("old", _at(10, day=date(2026, 10, 16)), "answered", "Old prompt", "too old")
+    checkin_log.append_entry("in", _at(10, day=date(2026, 10, 18)), "answered", "In prompt", "in window")
+    prompts = []
+    monkeypatch.setattr(evening, "write", lambda p, **k: prompts.append(p) or "Reading.")
+    evening.compose_evening_message(DAY)
+    assert "in window" in prompts[0] and "too old" not in prompts[0]
+
+
+def test_evening_survives_writer_failure(env, monkeypatch):
+    monkeypatch.setattr(day_context, "render_calendar", lambda a, b: "")
+    monkeypatch.setattr(day_context, "render_reminders", lambda a, b: "")
+    checkin_log.append_entry("c1", _at(10), "answered", "Prompt", "answer")
+
+    def boom(p, **k):
+        raise RuntimeError("model down")
+
+    monkeypatch.setattr(evening, "write", boom)
+    text, _ = evening.compose_evening_message(DAY)
+    assert "> answer" in text and "reading" not in text
 
 
 def test_weekly_prompt_covers_the_iso_week(env, monkeypatch):
@@ -232,7 +326,8 @@ def test_weekly_prompt_covers_the_iso_week(env, monkeypatch):
     assert "midweek thing" in prompt and "Last week was calm." in prompt
 
 
-def test_monthly_prompt_covers_previous_month(env):
+def test_monthly_prompt_first_morning_covers_previous_month(env, monkeypatch):
+    monkeypatch.setattr(settings, "monthly_review_timing", "first_morning")
     reviews.write_review("weekly", "2026-W40", "t", "Early October summary.")
     reviews.write_review("daily", "2026-09-30", "t", "Last day commentary.")
     reviews.write_review("weekly", "2026-W43", "t", "Not in September.")
@@ -243,8 +338,21 @@ def test_monthly_prompt_covers_previous_month(env):
     assert "Not in September." not in prompt
 
 
-def test_month_and_week_bounds():
-    assert review_jobs.previous_month_bounds(date(2026, 1, 5)) == (date(2025, 12, 1), date(2025, 12, 31))
+def test_monthly_prompt_last_evening_covers_this_month(env):
+    reviews.write_review("weekly", "2026-W43", "t", "Late October summary.")
+    reviews.write_review("daily", "2026-09-30", "t", "September commentary.")
+    key, prompt = review_jobs.build_monthly_prompt(date(2026, 10, 31))
+    assert key == "2026-10"
+    assert "October 2026" in prompt
+    assert "Late October summary." in prompt and "September commentary." not in prompt
+
+
+def test_month_and_week_bounds(monkeypatch):
+    monkeypatch.setattr(settings, "monthly_review_timing", "first_morning")
+    assert review_jobs.review_month_bounds(date(2026, 1, 5)) == (date(2025, 12, 1), date(2025, 12, 31))
+    monkeypatch.setattr(settings, "monthly_review_timing", "last_evening")
+    assert review_jobs.review_month_bounds(date(2026, 2, 28)) == (date(2026, 2, 1), date(2026, 2, 28))
+    assert review_jobs.review_month_bounds(date(2024, 2, 29)) == (date(2024, 2, 1), date(2024, 2, 29))
     assert review_jobs.week_bounds(date(2026, 10, 25)) == (date(2026, 10, 19), date(2026, 10, 25))
 
 
@@ -254,6 +362,9 @@ def test_compose_weekly_and_monthly_write_files(env, monkeypatch):
     path, text = review_jobs.compose_weekly_review(date(2026, 10, 25))
     assert text == "Review text." and path.name == "2026-W43.md"
     assert reviews.read_review_body("weekly", "2026-W43") == "Review text."
+    path, _ = review_jobs.compose_monthly_review(date(2026, 10, 31))
+    assert path == env / "vault" / "Reviews" / "Monthly" / "2026-10.md"
+    monkeypatch.setattr(settings, "monthly_review_timing", "first_morning")
     path, _ = review_jobs.compose_monthly_review(date(2026, 11, 1))
     assert path == env / "vault" / "Reviews" / "Monthly" / "2026-10.md"
 
@@ -277,7 +388,7 @@ def test_writer_empty_reply_raises(monkeypatch):
 @pytest.fixture
 def sent(monkeypatch):
     calls = {"gotify": [], "errors": [], "sweeps": 0}
-    monkeypatch.setattr(evening, "send_gotify", lambda *a, **k: calls["gotify"].append(a))
+    monkeypatch.setattr(common, "send_gotify", lambda *a, **k: calls["gotify"].append(a))
     monkeypatch.setattr(evening, "notify_error", lambda *a, **k: calls["errors"].append(a))
 
     async def fake_sweep():
@@ -289,7 +400,7 @@ def sent(monkeypatch):
 
 def test_evening_sends_saves_commentary_only_when_enabled(env, monkeypatch, sent):
     _stub_context(monkeypatch)
-    monkeypatch.setattr(evening, "write", lambda p, **k: "Evening text")
+    monkeypatch.setattr(evening, "compose_evening_message", lambda: ("Evening text", DAY))
     with freeze_time("2026-10-22 20:45:00"):
         asyncio.run(evening.send_evening_message())
         assert sent["gotify"] == [("Evening", "Evening text", evening.EVENING_PRIORITY)]
@@ -300,13 +411,19 @@ def test_evening_sends_saves_commentary_only_when_enabled(env, monkeypatch, sent
     assert sent["sweeps"] == 2 and not sent["errors"]
 
 
+def test_daily_commentary_defaults_on():
+    from agent.settings import Settings
+
+    assert Settings.daily_commentary is True
+
+
 def test_evening_failure_reports_error_but_still_sweeps(env, monkeypatch, sent):
     _stub_context(monkeypatch)
 
-    def boom(p, **k):
+    def boom(*a, **k):
         raise RuntimeError("model down")
 
-    monkeypatch.setattr(evening, "write", boom)
+    monkeypatch.setattr(evening, "compose_evening_message", boom)
     asyncio.run(evening.send_evening_message())
     assert sent["gotify"] == [] and len(sent["errors"]) == 1
     assert sent["sweeps"] == 1
@@ -324,11 +441,18 @@ def test_sweep_clears_thread_registry(env):
 
 def test_weekly_push_is_clipped(env, monkeypatch):
     sent = []
-    monkeypatch.setattr(review_jobs, "send_gotify", lambda *a, **k: sent.append(a))
+    emails = []
+    monkeypatch.setattr(common, "send_gotify", lambda *a, **k: sent.append(a))
+    monkeypatch.setattr(common.mailer, "send_email", lambda *a: emails.append(a))
+    monkeypatch.setattr(settings, "email_to", "me@example.com")
+    for name in common.mailer._REQUIRED_ENV:
+        monkeypatch.setenv(name, "x")
     monkeypatch.setattr(day_context, "render_calendar", lambda a, b: "")
     monkeypatch.setattr(review_jobs, "write", lambda p, **k: "word " * 400)
     asyncio.run(review_jobs.send_weekly_review())
     assert sent[0][0] == "Weekly review" and len(sent[0][1]) <= review_jobs.PUSH_CHARS
+    # Email carries the full text, not the clipped push.
+    assert emails[0][0] == "Weekly review" and len(emails[0][1]) > review_jobs.PUSH_CHARS
 
 
 def test_morning_failure_notifies(env, monkeypatch):
@@ -350,10 +474,9 @@ def test_settings_validators():
     assert settings_mod().is_valid_clock_time("18:00")
     assert not settings_mod().is_valid_clock_time("25:00")
     assert not settings_mod().is_valid_clock_time("nope")
-    assert settings_mod().is_valid_monthly_review_day(1)
-    assert settings_mod().is_valid_monthly_review_day(28)
-    assert not settings_mod().is_valid_monthly_review_day(29)
-    assert not settings_mod().is_valid_monthly_review_day(0)
+    assert settings_mod().is_valid_monthly_review_timing("last_evening")
+    assert settings_mod().is_valid_monthly_review_timing("first_morning")
+    assert not settings_mod().is_valid_monthly_review_timing("3")
 
 
 def settings_mod():
@@ -363,20 +486,27 @@ def settings_mod():
 
 
 def test_apply_persisted_parses_new_fields(monkeypatch):
-    for name in ("evening_time", "weekly_review_time", "monthly_review_day", "daily_commentary", "weather_enabled"):
+    for name in (
+        "evening_time", "weekly_review_time", "monthly_review_timing", "monthly_review_evening_time",
+        "monthly_review_morning_time", "daily_commentary", "weather_enabled", "email_to",
+    ):
         monkeypatch.setattr(settings, name, getattr(settings, name))
     settings_mod().apply_persisted(
         {
             "evening_time": "21:10",
             "weekly_review_time": "17:30",
-            "monthly_review_day": "3",
+            "monthly_review_timing": "first_morning",
+            "monthly_review_morning_time": "07:45",
+            "digest_email_to": "old@example.com",
             "daily_commentary": "1",
             "weather_enabled": "0",
         }
     )
     assert settings.evening_time == "21:10"
     assert settings.weekly_review_time == "17:30"
-    assert settings.monthly_review_day == 3
+    assert settings.monthly_review_timing == "first_morning"
+    assert settings.monthly_review_morning_time == "07:45"
+    assert settings.email_to == "old@example.com"  # the pre-v2 key still loads
     assert settings.daily_commentary is True
     assert settings.weather_enabled is False
 
@@ -385,12 +515,17 @@ def test_triggers_follow_settings(monkeypatch):
     monkeypatch.setattr(settings, "timezone", "UTC")
     monkeypatch.setattr(settings, "evening_time", "21:10")
     monkeypatch.setattr(settings, "weekly_review_time", "17:30")
-    monkeypatch.setattr(settings, "monthly_review_day", 3)
+    monkeypatch.setattr(settings, "monthly_review_timing", "first_morning")
+    monkeypatch.setattr(settings, "monthly_review_morning_time", "07:45")
+    monkeypatch.setattr(settings, "monthly_review_evening_time", "20:15")
     assert "hour='21'" in str(scheduler.evening_trigger()) and "minute='10'" in str(scheduler.evening_trigger())
     weekly = str(scheduler.weekly_trigger())
     assert "day_of_week='sun'" in weekly and "hour='17'" in weekly
     monthly = str(scheduler.monthly_trigger())
-    assert "day='3'" in monthly and "minute='30'" in monthly
+    assert "day='1'" in monthly and "hour='7'" in monthly and "minute='45'" in monthly
+    monkeypatch.setattr(settings, "monthly_review_timing", "last_evening")
+    monthly = str(scheduler.monthly_trigger())
+    assert "day='last'" in monthly and "hour='20'" in monthly and "minute='15'" in monthly
 
 
 def test_reschedule_time_jobs_only_touches_registered_jobs(monkeypatch):
@@ -410,3 +545,41 @@ def test_reschedule_time_jobs_only_touches_registered_jobs(monkeypatch):
     scheduler.reschedule_time_jobs()
     scheduler.reschedule_time_jobs("evening_message", "weekly_review")
     assert fake.rescheduled == ["evening_message", "evening_message"]
+
+
+# ---- delivery ---------------------------------------------------------------
+
+
+def test_deliver_pushes_and_emails_when_recipient_set(monkeypatch):
+    pushed, mailed = [], []
+    monkeypatch.setattr(common, "send_gotify", lambda *a, **k: pushed.append(a))
+    monkeypatch.setattr(common.mailer, "send_email", lambda *a: mailed.append(a))
+    for name in common.mailer._REQUIRED_ENV:
+        monkeypatch.setenv(name, "x")
+    monkeypatch.setattr(settings, "email_to", "")
+    common.deliver("T", "body", 3)
+    assert pushed == [("T", "body", 3)] and mailed == []
+    monkeypatch.setattr(settings, "email_to", "me@example.com")
+    common.deliver("T", "body", 3, push_text="short")
+    assert pushed[-1] == ("T", "short", 3) and mailed == [("T", "body")]
+
+
+def test_deliver_reports_email_misconfiguration_and_failure(monkeypatch):
+    pushed = []
+    monkeypatch.setattr(common, "send_gotify", lambda *a, **k: pushed.append(a))
+    monkeypatch.setattr(settings, "email_to", "me@example.com")
+    for name in common.mailer._REQUIRED_ENV:
+        monkeypatch.delenv(name, raising=False)
+    with pytest.raises(RuntimeError, match="SMTP_HOST"):
+        common.deliver("T", "body", 3)
+    assert pushed  # the push still went out
+
+    for name in common.mailer._REQUIRED_ENV:
+        monkeypatch.setenv(name, "x")
+
+    def smtp_down(*a):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(common.mailer, "send_email", smtp_down)
+    with pytest.raises(RuntimeError, match="connection refused"):
+        common.deliver("T", "body", 3)
