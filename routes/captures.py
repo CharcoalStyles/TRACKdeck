@@ -32,6 +32,12 @@ class Capture(BaseModel):
     time: str
     text: str
     done: bool
+    # Where it came from (voice, text, device, dashboard) and how it got
+    # saved ("tool": the model chose jot_note; "fallback": a one-shot turn
+    # where no tool was chosen, so the app saved it). None for captures typed
+    # straight into the vault or written before event logging.
+    source: Optional[str] = None
+    via: Optional[str] = None
 
 
 class CaptureDay(BaseModel):
@@ -71,6 +77,12 @@ def _today() -> datetime:
     return datetime.now(settings.zoneinfo())
 
 
+def _provenance(first: datetime, last: datetime) -> dict[str, dict]:
+    """capture_id -> {source, via} from the event log's capture events."""
+    found = event_log.events_between(first, last + timedelta(days=1), kind="capture")
+    return {e["capture_id"]: {"source": e.get("source"), "via": e.get("via")} for e in found if e.get("capture_id")}
+
+
 @router.get("/captures", response_model=CapturesResponse)
 async def list_captures(
     _: Annotated[None, Depends(auth.require_session_or_token)],
@@ -78,11 +90,15 @@ async def list_captures(
 ):
     """Captures for today and the previous days-1 days, newest day first;
     days without captures are left out (today is always present)."""
-    today = _today().date()
+    now = _today()
+    today = now.date()
+    first = (now - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
+    origins = await asyncio.to_thread(_provenance, first, now)
     out, unticked = [], 0
     for offset in range(days):
         date_str = (today - timedelta(days=offset)).isoformat()
         captures = await asyncio.to_thread(daily_notes.read_captures, date_str)
+        captures = [{**c, **origins.get(c["id"], {})} for c in captures]
         unticked += sum(1 for c in captures if not c["done"])
         if captures or offset == 0:
             out.append({"date": date_str, "captures": captures})
@@ -95,7 +111,10 @@ async def add_capture(body: CaptureCreate, _: Annotated[None, Depends(auth.requi
         raise HTTPException(status_code=422, detail="text cannot be empty")
     capture_id = await asyncio.to_thread(save_capture, body.text, "dashboard", "form")
     now = _today()
-    return {"id": capture_id, "time": f"{now:%H:%M}", "text": " ".join(body.text.split()), "done": False}
+    return {
+        "id": capture_id, "time": f"{now:%H:%M}", "text": " ".join(body.text.split()), "done": False,
+        "source": "dashboard", "via": "form",
+    }
 
 
 @router.patch("/captures/{date_str}/{capture_id}", response_model=Capture)
@@ -118,12 +137,30 @@ async def edit_capture(
     changed = [f for f in ("text", "done") if updated[f] != before[f]]
     if changed:
         event_log.log_event(
-            "edit", artifact_type="capture", capture_id=capture_id, date=date_str,
+            "edit", artifact_type="capture", action="update", capture_id=capture_id, date=date_str,
             fields=changed, before={f: before[f] for f in changed},
             after={f: updated[f] for f in changed}, source="dashboard",
             origin_interaction_id=event_log.origin_of("capture", capture_id),
         )
     return updated
+
+
+@router.delete("/captures/{date_str}/{capture_id}")
+async def delete_capture(
+    date_str: str,
+    capture_id: str,
+    _: Annotated[None, Depends(auth.require_session_or_token)],
+):
+    _check_date(date_str)
+    removed = await asyncio.to_thread(daily_notes.delete_capture, date_str, capture_id)
+    if removed is None:
+        raise HTTPException(status_code=404, detail="capture not found")
+    event_log.log_event(
+        "edit", artifact_type="capture", action="delete", capture_id=capture_id, date=date_str,
+        fields=["text", "done"], before={"text": removed["text"], "done": removed["done"]}, after=None,
+        source="dashboard", origin_interaction_id=event_log.origin_of("capture", capture_id),
+    )
+    return {"deleted": capture_id}
 
 
 @router.post("/captures/{date_str}/{capture_id}/convert", response_model=Capture)

@@ -138,6 +138,7 @@ from routes.day_planning import router as day_planning_router
 from routes.task_library import router as task_library_router
 from routes.captures import router as captures_router
 from routes.today import router as today_router
+from routes.calendar_events import router as calendar_events_router
 
 # ---------------------------------------------------------------------------
 # Lifespan
@@ -362,6 +363,7 @@ app.include_router(day_planning_router)  # /day-plans/run
 app.include_router(task_library_router)  # /task-library
 app.include_router(captures_router)  # /captures
 app.include_router(today_router)  # /today
+app.include_router(calendar_events_router)  # /calendar-events
 
 
 # ---------------------------------------------------------------------------

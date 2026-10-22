@@ -12,7 +12,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 import auth
@@ -26,9 +26,14 @@ router = APIRouter()
 
 
 class TodayEvent(BaseModel):
+    uid: Optional[str] = None
     title: str
     start: str
     end: Optional[str] = None
+    location: str = ""
+    description: str = ""
+    repeats: bool = False
+    generated: bool = False
 
 
 class TodayReminder(BaseModel):
@@ -46,6 +51,7 @@ class TodayCheckin(BaseModel):
 class TodayResponse(BaseModel):
     date: str
     weekday: str
+    is_today: bool
     events: list[TodayEvent]
     reminders: list[TodayReminder]
     checkins: list[TodayCheckin]
@@ -68,7 +74,12 @@ def _events(day_start: datetime, day_end: datetime) -> list[dict]:
             continue
         finish = _parse_ics(event.get("end"))
         rows.append((begin, {
+            "uid": event.get("uid"),
             "title": event.get("summary") or "(untitled)",
+            "location": event.get("location") or "",
+            "description": event.get("description") or "",
+            "repeats": bool(event.get("rrule")),
+            "generated": bool(event.get("generated")),
             "start": f"{begin.astimezone(tz):%H:%M}",
             "end": f"{finish.astimezone(tz):%H:%M}" if finish else None,
         }))
@@ -91,11 +102,20 @@ def _reminders(day_start: datetime, day_end: datetime) -> list[dict]:
 
 
 @router.get("/today", response_model=TodayResponse)
-async def today(_: Annotated[None, Depends(auth.require_session_or_token)]):
-    now = datetime.now(settings.zoneinfo())
-    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    day_end = day_start + timedelta(days=1)
-    date_str = f"{now:%Y-%m-%d}"
+async def today(
+    _: Annotated[None, Depends(auth.require_session_or_token)],
+    date: Annotated[Optional[str], Query(pattern=r"^\d{4}-\d{2}-\d{2}$")] = None,
+):
+    """One day's view — today by default, or any `date` (YYYY-MM-DD)."""
+    tz = settings.zoneinfo()
+    now = datetime.now(tz)
+    try:
+        day = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=tz) if date else now
+    except ValueError:
+        raise HTTPException(status_code=422, detail="date must be a real YYYY-MM-DD date")
+    day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = (day_start.replace(tzinfo=None) + timedelta(days=1)).replace(tzinfo=tz)
+    date_str = f"{day:%Y-%m-%d}"
     events, reminders, entries = await asyncio.gather(
         asyncio.to_thread(_events, day_start, day_end),
         asyncio.to_thread(_reminders, day_start, day_end),
@@ -103,7 +123,8 @@ async def today(_: Annotated[None, Depends(auth.require_session_or_token)]):
     )
     return {
         "date": date_str,
-        "weekday": f"{now:%A}",
+        "weekday": f"{day:%A}",
+        "is_today": date_str == f"{now:%Y-%m-%d}",
         "events": events,
         "reminders": reminders,
         "checkins": [

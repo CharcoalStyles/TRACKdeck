@@ -9,6 +9,8 @@ interface CaptureItem {
   time: string
   text: string
   done: boolean
+  source?: string | null
+  via?: string | null
 }
 
 const inputClass = 'rounded border border-border bg-card-alt px-2 py-1 text-sm text-text-primary'
@@ -66,6 +68,15 @@ function CaptureRow({ date, item, onChanged }: { date: string; item: CaptureItem
     onError: (e: Error) => setMessage(e.message),
   })
 
+  const remove = useMutation({
+    mutationFn: async () => {
+      const { error } = await api.DELETE('/captures/{date_str}/{capture_id}', { params: { path } })
+      if (error) throw new Error(errorText(error))
+    },
+    onSuccess: onChanged,
+    onError: (e: Error) => setMessage(e.message),
+  })
+
   function saveEdit(e: FormEvent) {
     e.preventDefault()
     if (draft.trim() && draft.trim() !== item.text) patch.mutate({ text: draft })
@@ -84,6 +95,14 @@ function CaptureRow({ date, item, onChanged }: { date: string; item: CaptureItem
           aria-label="Done"
         />
         <span className="mt-0.5 shrink-0 text-xs tabular-nums text-text-faint">{item.time}</span>
+        {item.source === 'voice' && (
+          <span
+            className="mt-0.5 shrink-0 rounded bg-card-alt px-1 text-xs text-text-muted"
+            title={item.via === 'fallback' ? 'Heard by voice but not understood as a request, so it was saved here automatically.' : 'Said by voice.'}
+          >
+            {item.via === 'fallback' ? 'from voice · auto-saved' : 'from voice'}
+          </span>
+        )}
         {editing ? (
           <form onSubmit={saveEdit} className="flex grow flex-wrap gap-2">
             <input
@@ -106,6 +125,14 @@ function CaptureRow({ date, item, onChanged }: { date: string; item: CaptureItem
         {!editing && (
           <span className="flex shrink-0 gap-1">
             <button type="button" onClick={() => setEditing(true)} className={smallBtn}>Edit</button>
+            <button
+              type="button"
+              disabled={remove.isPending}
+              onClick={() => { if (window.confirm('Delete this capture?')) remove.mutate() }}
+              className={smallBtn}
+            >
+              Delete
+            </button>
             {!item.done && (
               <button type="button" onClick={() => setConverting((v) => !v)} className={smallBtn}>
                 Convert

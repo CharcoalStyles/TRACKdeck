@@ -92,3 +92,20 @@ def update_capture(
             vault.write_note_atomic(path, "\n".join(lines) + "\n")
             return {"id": capture_id, "time": m[2], "text": new_text, "done": new_done}
     return None
+
+
+def delete_capture(date_str: str, capture_id: str) -> dict | None:
+    """Remove one capture's line; returns what was removed, or None when that
+    day or id doesn't exist."""
+    path = daily_notes_file(date_str)
+    with _lock:
+        if not path.exists():
+            return None
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for i, raw in enumerate(lines):
+            m = _LINE_RE.match(raw)
+            if m and m[4] == capture_id:
+                del lines[i]
+                vault.write_note_atomic(path, "\n".join(lines) + "\n")
+                return {"id": capture_id, "time": m[2], "text": m[3], "done": m[1] == "x"}
+    return None

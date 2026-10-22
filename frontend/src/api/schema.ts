@@ -325,7 +325,8 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete Capture */
+        delete: operations["delete_capture_captures__date_str___capture_id__delete"];
         options?: never;
         head?: never;
         /** Edit Capture */
@@ -360,7 +361,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Today */
+        /**
+         * Today
+         * @description One day's view — today by default, or any `date` (YYYY-MM-DD).
+         */
         get: operations["today_today_get"];
         put?: never;
         post?: never;
@@ -368,6 +372,41 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/calendar-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Event */
+        post: operations["add_event_calendar_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendar-events/{uid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Event */
+        delete: operations["remove_event_calendar_events__uid__delete"];
+        options?: never;
+        head?: never;
+        /** Edit Event */
+        patch: operations["edit_event_calendar_events__uid__patch"];
         trace?: never;
     };
     "/login": {
@@ -1306,6 +1345,37 @@ export interface components {
             /** File */
             file: string;
         };
+        /** CalendarEventCreate */
+        CalendarEventCreate: {
+            /** Title */
+            title: string;
+            /** Start */
+            start: string;
+            /** End */
+            end?: string | null;
+            /** Location */
+            location?: string | null;
+            /** Description */
+            description?: string | null;
+        };
+        /** CalendarEventEdit */
+        CalendarEventEdit: {
+            /** Title */
+            title?: string | null;
+            /** Start */
+            start?: string | null;
+            /** End */
+            end?: string | null;
+            /** Location */
+            location?: string | null;
+            /** Description */
+            description?: string | null;
+        };
+        /** CalendarEventResult */
+        CalendarEventResult: {
+            /** Uid */
+            uid: string;
+        };
         /** Capture */
         Capture: {
             /** Id */
@@ -1316,6 +1386,10 @@ export interface components {
             text: string;
             /** Done */
             done: boolean;
+            /** Source */
+            source?: string | null;
+            /** Via */
+            via?: string | null;
         };
         /** CaptureConvert */
         CaptureConvert: {
@@ -1828,12 +1902,34 @@ export interface components {
         };
         /** TodayEvent */
         TodayEvent: {
+            /** Uid */
+            uid?: string | null;
             /** Title */
             title: string;
             /** Start */
             start: string;
             /** End */
             end?: string | null;
+            /**
+             * Location
+             * @default
+             */
+            location: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Repeats
+             * @default false
+             */
+            repeats: boolean;
+            /**
+             * Generated
+             * @default false
+             */
+            generated: boolean;
         };
         /** TodayReminder */
         TodayReminder: {
@@ -1850,6 +1946,8 @@ export interface components {
             date: string;
             /** Weekday */
             weekday: string;
+            /** Is Today */
+            is_today: boolean;
             /** Events */
             events: components["schemas"]["TodayEvent"][];
             /** Reminders */
@@ -2827,6 +2925,40 @@ export interface operations {
             };
         };
     };
+    delete_capture_captures__date_str___capture_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path: {
+                date_str: string;
+                capture_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     edit_capture_captures__date_str___capture_id__patch: {
         parameters: {
             query?: never;
@@ -2905,7 +3037,9 @@ export interface operations {
     };
     today_today_get: {
         parameters: {
-            query?: never;
+            query?: {
+                date?: string | null;
+            };
             header?: {
                 auth?: string | null;
             };
@@ -2921,6 +3055,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TodayResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_event_calendar_events_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarEventCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEventResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_event_calendar_events__uid__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path: {
+                uid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEventResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_event_calendar_events__uid__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path: {
+                uid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalendarEventEdit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEventResult"];
                 };
             };
             /** @description Validation Error */

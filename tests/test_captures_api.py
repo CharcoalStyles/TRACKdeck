@@ -140,3 +140,36 @@ def test_today_collects_events_reminders_and_answered_checkins(env, monkeypatch)
     assert [e["title"] for e in out["events"]] == ["Later"]
     assert out["reminders"] == [] and out["checkins"] == []
     assert out["date"] == f"{datetime.now(settings.zoneinfo()):%Y-%m-%d}"
+
+
+def test_delete_capture_removes_line_and_logs_delete_edit(env):
+    from routes import captures
+
+    created = run(captures.add_capture(captures.CaptureCreate(text="old idea"), None))
+    keep = run(captures.add_capture(captures.CaptureCreate(text="keep me"), None))
+    today = f"{datetime.now(settings.zoneinfo()):%Y-%m-%d}"
+    assert run(captures.delete_capture(today, created["id"], None)) == {"deleted": created["id"]}
+    assert [c["id"] for c in daily_notes.read_captures(today)] == [keep["id"]]
+    edit = events("edit")[0]
+    assert edit["artifact_type"] == "capture" and edit["action"] == "delete"
+    assert edit["before"] == {"text": "old idea", "done": False} and edit["after"] is None
+    assert edit["source"] == "dashboard"
+    with pytest.raises(HTTPException) as e:
+        run(captures.delete_capture(today, created["id"], None))
+    assert e.value.status_code == 404
+    assert daily_notes.delete_capture(today, "nope") is None
+
+
+def test_listing_marks_where_each_capture_came_from(env):
+    from routes import captures
+
+    now = datetime.now(settings.zoneinfo())
+    voice_id = daily_notes.append_capture(now, "from the mic")
+    event_log.log_event("capture", capture_id=voice_id, source="voice", via="fallback",
+                        text="from the mic", origin_interaction_id="i1")
+    typed = run(captures.add_capture(captures.CaptureCreate(text="typed"), None))
+    unknown = daily_notes.append_capture(now, "hand-written in obsidian")
+    caps = {c["id"]: c for c in run(captures.list_captures(None, days=1))["days"][0]["captures"]}
+    assert (caps[voice_id]["source"], caps[voice_id]["via"]) == ("voice", "fallback")
+    assert (caps[typed["id"]]["source"], caps[typed["id"]]["via"]) == ("dashboard", "form")
+    assert caps[unknown].get("source") is None and caps[unknown].get("via") is None
