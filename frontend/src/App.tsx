@@ -3,10 +3,6 @@ import RequireAuth from './components/RequireAuth'
 import AppShell from './components/layout/AppShell'
 import LoginPage from './routes/LoginPage'
 import ChatPage from './routes/ChatPage'
-import ProfilePage from './routes/ProfilePage'
-import VaultPage from './routes/VaultPage'
-import ProjectsPage from './routes/ProjectsPage'
-import ProjectPage from './routes/ProjectPage'
 import SettingsPage from './routes/SettingsPage'
 import RemindersPage from './routes/RemindersPage'
 import CheckinsAdminPage from './routes/CheckinsAdminPage'
@@ -25,10 +21,6 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>
           <Route path="/" element={<ChatPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/vault" element={<VaultPage />} />
-          <Route path="/projects" element={<ProjectsPage />} />
-          <Route path="/projects/:name" element={<ProjectPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/reminders" element={<RemindersPage />} />
           <Route path="/admin/checkins" element={<CheckinsAdminPage />} />

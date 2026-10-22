@@ -2,7 +2,6 @@ import asyncio
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-from langchain_core.tools import tool
 
 from agent import writer
 from agent.settings import settings
@@ -21,8 +20,8 @@ def info_for(*calls, errors=()):
     return info
 
 
-def d(draft="Done.", *, mode=None, one_shot=False, agent_run=False, info=None):
-    return writer.decide(mode=mode, one_shot=one_shot, agent_run=agent_run, info=info or info_for(), draft=draft)
+def d(draft="Done.", *, mode=None, one_shot=False, info=None):
+    return writer.decide(mode=mode, one_shot=one_shot, info=info or info_for(), draft=draft)
 
 
 # --- Rule A ----------------------------------------------------------------
@@ -47,13 +46,8 @@ def test_prose_tools_go_to_writer(tool_name):
     assert d(info=info_for(tool_name), one_shot=True) == (True, "prose_tool")
 
 
-@pytest.mark.parametrize("mode", ["onboarding", "profile_chat", "day_planning", "project_chat"])
-def test_always_writer_modes(mode):
-    assert d("Got it.", mode=mode, info=info_for("remember_about_me")) == (True, f"mode:{mode}")
-
-
-def test_agent_run_goes_to_writer():
-    assert d(mode="project_chat", agent_run=True) == (True, "mode:agent_run")
+def test_always_writer_mode():
+    assert d("Got it.", mode="day_planning", info=info_for("add_planning_task")) == (True, "mode:day_planning")
 
 
 def test_one_shot_keeps_draft():
@@ -75,10 +69,6 @@ def test_data_tool_has_larger_limit():
     info = info_for("get_todays_events")
     assert d("x" * 400, info=info) == (False, "short_draft")
     assert d("x" * 600, info=info) == (True, "long_draft")
-
-
-def test_remember_about_me_next_to_a_real_answer_is_long_draft():
-    assert d("x" * 600, info=info_for("remember_about_me", "get_current_weather"))[0] is True
 
 
 # --- helpers ----------------------------------------------------------------
@@ -118,22 +108,7 @@ def test_shorten_and_tool_model_view():
     assert flagged.content == long  # original untouched
 
 
-def test_valid_rewrite_tidy_keeps_anchors():
-    orig = "Meeting 3:30 on 12/10 at https://x.example/a with [[Bob]]. " * 8
-    assert writer.valid_rewrite(orig, orig.replace("Meeting", "Mtg"), compose=False)
-    assert not writer.valid_rewrite(orig, orig.replace("3:30", "4:30"), compose=False)
-    assert not writer.valid_rewrite(orig, orig.replace("[[Bob]]", "Bob"), compose=False)
-    assert not writer.valid_rewrite(orig, "short", compose=False)
-    assert not writer.valid_rewrite(orig, "", compose=False)
-
-
-def test_valid_rewrite_compose_must_not_shrink_or_drop_urls():
-    orig = "Outline see https://a.example/x"
-    assert writer.valid_rewrite(orig, "A full note. https://a.example/x and a lot more detail here", compose=True)
-    assert not writer.valid_rewrite(orig, "A full note with no link and plenty of words in it", compose=True)
-
-
-# --- finalize_reply / rewrite_tool_calls (writer model mocked) --------------
+# --- finalize_reply (writer model mocked) -----------------------------------
 
 @pytest.fixture
 def enabled(monkeypatch, tmp_path):
@@ -155,7 +130,6 @@ def enabled(monkeypatch, tmp_path):
 def finalize(msgs, draft, **kw):
     kw.setdefault("mode", None)
     kw.setdefault("one_shot", False)
-    kw.setdefault("agent_run", False)
     return run(writer.finalize_reply(msgs, draft=draft, thread_id="t1", **kw))
 
 
@@ -180,9 +154,9 @@ def test_finalize_uses_writer_and_logs(enabled):
 
 
 def test_finalize_keeps_draft_when_rule_says_so(enabled):
-    msgs = [HumanMessage(content="jot this"), AIMessage(content="", tool_calls=[{"name": "save_note", "args": {}, "id": "c"}]),
-            ToolMessage(content="Note saved", tool_call_id="c")]
-    assert finalize(msgs, "Saved.") is None
+    msgs = [HumanMessage(content="plan tomorrow"), AIMessage(content="", tool_calls=[{"name": "add_planning_task", "args": {}, "id": "c"}]),
+            ToolMessage(content="Task noted", tool_call_id="c")]
+    assert finalize(msgs, "Noted.") is None
     assert writer_log.get_writer_log("t1")[0]["route"] == "tool_model"
 
 
@@ -212,47 +186,3 @@ def test_writer_prompt_tells_it_about_errors_and_voice(enabled):
     system, final = calls[0][0].content, calls[0][-1].content
     assert "plain text only" in system
     assert "Result (ERROR): Failed to add event" in final
-
-
-LONG = ("Service notes: oil changed at 120000 km on 2026-03-01 by [[Bob]] see https://x.example/a. " * 6)
-
-
-def tool_call_msgs(name, args, user="u"):
-    return [HumanMessage(content=user), AIMessage(content="", tool_calls=[{"name": name, "args": args, "id": "c1"}])]
-
-
-def test_rewrite_tool_calls_tidy(enabled):
-    _, fake = enabled
-    fake.reply = LONG.replace("Service notes", "Service log")
-    msgs = tool_call_msgs("save_note", {"content": LONG, "title": "Car"})
-    new = run(writer.rewrite_tool_calls(msgs, thread_id="t1", mode=None, agent_run=False))
-    assert new[0]["args"]["content"] == fake.reply and new[0]["args"]["title"] == "Car"
-    assert msgs[-1].tool_calls[0]["args"]["content"] == LONG  # original untouched
-    assert writer_log.get_writer_log("t1")[0]["kind"] == "arg:save_note.content"
-
-
-def test_rewrite_tool_calls_skips_short_content(enabled):
-    msgs = tool_call_msgs("save_note", {"content": "buy milk"})
-    assert run(writer.rewrite_tool_calls(msgs, thread_id="t1", mode=None, agent_run=False)) is None
-
-
-def test_rewrite_tool_calls_skips_other_tools(enabled):
-    msgs = tool_call_msgs("remember_about_me", {"section": "x", "content": LONG})
-    assert run(writer.rewrite_tool_calls(msgs, thread_id="t1", mode=None, agent_run=False)) is None
-
-
-def test_rewrite_tool_calls_invalid_rewrite_keeps_original(enabled):
-    _, fake = enabled
-    fake.reply = "Totally different and drops every anchor but is long enough to pass the length check. " * 5
-    msgs = tool_call_msgs("save_note", {"content": LONG})
-    assert run(writer.rewrite_tool_calls(msgs, thread_id="t1", mode=None, agent_run=False)) is None
-    row = writer_log.get_writer_log("t1")[0]
-    assert row["route"] == "fallback" and row["error"] == "validation_failed"
-
-
-def test_rewrite_tool_calls_compose_runs_even_for_short_drafts(enabled):
-    _, fake = enabled
-    fake.reply = "A full written note. https://a.example/x and plenty more detail than the outline had."
-    msgs = tool_call_msgs("save_note", {"content": "outline https://a.example/x"}, user="research X")
-    new = run(writer.rewrite_tool_calls(msgs, thread_id="project_demo", mode="project_chat", agent_run=True))
-    assert new[0]["args"]["content"] == fake.reply

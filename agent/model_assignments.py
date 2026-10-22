@@ -19,7 +19,7 @@ from agent.settings import settings
 NO_WRITER = "@tool"
 
 # Modes whose final reply is always handed to the writer (agent/writer.py).
-ALWAYS_WRITER = ("onboarding", "profile_chat", "day_planning", "project_chat", "agent_run")
+ALWAYS_WRITER = ("day_planning",)
 
 
 @dataclass(frozen=True)
@@ -37,12 +37,7 @@ SURFACES: tuple[Surface, ...] = (
     Surface("one_shot", "Voice (one-shot)", True,
             "Tool model, kept short for a push notification. Writer only when a tool failed or a "
             "schedule / reflection / web-page tool ran."),
-    Surface("onboarding", "Onboarding interview", True, "Always the writer."),
-    Surface("profile_chat", "Profile chat", True, "Always the writer."),
     Surface("day_planning", "Day planning", True, "Always the writer."),
-    Surface("project_chat", "Project chat", True, "Always the writer."),
-    Surface("agent_run", "Project agent run", True,
-            "Always the writer, which also composes long note bodies."),
     Surface("digest", "Daily digest", False, "Always the writer."),
     Surface("checkin", "Check-in prompts", False, "Always the writer (rewording and picking prompts)."),
 )
@@ -50,9 +45,7 @@ SURFACE_KEYS = {s.key for s in SURFACES}
 TOOL_SURFACE_KEYS = {s.key for s in SURFACES if s.tool_calls}
 
 
-def surface_key(mode: str | None, one_shot: bool, agent_run: bool) -> str:
-    if agent_run:
-        return "agent_run"
+def surface_key(mode: str | None, one_shot: bool) -> str:
     if mode in ALWAYS_WRITER:
         return mode  # type: ignore[return-value]
     return "one_shot" if one_shot else "chat"

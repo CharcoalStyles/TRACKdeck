@@ -3,8 +3,7 @@ utils/vault.py
 ---------------
 Core file I/O and markdown/frontmatter handling for the Obsidian-synced
 notes vault. This module owns the on-disk format; agent/vault_watcher.py
-and agent/tools/notes.py both build on top of it rather than touching
-files directly.
+builds on top of it rather than touching files directly.
 
 Vault layout:
     <VAULT_PATH>/
@@ -15,13 +14,9 @@ Vault layout:
         <note>.md     Processed notes live flat at the vault root by
                       default — no category folders. Tags and [[links]] do
                       the organizing, not folder placement.
-        <Project>/    The one deliberate exception: a project folder groups
-                      together all the notes for one ongoing project (see
-                      get_or_create_project_dir/get_or_create_project in
-                      agent/tools/notes.py). One level deep only, no
-                      nesting — a note's containing folder *is* its
-                      project, there's no separate registry to keep in
-                      sync.
+        <folder>/    One level deep, no nesting — is_project_dir() treats
+                      any such folder (other than Inbox/dotfiles) as a
+                      content folder for list_vault_notes() to scan.
 
 Frontmatter schema:
     id:      stable short id, generated once, never changes. This is the
@@ -56,18 +51,9 @@ import yaml
 INBOX_DIRNAME = "Inbox"
 FRONTMATTER_DELIM = "---"
 
-# Same threshold convention as agent/keywords.py's fuzzy thread-keyword
-# matching — tolerates the model or a voice transcription phrasing a
-# project name slightly differently without spawning a near-duplicate
-# folder for what's really the same project.
-PROJECT_MATCH_THRESHOLD = 0.75
-
 # The About Me note is a singleton with a fixed, known location, unlike
-# ordinary notes. It's referenced constantly (every turn learning mode is
-# on), so it deliberately doesn't go through search_notes/find_note_by_id
-# at all — no dependency on embedding similarity, and no risk of an id
-# remembered from an earlier turn going stale or getting hallucinated.
-# See agent/tools/notes.py's remember_about_me/read_about_me.
+# ordinary notes — no dependency on embedding similarity, and no risk of an
+# id remembered from an earlier turn going stale or getting hallucinated.
 ABOUT_ME_FILENAME = "about-me.md"
 ABOUT_ME_TITLE = "About Me"
 
@@ -150,11 +136,9 @@ class Note:
     source: str = "agent"
     body: str = ""
     path: Path | None = None  # populated when loaded from / written to disk
-    # topic name -> note id. Only meaningfully used on About Me today (see
-    # get_or_create_linked_note in agent/tools/notes.py) — a deterministic
-    # registry so a specific person/project/topic can always be found the
-    # same reliable way About Me itself is found, rather than through
-    # search or a remembered id that can go stale or get hallucinated.
+    # topic name -> note id, written on About Me by the now-removed
+    # get_or_create_linked_note tool. Nothing writes or reads this anymore;
+    # kept only so an existing About Me note's frontmatter still round-trips.
     linked_notes: dict = field(default_factory=dict)
 
     def frontmatter_dict(self) -> dict:
@@ -185,9 +169,8 @@ def _coerce_iso_str(value: object) -> object:
     unquoted date in frontmatter (its Properties panel writes native YAML
     dates), which yaml.safe_load then parses as a real datetime/date
     object instead of the str the Note dataclass declares. Normalize back
-    to a string here so every caller (e.g. list_notes_summary's sort) can
-    trust created/updated are always comparable strings, regardless of how
-    the file got edited."""
+    to a string here so every caller can trust created/updated are always
+    comparable strings, regardless of how the file got edited."""
     if isinstance(value, (datetime, date)):
         return value.isoformat()
     return value
@@ -265,19 +248,17 @@ def _claim_path(path: Path) -> bool:
     return True
 
 
-def unique_note_path(title: str, project: Path | None = None) -> Path:
-    """Pick a non-colliding filename for a new note — in the vault root, or
-    inside `project` (a project folder from get_or_create_project_dir) if
-    given.
+def unique_note_path(title: str) -> Path:
+    """Pick a non-colliding filename for a new note in the vault root.
 
     The candidate is claimed with an exclusive create (not just an
     existence check) so a concurrent writer computing the same slug —
-    another save_note call, or the Inbox watcher — can't race past a
-    stale check and overwrite this note once real content is written.
-    The caller's subsequent write_note_atomic replaces this empty
-    placeholder with the actual content.
+    the Inbox watcher — can't race past a stale check and overwrite this
+    note once real content is written. The caller's subsequent
+    write_note_atomic replaces this empty placeholder with the actual
+    content.
     """
-    target_dir = project if project is not None else vault_root()
+    target_dir = vault_root()
     target_dir.mkdir(parents=True, exist_ok=True)
     slug = slugify(title)
 
@@ -309,102 +290,6 @@ def is_project_dir(path: Path) -> bool:
     )
 
 
-def list_project_dirs() -> list[Path]:
-    root = vault_root()
-    if not root.exists():
-        return []
-    return [p for p in root.iterdir() if is_project_dir(p)]
-
-
-def match_project_dir(name: str) -> Path | None:
-    """Fuzzy-match `name` against existing project folder names, tolerant of
-    the model (or a voice transcription) phrasing a project name slightly
-    differently each time. Pure lookup — never creates anything."""
-    projects = list_project_dirs()
-    slug = slugify(name)
-    for p in projects:
-        if p.name == slug:
-            return p
-
-    candidate = name.strip().lower()
-    best_dir = None
-    best_ratio = 0.0
-    for p in projects:
-        ratio = SequenceMatcher(None, candidate, p.name.replace("-", " ").lower()).ratio()
-        if ratio > best_ratio:
-            best_ratio = ratio
-            best_dir = p
-
-    if best_dir is not None and best_ratio >= PROJECT_MATCH_THRESHOLD:
-        return best_dir
-    return None
-
-
-def get_or_create_project_dir(name: str) -> tuple[Path, bool]:
-    """Get (or create) the folder for a project. Returns (dir, created)."""
-    existing = match_project_dir(name)
-    if existing is not None:
-        return existing, False
-
-    root = vault_root()
-    project_dir = root / slugify(name)
-    # slugify already strips anything that could escape vault_root() (path
-    # separators, "..", etc.) — this is a cheap defense-in-depth check on
-    # top of that, since nothing else in this module guards against path
-    # traversal from user/model-supplied names.
-    if not project_dir.resolve().is_relative_to(root.resolve()):
-        raise ValueError(f"Unsafe project name: {name!r}")
-    project_dir.mkdir(parents=True, exist_ok=True)
-    return project_dir, True
-
-
-# ---------------------------------------------------------------------------
-# Project image attachments
-# ---------------------------------------------------------------------------
-
-ATTACHMENTS_DIRNAME = "attachments"
-ALLOWED_ATTACHMENT_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
-
-
-def project_attachments_dir(project_dir: Path) -> Path:
-    return project_dir / ATTACHMENTS_DIRNAME
-
-
-def save_project_attachment(project_dir: Path, filename: str, data: bytes) -> Path:
-    """Save an uploaded/dropped-in image under a project's attachments folder.
-    Sanitizes the filename the same way unique_note_path sanitizes a title —
-    slugify the stem, keep the extension — and de-dupes a collision with a
-    short id suffix rather than overwriting."""
-    attachments_dir = project_attachments_dir(project_dir)
-    attachments_dir.mkdir(parents=True, exist_ok=True)
-
-    suffix = Path(filename).suffix.lower()
-    stem = slugify(Path(filename).stem)
-    candidate = attachments_dir / f"{stem}{suffix}"
-    if candidate.exists():
-        candidate = attachments_dir / f"{stem}-{generate_id()}{suffix}"
-
-    # Same defense-in-depth shape as get_or_create_project_dir: slugify
-    # already strips path-traversal characters, this just double-checks.
-    if not candidate.resolve().is_relative_to(attachments_dir.resolve()):
-        raise ValueError(f"Unsafe attachment filename: {filename!r}")
-
-    tmp_path = candidate.with_name(candidate.name + f".tmp{os.getpid()}")
-    tmp_path.write_bytes(data)
-    os.replace(tmp_path, candidate)
-    return candidate
-
-
-def list_project_attachments(project_dir: Path) -> list[Path]:
-    attachments_dir = project_attachments_dir(project_dir)
-    if not attachments_dir.exists():
-        return []
-    return sorted(
-        p for p in attachments_dir.iterdir()
-        if p.is_file() and p.suffix.lower() in ALLOWED_ATTACHMENT_EXTENSIONS
-    )
-
-
 # ---------------------------------------------------------------------------
 # Listing / lookup
 # ---------------------------------------------------------------------------
@@ -416,7 +301,7 @@ def list_vault_notes() -> list[Path]:
     if not root.exists():
         return []
     notes = [p for p in root.iterdir() if p.is_file() and not is_ignorable(p)]
-    for project_dir in list_project_dirs():
+    for project_dir in (p for p in root.iterdir() if is_project_dir(p)):
         notes.extend(p for p in project_dir.iterdir() if p.is_file() and not is_ignorable(p))
     return notes
 
@@ -435,39 +320,6 @@ def find_note_by_id(note_id: str) -> Path | None:
         if note is not None and note.id == note_id:
             return path
     return None
-
-
-def note_project(path: Path) -> str | None:
-    """The project folder name a note lives in, or None for a vault-root
-    note. Used to label notes for the vault-browse dashboard page."""
-    parent = path.parent
-    return parent.name if is_project_dir(parent) else None
-
-
-def list_notes_summary() -> list[dict]:
-    """Lightweight metadata for every processed note (excludes Inbox — see
-    list_vault_notes), most recently updated first. Backs GET /vault/notes;
-    kept here rather than inline in main.py since it's just another read
-    over what this module already owns."""
-    notes = []
-    for path in list_vault_notes():
-        note = parse_note(path)
-        if note is None:
-            continue
-        notes.append(
-            {
-                "id": note.id,
-                "title": note.title,
-                "tags": note.tags,
-                "project": note_project(path),
-                "source": note.source,
-                "created": note.created,
-                "updated": note.updated,
-                "excerpt": note.body.strip()[:200],
-            }
-        )
-    notes.sort(key=lambda n: n["updated"], reverse=True)
-    return notes
 
 
 def about_me_path() -> Path:
@@ -526,10 +378,9 @@ def get_or_create_planning_note(date_str: str, template_note_id: str | None = No
 def list_planning_notes() -> list[dict]:
     """Every task-planning note (see PLANNING_NOTE_TAG), most recent date
     first. Backs GET /reflection/history — lets the dashboard list past
-    days instead of only reaching one via an exact date in the URL. Same
-    shape/spirit as list_notes_summary, but scoped to this one note kind
-    since planning notes use a deterministic date-keyed filename rather
-    than needing a full vault scan."""
+    days instead of only reaching one via an exact date in the URL.
+    Planning notes use a deterministic date-keyed filename, so this scans
+    just the vault root rather than needing a full vault scan."""
     root = vault_root()
     if not root.exists():
         return []
@@ -547,21 +398,6 @@ def list_planning_notes() -> list[dict]:
         )
     notes.sort(key=lambda n: n["date"], reverse=True)
     return notes
-
-
-def find_linked_note_id(linked_notes: dict, topic: str) -> str | None:
-    """
-    Look up `topic` in a linked_notes registry, tolerant of case/whitespace
-    differences (the model may not phrase a topic identically every time).
-    Exact match first, then a case-insensitive fallback.
-    """
-    if topic in linked_notes:
-        return linked_notes[topic]
-    topic_lower = topic.strip().lower()
-    for key, note_id in linked_notes.items():
-        if key.strip().lower() == topic_lower:
-            return note_id
-    return None
 
 
 def get_or_create_about_me() -> Note:

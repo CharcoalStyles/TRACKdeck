@@ -22,9 +22,7 @@ export interface ThreadSize {
 
 interface UseChatOptions {
   threadId: string | null
-  mode?: 'onboarding' | 'profile_chat' | 'project_chat' | null
   oneShot?: boolean
-  agentRun?: boolean
   greeting?: string | null
   // false (default, matches index.html's ChatWidget/"+ New Chat"): greeting
   // only ever appears for the very first null-threadId render, never again
@@ -44,9 +42,7 @@ interface UseChatOptions {
 // append/replace on send, no extra round-trip after replying.
 export function useChat({
   threadId,
-  mode = null,
   oneShot = false,
-  agentRun = false,
   greeting = null,
   alwaysGreetIfEmpty = false,
   onSendStart,
@@ -110,8 +106,6 @@ export function useChat({
           text,
           thread_id: effectiveThreadId.current,
           one_shot: oneShot,
-          mode,
-          agent_run: agentRun,
         },
       })
       if (error || !data) throw new Error('Send failed')

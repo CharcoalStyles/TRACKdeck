@@ -158,9 +158,9 @@ def _default_mcp_servers() -> str:
 
 class Settings:
     # Fallback location for weather tools when the user doesn't name one
-    # (agent/tools/weather.py). No env var — collected via the onboarding
-    # "Basics" form / Settings page, not .env, so there's one source of
-    # truth for a value that's meant to be edited from the frontend.
+    # (agent/tools/weather.py). No env var — collected via the Settings
+    # page, not .env, so there's one source of truth for a value that's
+    # meant to be edited from the frontend.
     default_location: str = "Canberra"
 
     # IANA timezone name. Used for "what time is it" grounding
@@ -250,10 +250,10 @@ class Settings:
     # Fallback token budget for the message history sent to the LLM every
     # turn (agent/graph.py's call_llm, via trim_messages) — the oldest
     # messages are dropped once the thread's history exceeds the budget.
-    # Exists because "onboarding"/"profile_chat"/"project_<slug>" threads
-    # reuse the same thread_id forever and are never swept, so their
-    # history otherwise grows until it exceeds whatever context length the
-    # active model actually has. Shared fallback across both providers with
+    # Exists because a fixed-id thread (e.g. "day_planning:<date>") reuses
+    # the same thread_id forever and is never swept, so its history
+    # otherwise grows until it exceeds whatever context length the active
+    # model actually has. Shared fallback across both providers with
     # live context lookups: used when LLM_PROVIDER=lmstudio and either
     # LMSTUDIO_MANAGEMENT_URL isn't set or LM Studio's live
     # loaded_context_length can't be fetched (utils/lmstudio_client.py's
@@ -334,7 +334,7 @@ class Settings:
     # applies on the lmstudio provider. Live-editable, no restart.
     lmstudio_writer_model: str = os.environ.get("LMSTUDIO_WRITER_MODEL", "")
 
-    # Per-mode model overrides, JSON: {"onboarding": {"tool": "<id>", "writer": "<id>"}, ...}.
+    # Per-mode model overrides, JSON: {"day_planning": {"tool": "<id>", "writer": "<id>"}, ...}.
     # Blank/missing = lmstudio_chat_model for tools, lmstudio_writer_model for
     # replies. See agent/model_assignments.py. Live-editable, read per turn.
     model_assignments: str = "{}"

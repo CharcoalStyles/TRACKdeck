@@ -26,7 +26,6 @@ from agent.date_guard import clean_search_queries, fix_relative_dates
 from agent.memory import MemoryStore
 from agent.settings import settings
 from agent.tools.all_tools import get_tools
-from utils import vault
 from utils.datetime import format_now_human
 from utils.llm_client import get_chat_llm
 from utils.lmstudio_client import get_history_budget_tokens
@@ -44,14 +43,6 @@ logger = logging.getLogger(__name__)
 # (utils/openrouter_client.py), so its history budget is looked up live
 # from that same catalog instead of guessed.
 GEMINI_HISTORY_BUDGET_TOKENS = 200_000
-
-# Fixed-thread-id prefix for per-project chats (agent/runtime.py's run_agent
-# skips normal keyword/recency resolution whenever an explicit thread_id is
-# passed, so "project_<slug>" threads are automatically un-addressable by
-# voice keyword and never swept by jobs/digest.py — same trick as the
-# "onboarding"/"profile_chat" fixed threads below).
-PROJECT_THREAD_PREFIX = "project_"
-
 
 SYSTEM_PROMPT = """You are a personal assistant agent with access to tools including search_web.
 
@@ -100,15 +91,6 @@ If a tool call's result indicates an error, you MUST NOT report the action as su
 Either fix the call and retry once with corrected arguments, or tell the user plainly that it
 failed — never describe a failed tool call as if it worked.
 
-## Projects
-If the user is developing an ongoing project — ideas, notes, or plans that build up over
-many separate conversations, not a single one-off note and not a specific person/topic —
-check list_projects (or just try get_or_create_project) to get or create a dedicated vault
-folder for it. Use save_note — still with a title and content like any other note, plus
-that project's name — to file its notes together there, and pass the same project name to
-search_notes whenever the user is actively discussing that project, so retrieval stays
-scoped to it instead of pulling in unrelated notes.
-
 ## Tone
 A little warmth is fine, but keep it in check — especially on heavier or personal
 topics (self-criticism, mental health, executive function, motivation struggles,
@@ -150,59 +132,6 @@ Only decline to guess if something is truly required with no reasonable default 
 business name that doesn't exist) — then say what's missing and what you did anyway with the
 rest, rather than leaving everything undone."""
 
-ONBOARDING_ADDENDUM = """
-
-## Mode: Guided Onboarding
-You're actively interviewing the user to build out their About Me profile — driving the
-conversation, not waiting for facts to come up naturally (unlike passive learning mode).
-
-They already filled out a basics form before this conversation started, and everything on it
-is already recorded in About Me exactly as typed (name, birthday, occupation, job, important
-dates, preferences, routine, interests, values, health & goals), with a linked note for each
-person listed holding their relation to the user. Call read_about_me first to see what's
-there, and don't re-ask or re-record anything it already answered. Location is set separately
-via set_home_location; only touch that if they bring up moving. Go deeper on whatever they
-gave short answers to, and offer to say more about specific people if several were listed.
-
-Use as a guide for what's still thin, not a script to read verbatim:
-  - Preferences, People, Routine, Interests — go deeper than the form's short notes
-  - Values (guiding principles — often deliberately worked out, sometimes already ranked;
-    don't push if unarticulated. If the form gave a full ranked list, use remember_about_me
-    with mode="replace" so a later correction replaces it rather than appending a
-    conflicting one)
-  - Health & Goals, Important Dates — whatever's already there
-
-Follow their actual answers rather than marching down this list — dig into what's worth
-digging into, follow topics not on the list if they seem worth capturing, and ask one thing
-at a time.
-
-## MANDATORY: Recording as you go
-For every response: decide if anything's worth recording, and if so record it immediately —
-before asking anything else. Never batch facts for the end; the user can stop at any point
-and whatever's unsaved is lost. Briefly acknowledge what you recorded ("Got it" is enough)
-and continue.
-
-For a specific person (e.g. going through several one by one) or any other distinct
-sub-topic likely to accumulate detail later, use get_or_create_linked_note instead of
-writing into a shared About Me section.
-
-Once the main areas feel reasonably covered, tell them they can press Finished on the
-dashboard whenever they're done and add more later — don't keep interviewing indefinitely.
-Only record what the user actually said; never fill in details they haven't given."""
-
-PROFILE_CHAT_ADDENDUM = """
-
-## Mode: Profile Query & Update
-This conversation is specifically about the user's own profile — answering what's currently
-recorded in About Me, and letting them correct or add to it. Use read_about_me before
-answering what's known, and remember_about_me to record corrections/additions given
-directly.
-
-For a correction about a specific person/project/sub-topic, use get_or_create_linked_note
-and edit that note directly rather than the shared About Me section — editing a section
-holding multiple entries (e.g. "People") risks losing every other entry in it, not just the
-one fixed."""
-
 DAY_PLANNING_ADDENDUM = """
 
 ## Mode: Day Planning
@@ -230,58 +159,13 @@ If a "Schedule window" line is included (e.g. planning just an evening rather th
 day), pass its two values to generate_schedule_blocks as start_time/end_time exactly as
 given — they're already resolved, not something to reinterpret."""
 
-PROJECT_CHAT_ADDENDUM = """
-
-## Mode: Project Chat — {project}
-Focused specifically on the "{project}" project. A PROJECT NOTES block below lists every
-note in its folder — your primary source; use read_note (with the id shown) for full
-content when an excerpt isn't enough, and search_notes/save_note with project="{project}"
-for deeper search or new notes (still needs its own title/content — project just scopes
-where it's filed).
-
-Stay scoped to this project — say so rather than answering from general knowledge if the
-user asks about something unrelated."""
-
-PROJECT_AGENT_ADDENDUM = """
-
-## Mode: Project Agent — {project}
-The message below is a goal to complete autonomously for "{project}" in this turn, with no
-back-and-forth — don't ask a clarifying question or just describe what you'd do; actually do
-the work with your tools and produce the real result.
-
-A PROJECT NOTES block below lists every note in this project's folder — check it first to
-build on what's there. Use search_notes/read_note (project="{project}") for anything the
-excerpts don't cover, search_web/fetch_webpage for anything not already in the vault.
-
-When the goal calls for documentation, write it: save_note with a real title/content and
-project="{project}". Summarizing what a note *would* say hasn't completed the goal — it has
-to actually exist.
-
-Stay scoped to "{project}" — if part of the goal needs something outside it, say so and do
-the rest anyway rather than leaving it all undone.
-
-This is your only turn for this goal — work through every part before ending, don't stop
-partway. Once done, reply with a short summary of what you did and where to find it (e.g.
-note title(s)), not the full content again."""
-
-# Per-mode tool sets for the tool model. Each of these modes is a separate,
-# narrow flow (see the *_ADDENDUM prompts above), so offering the full ~31+
-# tool schemas just gives a 1.2B model more ways to pick wrong. Names that
-# don't exist in the live tool list are skipped; an empty result falls back
-# to the full list (build_graph).
-_NOTE_EDIT_TOOLS = ["read_note", "append_to_note", "update_note_section", "search_notes"]
+# Per-mode tool sets for the tool model. day_planning is a separate, narrow
+# flow (see DAY_PLANNING_ADDENDUM above), so offering the full tool list
+# just gives a 1.2B model more ways to pick wrong. Names that don't exist in
+# the live tool list are skipped; an empty result falls back to the full
+# list (build_graph).
 MODE_TOOL_NAMES = {
-    "onboarding": [
-        "read_about_me", "remember_about_me", "get_or_create_linked_note",
-        "set_home_location", *_NOTE_EDIT_TOOLS,
-    ],
-    "profile_chat": ["read_about_me", "remember_about_me", "get_or_create_linked_note", *_NOTE_EDIT_TOOLS],
     "day_planning": ["add_planning_task", "generate_schedule_blocks", "get_todays_events", "get_calendar_events"],
-    "project_chat": [*_NOTE_EDIT_TOOLS, "save_note", "list_projects", "get_or_create_project"],
-    "agent_run": [
-        *_NOTE_EDIT_TOOLS, "save_note", "list_projects", "get_or_create_project",
-        "search_web", "fetch_webpage",
-    ],
 }
 
 
@@ -296,9 +180,7 @@ _SCHEDULING_RE = re.compile(
 # A lookup and a write in one batch run together, so the write can't use what
 # the lookup found. The 1.2B tool model does this; the write waits a step.
 LOOKUP_TOOLS = {"search_web", "search_news", "search_images", "search_videos", "fetch_url", "fetch_webpage"}
-WRITE_AFTER_LOOKUP_TOOLS = writer.TEMPLATE_TOOLS | {
-    "save_note", "append_to_note", "update_note_section", "remember_about_me", "add_planning_task",
-}
+WRITE_AFTER_LOOKUP_TOOLS = writer.TEMPLATE_TOOLS | {"add_planning_task"}
 
 
 def defer_writes_after_lookup(tool_calls: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -333,7 +215,7 @@ def skip_recall(message: str) -> bool:
 
 
 def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None):
-    tools = get_tools(memory)
+    tools = get_tools()
     if mcp_tools:
         local_names = {t.name for t in tools}
         for mcp_tool in mcp_tools:
@@ -416,66 +298,35 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
         thread_id = (config or {}).get("configurable", {}).get("thread_id")
         one_shot = (config or {}).get("configurable", {}).get("one_shot", False)
         mode = (config or {}).get("configurable", {}).get("mode")
-        agent_run = (config or {}).get("configurable", {}).get("agent_run", False)
-
-        # Project name isn't a separate request field — it's derived from the
-        # thread id itself, same "always resolves the same way" pattern as
-        # every other fixed-path lookup in this codebase (About Me, linked
-        # notes). See PROJECT_THREAD_PREFIX above.
-        project_slug = None
-        if mode == "project_chat" and thread_id and thread_id.startswith(PROJECT_THREAD_PREFIX):
-            project_slug = thread_id[len(PROJECT_THREAD_PREFIX):]
 
         memory_block = ""
-        if project_slug:
-            # Deterministic, code-filtered retrieval instead of cross-thread
-            # semantic recall — a different project's chat leaking in here
-            # would defeat the point of a project-scoped chat, and this is
-            # the actual scoping guarantee, not just a prompt instruction.
-            project_notes = await asyncio.to_thread(vault.list_notes_summary)
-            project_notes = [n for n in project_notes if n["project"] == project_slug]
-            if project_notes:
-                memory_block = "\n\nPROJECT NOTES:\n" + "\n".join(
-                    f"[id: {n['id']}] {n['title']} — {n['excerpt']}" for n in project_notes
-                )
-        else:
-            # Never recall from onboarding/profile_chat (dense, deliberately
-            # elicited personal/health disclosures — the root cause of the
-            # cross-thread leak this filtering fixes) or from the thread
-            # currently running (its own history is already in state["messages"],
-            # so recalling it here would just be a redundant duplicate).
-            exclude_thread_ids = {t for t in (thread_id, "onboarding", "profile_chat") if t}
-            min_timestamp = int(time.time()) - settings.recall_recency_days * 86400
+        # Never recall from the thread currently running — its own history is
+        # already in state["messages"], so recalling it here would just be a
+        # redundant duplicate.
+        exclude_thread_ids = {thread_id} if thread_id else set()
+        min_timestamp = int(time.time()) - settings.recall_recency_days * 86400
 
-            # MemoryStore/Chroma has no async client, so this still blocks — but
-            # to_thread keeps it off the event loop instead of freezing every
-            # other concurrent request for the duration of the search.
-            recalled = [] if skip_recall(last_user_msg) else await asyncio.to_thread(
-                memory.search_conversations,
-                last_user_msg,
-                n_results=3,
-                exclude_thread_ids=exclude_thread_ids,
-                max_distance=settings.recall_max_distance,
-                min_timestamp=min_timestamp,
+        # MemoryStore/Chroma has no async client, so this still blocks — but
+        # to_thread keeps it off the event loop instead of freezing every
+        # other concurrent request for the duration of the search.
+        recalled = [] if skip_recall(last_user_msg) else await asyncio.to_thread(
+            memory.search_conversations,
+            last_user_msg,
+            n_results=3,
+            exclude_thread_ids=exclude_thread_ids,
+            max_distance=settings.recall_max_distance,
+            min_timestamp=min_timestamp,
+        )
+        if recalled:
+            memory_block = "\n\nRELEVANT PAST CONTEXT:\n" + "\n---\n".join(
+                r["document"] for r in recalled
             )
-            if recalled:
-                memory_block = "\n\nRELEVANT PAST CONTEXT:\n" + "\n---\n".join(
-                    r["document"] for r in recalled
-                )
-            if thread_id:
-                await asyncio.to_thread(log_recall, thread_id, last_user_msg, recalled)
+        if thread_id:
+            await asyncio.to_thread(log_recall, thread_id, last_user_msg, recalled)
 
         addendum = ONE_SHOT_ADDENDUM if one_shot else ""
-        if mode == "onboarding":
-            addendum += ONBOARDING_ADDENDUM
-        elif mode == "profile_chat":
-            addendum += PROFILE_CHAT_ADDENDUM
-        elif mode == "day_planning":
+        if mode == "day_planning":
             addendum += DAY_PLANNING_ADDENDUM
-        elif project_slug and agent_run:
-            addendum += PROJECT_AGENT_ADDENDUM.format(project=project_slug)
-        elif project_slug:
-            addendum += PROJECT_CHAT_ADDENDUM.format(project=project_slug)
 
         # Read once per turn — live-switchable via the dashboard's Settings
         # page (agent/settings.py's llm_provider), so every branch below
@@ -490,12 +341,12 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
         datetime_block = f"\n\nCURRENT DATE AND TIME: {format_now_human(settings.zoneinfo())}"
 
         system = SystemMessage(content=SYSTEM_PROMPT + addendum + datetime_block + memory_block)
-        # "onboarding"/"profile_chat"/"project_<slug>" threads reuse the same
-        # thread_id forever and are never swept (see PROJECT_THREAD_PREFIX
-        # comment above), so unlike normal threads their history can grow
-        # until it exceeds whatever context length LM Studio's model was
-        # loaded with. Trim to a budget every turn regardless of thread type,
-        # since this node is the one place all of them route through. The
+        # A fixed-id thread (e.g. "day_planning:<date>") reuses the same
+        # thread_id across visits and is never swept, so unlike normal
+        # threads its history can grow until it exceeds whatever context
+        # length LM Studio's model was loaded with. Trim to a budget every
+        # turn regardless of thread type, since this node is the one place
+        # all of them route through. The
         # budget itself is LM Studio's live loaded_context_length when
         # LMSTUDIO_MANAGEMENT_URL is configured (utils/lmstudio_client.py),
         # else the dashboard-editable max_history_tokens fallback.
@@ -506,7 +357,7 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
         # of the budget before history gets whatever's left. Without this, history
         # alone could grow to fill the full budget and the actual request (system +
         # tools + history) would still overflow the model's real context.
-        surface = model_assignments.surface_key(mode, one_shot, bool(project_slug and agent_run))
+        surface = model_assignments.surface_key(mode, one_shot)
         tool_model_id = model_assignments.tool_model(surface)
         if provider == "lmstudio":
             budget = await get_history_budget_tokens(tool_model_id)
@@ -542,9 +393,8 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
             # and fails with a clearer error than a template crash.
             history = state["messages"][-1:]
 
-        mode_key = "agent_run" if (project_slug and agent_run) else mode
-        if mode_key in mode_tools:
-            llm_with_tools = get_llm_with_mode_tools(provider, mode_key)
+        if mode in mode_tools:
+            llm_with_tools = get_llm_with_mode_tools(provider, mode)
         else:
             llm_with_tools = get_llm_with_tools(provider)
         # Both lmstudio and openrouter have a dashboard-editable model
@@ -579,7 +429,6 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
             new_text = await writer.finalize_reply(
                 list(state["messages"]) + [response],
                 draft=draft, thread_id=thread_id, mode=mode, one_shot=one_shot,
-                agent_run=bool(project_slug and agent_run),
             )
             if new_text:
                 response = AIMessage(
@@ -592,23 +441,9 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
     tool_node = ToolNode(tools)
 
     async def run_tools(state: MessagesState, config: RunnableConfig):
-        # Rule B (agent/writer.py): a writer rewrite of a note-writing tool's
-        # long text argument is used for this execution only — the stored AI
-        # message keeps the tool model's original args, since its chat
-        # template can't round-trip arbitrary writer text (e.g. double quotes).
         cfg = (config or {}).get("configurable", {})
         thread_id = cfg.get("thread_id")
-        project_run = bool(
-            cfg.get("agent_run") and cfg.get("mode") == "project_chat"
-            and thread_id and thread_id.startswith(PROJECT_THREAD_PREFIX)
-        )
         messages = list(state["messages"])
-        new_calls = await writer.rewrite_tool_calls(
-            messages, thread_id=thread_id, mode=cfg.get("mode"), agent_run=project_run,
-            one_shot=bool(cfg.get("one_shot")),
-        )
-        if new_calls:
-            messages[-1] = messages[-1].model_copy(update={"tool_calls": new_calls})
         # A "tonight"/"tomorrow" request whose call carries some other date
         # (copied from recalled context) is corrected for this execution.
         user_text = writer.current_turn(messages).user_message

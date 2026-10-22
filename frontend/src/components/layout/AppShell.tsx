@@ -10,8 +10,6 @@ const ADMIN_PATHS = [
   "/admin/alert-sounds",
   "/admin/errors",
   "/admin/thread-debug",
-  "/vault",
-  "/projects",
 ];
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -85,12 +83,6 @@ const MainNav = () => {
       <NavLink to="/reminders" className={navLinkClass}>
         To-Dos
       </NavLink>
-      <NavLink to="/projects" className={navLinkClass}>
-        Projects
-      </NavLink>
-      <NavLink to="/profile" className={navLinkClass}>
-        Profile
-      </NavLink>
     </>
   );
 };
@@ -134,9 +126,6 @@ const AdminNav = () => {
         </NavLink>
         <NavLink to="/admin/thread-debug" className={navLinkClass}>
           Thread Debug
-        </NavLink>
-        <NavLink to="/vault" className={navLinkClass}>
-          Vault
         </NavLink>
         <a
           href="/calendar/"

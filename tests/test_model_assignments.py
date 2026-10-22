@@ -19,23 +19,22 @@ def set_overrides(monkeypatch, value):
 
 
 def test_surface_key():
-    assert ma.surface_key(None, False, False) == "chat"
-    assert ma.surface_key(None, True, False) == "one_shot"
-    assert ma.surface_key("onboarding", False, False) == "onboarding"
-    assert ma.surface_key("project_chat", False, True) == "agent_run"
-    assert ma.surface_key("onboarding", True, False) == "onboarding"
+    assert ma.surface_key(None, False) == "chat"
+    assert ma.surface_key(None, True) == "one_shot"
+    assert ma.surface_key("day_planning", False) == "day_planning"
+    assert ma.surface_key("day_planning", True) == "day_planning"
 
 
 def test_defaults_without_overrides():
     assert ma.tool_model("chat") == "lfm"
-    assert ma.writer_model("onboarding") == "gemma"
+    assert ma.writer_model("day_planning") == "gemma"
     assert ma.writer_model(None) == "gemma"
 
 
 def test_overrides_apply_per_surface(monkeypatch):
-    set_overrides(monkeypatch, {"onboarding": {"tool": "big", "writer": "other"}, "digest": {"writer": ma.NO_WRITER}})
-    assert ma.tool_model("onboarding") == "big" and ma.tool_model("chat") == "lfm"
-    assert ma.writer_model("onboarding") == "other" and ma.writer_model("chat") == "gemma"
+    set_overrides(monkeypatch, {"day_planning": {"tool": "big", "writer": "other"}, "digest": {"writer": ma.NO_WRITER}})
+    assert ma.tool_model("day_planning") == "big" and ma.tool_model("chat") == "lfm"
+    assert ma.writer_model("day_planning") == "other" and ma.writer_model("chat") == "gemma"
     assert ma.writer_model("digest") == ""
 
 
@@ -66,4 +65,4 @@ def test_matrix_rows(monkeypatch):
     assert set(rows) == ma.SURFACE_KEYS
     assert rows["digest"]["writer_model"] is None and rows["digest"]["reply_model"] == "lfm"
     assert rows["digest"]["tool_model"] is None
-    assert rows["onboarding"]["writer_model"] == "gemma" and rows["onboarding"]["tool_model"] == "lfm"
+    assert rows["day_planning"]["writer_model"] == "gemma" and rows["day_planning"]["tool_model"] == "lfm"

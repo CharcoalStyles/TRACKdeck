@@ -6,7 +6,6 @@ import os
 import asyncio
 import json
 import logging
-import mimetypes
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, time as dtime, timedelta, timezone
@@ -18,18 +17,15 @@ from apscheduler.jobstores.base import JobLookupError
 from apscheduler.triggers.date import DateTrigger
 from dotenv import load_dotenv
 from fastapi import (
-    BackgroundTasks,
     Depends,
     FastAPI,
-    File,
     HTTPException,
     Query,
     Request,
-    UploadFile,
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
-from pydantic import BaseModel, ValidationError, model_validator
+from pydantic import BaseModel, model_validator
 from starlette.middleware.sessions import SessionMiddleware
 
 # Load .env before anything that reads os.environ (i.e. before agent imports)
@@ -72,12 +68,10 @@ from agent import model_assignments
 from agent.checkin_prompts import PROMPTS
 from agent.graph import build_graph
 from agent.memory import MemoryStore, make_chroma_client, make_embedding_function
-from agent.profile_import import import_basics
 from agent.runtime import (
     app_state,
     clear_thread,
     create_new_thread,
-    get_agent_activity,
     get_thread_debug,
     get_thread_messages,
     get_thread_size,
@@ -118,7 +112,6 @@ from jobs.device_sync import build_sync_payload
 from jobs.digest import send_daily_digest
 from jobs.reminders import create_test_reminder, fire_reminder
 
-from agent.tools.general import resolve_location
 from agent.vault_watcher import reconcile_vault, watch_vault
 from utils import (
     alert_sounds_store,
@@ -126,7 +119,6 @@ from utils import (
     day_plans_store,
     device_errors_store,
     device_state,
-    onboarding_state,
     recall_log_store,
     reminders_store,
     settings_store,
@@ -403,28 +395,11 @@ class TextRequest(BaseModel):
     # end on a clarifying question, since real hardware has no way to hear
     # a follow-up.
     one_shot: bool = False
-    # "onboarding" | "profile_chat" | "day_planning" | None — switches to a
-    # different active system-prompt mode. Used by the dashboard's
-    # onboarding/profile/day-planning pages, which also pass a fixed
-    # thread_id ("onboarding"/"profile_chat"/"day_planning:<date>") so those
-    # conversations stay continuous across visits.
+    # "day_planning" | None — switches to a different active system-prompt
+    # mode. Used by the dashboard's day-planning page, which also passes a
+    # fixed thread_id ("day_planning:<date>") so those conversations stay
+    # continuous across visits.
     mode: str | None = None
-    # Explicit per-message opt-in from the project page's "Run as agent"
-    # checkbox — reframes `text` as a goal to complete autonomously rather
-    # than a conversational reply. See PROJECT_AGENT_ADDENDUM in
-    # agent/graph.py and run_agent's agent_run param.
-    agent_run: bool = False
-
-    @model_validator(mode="after")
-    def _check_mode_one_shot_compatible(self):
-        # ONE_SHOT_ADDENDUM ("never end on a clarifying question") and
-        # ONBOARDING_ADDENDUM ("ask one thing at a time") directly conflict
-        # in the system prompt if both are active for the same request.
-        if self.mode == "onboarding" and self.one_shot:
-            raise ValueError("one_shot cannot be combined with mode='onboarding'")
-        if self.agent_run and self.mode != "project_chat":
-            raise ValueError("agent_run can only be combined with mode='project_chat'")
-        return self
 
 
 class AssistantResponse(BaseModel):
@@ -457,58 +432,6 @@ class ThreadSizeResponse(BaseModel):
     message_count: int
     estimated_tokens: int
     budget_tokens: int
-
-
-class NoteSummary(BaseModel):
-    id: str
-    title: str
-    tags: list[str]
-    project: str | None
-    source: str
-    created: str
-    updated: str
-    excerpt: str
-
-
-class VaultNotesResponse(BaseModel):
-    notes: list[NoteSummary]
-
-
-class NoteDetail(BaseModel):
-    id: str
-    title: str
-    tags: list[str]
-    aliases: list[str]
-    project: str | None
-    source: str
-    created: str
-    updated: str
-    body: str
-
-
-class ProjectAttachment(BaseModel):
-    filename: str
-    url: str
-
-
-class ProjectAttachmentsResponse(BaseModel):
-    attachments: list[ProjectAttachment]
-
-
-class ProjectsResponse(BaseModel):
-    projects: list[str]
-
-
-class AgentActivityStep(BaseModel):
-    type: str
-    tool: str | None = None
-    args: dict | None = None
-    content: str | None = None
-
-
-class AgentActivityResponse(BaseModel):
-    steps: list[AgentActivityStep]
-    done: bool
 
 
 class CheckinRecord(BaseModel):
@@ -615,7 +538,6 @@ async def handle_text(
         thread_id=request.thread_id,
         one_shot=request.one_shot,
         mode=request.mode,
-        agent_run=request.agent_run,
     )
     return AssistantResponse(reply=result.reply, thread_id=result.thread_id, keyword=result.keyword)
 
@@ -682,115 +604,6 @@ async def todays_checkins(_: Annotated[None, Depends(auth.require_session_or_tok
     end_ts = int(end_local.astimezone(timezone.utc).timestamp())
     reflections = await checkin_jobs.reflections_between(app_state.memory, start_ts, end_ts)
     return {"checkins": reflections}
-
-
-@app.get("/vault/notes", response_model=VaultNotesResponse)
-async def list_vault_notes_route(_: Annotated[None, Depends(auth.require_session_or_token)]):
-    """Every processed note in the vault (excludes Inbox — unprocessed
-    scratch, not "what's accumulated"), most recently updated first.
-    Backs the read-only vault-browse dashboard page; filtering/searching
-    happens client-side since a personal vault is small enough not to
-    need query-param plumbing for it.
-    """
-    notes = await asyncio.to_thread(vault.list_notes_summary)
-    return {"notes": notes}
-
-
-@app.get("/projects", response_model=ProjectsResponse)
-async def list_projects_route(_: Annotated[None, Depends(auth.require_session_or_token)]):
-    """Project names, derived from vault-root subfolders (see
-    utils.vault.list_project_dirs) — used by the Projects page instead of
-    fetching every note and grouping by its project field client-side."""
-    project_dirs = await asyncio.to_thread(vault.list_project_dirs)
-    return {"projects": [p.name for p in project_dirs]}
-
-
-@app.get("/vault/notes/{note_id}", response_model=NoteDetail)
-async def get_vault_note_route(
-    note_id: str, _: Annotated[None, Depends(auth.require_session_or_token)]
-):
-    """Full single note (including body) for the vault-browse page's
-    detail view."""
-    path = await asyncio.to_thread(vault.find_note_by_id, note_id)
-    if path is None:
-        raise HTTPException(status_code=404, detail="Note not found")
-    note = await asyncio.to_thread(vault.parse_note, path)
-    if note is None:
-        raise HTTPException(status_code=404, detail="Note not found")
-    return {
-        "id": note.id,
-        "title": note.title,
-        "tags": note.tags,
-        "aliases": note.aliases,
-        "project": vault.note_project(path),
-        "source": note.source,
-        "created": note.created,
-        "updated": note.updated,
-        "body": note.body,
-    }
-
-
-def _resolve_project_or_404(project: str) -> Path:
-    project_dir = vault.match_project_dir(project)
-    if project_dir is None:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return project_dir
-
-
-@app.get("/vault/projects/{project}/attachments", response_model=ProjectAttachmentsResponse)
-async def list_project_attachments_route(
-    project: str, _: Annotated[None, Depends(auth.require_session_or_token)]
-):
-    """Image attachments for one project — backs the Projects page's image
-    gallery. Attachments can arrive either via the upload route below or by
-    being dropped directly into <project>/attachments/ via Obsidian/Syncthing."""
-    project_dir = await asyncio.to_thread(_resolve_project_or_404, project)
-    paths = await asyncio.to_thread(vault.list_project_attachments, project_dir)
-    return {
-        "attachments": [
-            {
-                "filename": p.name,
-                "url": f"/vault/projects/{project_dir.name}/attachments/{p.name}",
-            }
-            for p in paths
-        ]
-    }
-
-
-@app.post("/vault/projects/{project}/attachments", response_model=ProjectAttachment)
-async def upload_project_attachment_route(
-    project: str,
-    file: Annotated[UploadFile, File()],
-    _: Annotated[None, Depends(auth.require_session_or_token)],
-):
-    if not (file.content_type or "").startswith("image/"):
-        raise HTTPException(status_code=400, detail="Only image uploads are accepted")
-    project_dir = await asyncio.to_thread(_resolve_project_or_404, project)
-    data = await file.read()
-    saved_path = await asyncio.to_thread(
-        vault.save_project_attachment, project_dir, file.filename or "upload", data
-    )
-    return {
-        "filename": saved_path.name,
-        "url": f"/vault/projects/{project_dir.name}/attachments/{saved_path.name}",
-    }
-
-
-@app.get("/vault/projects/{project}/attachments/{filename}")
-async def get_project_attachment_route(
-    project: str, filename: str, _: Annotated[None, Depends(auth.require_session_or_token)]
-):
-    project_dir = await asyncio.to_thread(_resolve_project_or_404, project)
-    # Reject anything that isn't a bare filename (e.g. "../../etc/passwd")
-    # before it ever touches the filesystem.
-    if Path(filename).name != filename:
-        raise HTTPException(status_code=404, detail="Attachment not found")
-    attachments_dir = vault.project_attachments_dir(project_dir)
-    path = attachments_dir / filename
-    if not path.resolve().is_relative_to(attachments_dir.resolve()) or not path.is_file():
-        raise HTTPException(status_code=404, detail="Attachment not found")
-    media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-    return FileResponse(path, media_type=media_type)
 
 
 @app.get("/health")
@@ -957,8 +770,6 @@ class SettingsResponse(BaseModel):
     # POST /settings' own validation (SettingsUpdate._check_values).
     openrouter_configured: bool
     lmstudio_writer_model: str
-    onboarding_complete: bool
-    basics_complete: bool
 
 
 def _current_settings() -> dict:
@@ -986,12 +797,6 @@ def _current_settings() -> dict:
         "llm_provider": settings.llm_provider,
         "lmstudio_writer_model": settings.lmstudio_writer_model,
         "openrouter_configured": openrouter_configured(),
-        # Read-only here — deliberately not part of SettingsUpdate below, so
-        # it can only be set via agent/tools/general.py's
-        # mark_onboarding_complete tool, not a direct POST /settings call.
-        "onboarding_complete": onboarding_state.is_onboarding_complete(),
-        # Read-only here too — only set by POST /onboarding/basics below.
-        "basics_complete": onboarding_state.is_basics_complete(),
     }
 
 
@@ -1005,8 +810,7 @@ async def get_settings(_: Annotated[None, Depends(auth.require_session_or_token)
 async def _apply_settings_update(update: SettingsUpdate) -> None:
     """Applies a SettingsUpdate to the live settings singleton, reschedules
     any affected APScheduler jobs, and persists changed fields to
-    settings.db. Shared by POST /settings and POST /onboarding/basics so
-    both go through the same write/reschedule/persist logic."""
+    settings.db."""
     changed: dict[str, str] = {}
 
     if update.default_location is not None:
@@ -1175,121 +979,6 @@ async def get_lmstudio_models(_: Annotated[None, Depends(auth.require_session_or
         "active": settings.llm_provider == "lmstudio",
         "configured_model": settings.lmstudio_chat_model or None,
     }
-
-
-class OnboardingPerson(BaseModel):
-    name: str
-    relation: str | None = None
-
-
-class OnboardingBasicsRequest(BaseModel):
-    name: str | None = None
-    birthday: str | None = None
-    location: str | None = None
-    occupation: str | None = None
-    current_job: str | None = None
-    people: list[OnboardingPerson] = []
-    preferences: str | None = None
-    routine: str | None = None
-    interests: str | None = None
-    values: str | None = None
-    health_goals: str | None = None
-    important_dates: str | None = None
-    wake_time: str | None = None
-    bedtime: str | None = None
-
-
-class OnboardingBasicsResponse(SettingsResponse):
-    location_resolved: bool
-
-
-_ONBOARDING_KICKOFF = (
-    "I've just filled out the basics form. Everything on it is already recorded in my "
-    "About Me note, so don't re-record it. Read it, then start the interview with one question "
-    "about something it leaves thin."
-)
-
-
-async def _start_onboarding_interview() -> None:
-    """One short turn in the "onboarding" thread that opens the interview.
-    Fire-and-forget background task, same pattern as voice.py's
-    _process_voice_note — failures surface via Gotify, never over HTTP,
-    since the request has already returned."""
-    try:
-        await run_agent(_ONBOARDING_KICKOFF, thread_id="onboarding", mode="onboarding")
-    except Exception as e:
-        logger.exception("Onboarding kickoff turn failed")
-        await asyncio.to_thread(notify_error, "Onboarding: couldn't start the interview", e)
-
-
-@app.post("/onboarding/basics", response_model=OnboardingBasicsResponse)
-async def submit_onboarding_basics(
-    request: OnboardingBasicsRequest,
-    background_tasks: BackgroundTasks,
-    _: Annotated[None, Depends(auth.require_session_or_token)],
-):
-    """One-time submission from the onboarding basics form (the first step
-    of /profile, before the guided chat interview takes over). Every field
-    is optional. Location/wake_time/bedtime go through the same settings
-    write path as POST /settings (not About Me — that separation is
-    deliberate, see agent/tools/general.py's set_home_location). Everything
-    else is written into About Me directly by agent/profile_import.py — no
-    LLM involved, so nothing can be dropped or invented — with a dedicated
-    note per person. A short background turn then has the assistant open
-    the follow-up interview in the "onboarding" thread."""
-    location_resolved = False
-    try:
-        if request.location:
-            resolved = resolve_location(request.location)
-            if resolved is not None:
-                resolved_name, tz_name = resolved
-                await _apply_settings_update(
-                    SettingsUpdate(default_location=resolved_name, timezone=tz_name)
-                )
-                location_resolved = True
-        if request.wake_time or request.bedtime:
-            await _apply_settings_update(
-                SettingsUpdate(wake_time=request.wake_time, bedtime=request.bedtime)
-            )
-    except ValidationError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-
-    try:
-        await import_basics(app_state.memory, request)
-    except Exception:
-        logger.exception("Onboarding basics import failed")
-        raise HTTPException(status_code=500, detail="Couldn't save the basics form; please try again.")
-    onboarding_state.mark_basics_complete()
-    background_tasks.add_task(_start_onboarding_interview)
-
-    return {**_current_settings(), "location_resolved": location_resolved}
-
-
-@app.post("/onboarding/complete", response_model=SettingsResponse)
-async def complete_onboarding(_: Annotated[None, Depends(auth.require_session_or_token)]):
-    """Explicit "Finished" action from the onboarding chat step's UI — the
-    the only way onboarding is marked complete from the dashboard (the
-    onboarding model doesn't have mark_onboarding_complete)."""
-    onboarding_state.mark_onboarding_complete()
-    return _current_settings()
-
-
-@app.post("/onboarding/reset", response_model=SettingsResponse)
-async def reset_onboarding(_: Annotated[None, Depends(auth.require_session_or_token)]):
-    """Deletes About Me and restarts the onboarding wizard from the basics
-    form. Also clears the onboarding/profile_chat conversation threads,
-    since their history is all about a profile that no longer exists.
-    Scoped to About Me only — notes linked from it (individual people) and
-    Settings (location/timezone/schedule) are left untouched."""
-    about_me_path = vault.about_me_path()
-    if about_me_path.exists():
-        about_me_path.unlink()
-    await reconcile_vault(app_state.memory)
-    await clear_thread("onboarding")
-    await clear_thread("profile_chat")
-    onboarding_state.clear_basics_complete()
-    onboarding_state.clear_onboarding_complete()
-    return _current_settings()
 
 
 @app.post("/debug/digest")
@@ -1606,21 +1295,6 @@ async def debug_writer_log(
     kept or the writer model's text used, why, both texts, and latency.
     """
     return {"entries": await asyncio.to_thread(writer_log.get_writer_log, thread_id, max(1, min(limit, 500)))}
-
-
-@app.get("/agent-activity/{thread_id}", response_model=AgentActivityResponse)
-async def agent_activity(
-    thread_id: str, _: Annotated[None, Depends(auth.require_session_or_token)]
-):
-    """
-    Polled by a project page while a "Run as agent" turn is in flight —
-    {"steps": [...], "done": bool}, populated live by run_agent's
-    agent_run path (agent/runtime.py's _run_graph_streamed). Returns
-    done=True with no steps for any thread that isn't currently running
-    one, so polling a thread that already finished (or never started) is
-    always a safe no-op rather than an error.
-    """
-    return get_agent_activity(thread_id)
 
 
 class DeviceTelemetry(BaseModel):

@@ -38,12 +38,6 @@ class FakeToolModel:
         return root.replies.pop(0)
 
 
-@tool
-def echo_note(content: str) -> str:
-    """Pretend to save a note."""
-    return f"saved: {content}"
-
-
 @pytest.fixture
 def env(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "llm_provider", "lmstudio")
@@ -81,16 +75,16 @@ def invoke(g, text, thread="t1", **cfg):
     return asyncio.run(g.ainvoke({"messages": [{"role": "user", "content": text}]}, config=config))
 
 
-def test_profile_chat_reply_comes_from_writer_and_tools_are_narrowed(env):
+def test_day_planning_reply_comes_from_writer_and_tools_are_narrowed(env):
     make, state = env
     fake, g = make([AIMessage(content="ok")])
-    result = invoke(g, "what do you know about me", mode="profile_chat")
+    result = invoke(g, "plan my day", mode="day_planning")
     last = result["messages"][-1]
     assert last.content == state["writer_reply"]
     assert last.additional_kwargs[writer.WRITER_FLAG] is True
     assert len([m for m in result["messages"] if m.type == "ai"]) == 1
     names = set(fake.bound_tool_names[0])
-    assert "read_about_me" in names and "remember_about_me" in names
+    assert "add_planning_task" in names and "generate_schedule_blocks" in names
     assert "set_reminder" not in names and "get_current_weather" not in names
 
 
@@ -113,7 +107,7 @@ def test_writer_off_leaves_everything_alone(env, monkeypatch):
     make, state = env
     monkeypatch.setattr(settings, "lmstudio_writer_model", "")
     _, g = make([AIMessage(content="ok")])
-    result = invoke(g, "what do you know about me", mode="profile_chat")
+    result = invoke(g, "plan my day", mode="day_planning")
     assert result["messages"][-1].content == "ok"
     assert state["writer_calls"] == []
 
@@ -122,8 +116,8 @@ def test_tool_model_sees_shortened_writer_history(env):
     make, state = env
     state["writer_reply"] = "First sentence. " + "Lots more prose here. " * 40
     fake, g = make([AIMessage(content="a"), AIMessage(content="b")])
-    invoke(g, "first question", mode="profile_chat")
-    invoke(g, "second question", mode="profile_chat")
+    invoke(g, "first question", mode="day_planning")
+    invoke(g, "second question", mode="day_planning")
     second_call_msgs = fake.seen[1]
     prior_ai = [m for m in second_call_msgs if m.type == "ai"]
     assert prior_ai and len(prior_ai[0].content) <= writer.TOOL_VIEW_MAX_CHARS + 3
@@ -132,44 +126,28 @@ def test_tool_model_sees_shortened_writer_history(env):
     assert len(writer_history[0].content) > writer.TOOL_VIEW_MAX_CHARS * 2
 
 
-def test_note_argument_rewrite_is_execution_only(env, monkeypatch):
-    make, state = env
-    monkeypatch.setitem(writer.NOTE_CONTENT_FIELDS, "echo_note", "content")
-    original = "Oil changed at 120000 km on 2026-03-01 by [[Bob]]. " * 12
-    tidied = original.replace("Oil changed", "Oil change done")
-    state["writer_reply"] = tidied
-    call = AIMessage(content="", tool_calls=[{"name": "echo_note", "args": {"content": original}, "id": "c1"}])
-    _, g = make([call, AIMessage(content="Saved it.")], mcp_tools=[echo_note])
-    result = invoke(g, "save this note", one_shot=True)
-    tool_msg = next(m for m in result["messages"] if m.type == "tool")
-    assert tool_msg.content == f"saved: {tidied}"
-    stored_call = next(m for m in result["messages"] if m.type == "ai" and m.tool_calls)
-    assert stored_call.tool_calls[0]["args"]["content"] == original
-    assert result["messages"][-1].content == "Saved it."  # one_shot confirmation kept
-
-
 def test_per_mode_models_are_used(env, monkeypatch):
     import json
 
     make, state = env
-    monkeypatch.setattr(settings, "model_assignments", json.dumps(
-        {"profile_chat": {"tool": "tool-override"}, "onboarding": {"writer": "@tool"}}))
+    monkeypatch.setattr(settings, "model_assignments", json.dumps({"day_planning": {"tool": "tool-override"}}))
     fake, g = make([AIMessage(content="ok")])
-    invoke(g, "what do you know about me", mode="profile_chat")
+    invoke(g, "plan my day", mode="day_planning")
     assert fake.bound_models == ["tool-override"]
     assert len(state["writer_calls"]) == 1
 
-    fake, g = make([AIMessage(content="Hello, what's your name?")])
-    result = invoke(g, "hi", thread="onboarding", mode="onboarding")
+    monkeypatch.setattr(settings, "model_assignments", json.dumps({"day_planning": {"writer": "@tool"}}))
+    fake, g = make([AIMessage(content="Here's the plan.")])
+    result = invoke(g, "plan my day", thread="t2", mode="day_planning")
     assert fake.bound_models == ["lfm-test"]
-    assert result["messages"][-1].content == "Hello, what's your name?"
-    assert len(state["writer_calls"]) == 1  # no new writer call for onboarding
+    assert result["messages"][-1].content == "Here's the plan."
+    assert len(state["writer_calls"]) == 1  # no new writer call — NO_WRITER override
 
 
 def test_mode_tool_names_exist():
     from agent.tools.all_tools import get_tools
 
-    known = {t.name for t in get_tools(MagicMock())}
+    known = {t.name for t in get_tools()}
     mcp_only = {"search_web"}  # comes from the MCP search server, not get_tools()
     for mode_key, names in graph_mod.MODE_TOOL_NAMES.items():
         missing = set(names) - known - mcp_only
@@ -235,9 +213,9 @@ def test_write_in_same_batch_as_a_lookup_is_held_back_until_the_next_step(env, m
 
 def test_defer_writes_after_lookup_only_when_both_are_present():
     calls = lambda *names: [{"name": n, "id": n, "args": {}} for n in names]
-    run, held = graph_mod.defer_writes_after_lookup(calls("search_web", "get_calendar_event", "update_calendar_event", "save_note"))
+    run, held = graph_mod.defer_writes_after_lookup(calls("search_web", "get_calendar_event", "update_calendar_event", "add_planning_task"))
     assert [c["name"] for c in run] == ["search_web", "get_calendar_event"]
-    assert [c["name"] for c in held] == ["update_calendar_event", "save_note"]
+    assert [c["name"] for c in held] == ["update_calendar_event", "add_planning_task"]
     run, held = graph_mod.defer_writes_after_lookup(calls("add_calendar_event", "set_reminder"))
     assert len(run) == 2 and held == []
     run, held = graph_mod.defer_writes_after_lookup(calls("fetch_webpage", "get_current_datetime"))

@@ -8,7 +8,6 @@ import trafilatura
 from agent.scheduler import scheduler, bedtime_trigger, digest_trigger, wake_trigger
 from agent.settings import is_valid_timezone, settings
 from agent.tools.weather import call_open_meteo_search
-from utils import onboarding_state
 from utils.datetime import format_now_human
 
 logger = logging.getLogger(__name__)
@@ -26,15 +25,9 @@ def get_current_datetime() -> str:
     logger.info("Current date and time: %s", now_string)
     return f"The current date and time is: {now_string}"
 
-# ---------------------------------------------------------------------------
-# Onboarding
-# ---------------------------------------------------------------------------
-
 def resolve_location(location: str) -> tuple[str, str] | None:
     """Geocode a free-text place name to a canonical name + IANA timezone via
-    Open-Meteo. Returns None if it couldn't be resolved. Shared by the
-    set_home_location tool and the onboarding basics form endpoint so both
-    go through the same geocoding logic."""
+    Open-Meteo. Returns None if it couldn't be resolved."""
     try:
         data = call_open_meteo_search(location)
     except requests.exceptions.RequestException as e:
@@ -57,23 +50,10 @@ def resolve_location(location: str) -> tuple[str, str] | None:
 
 
 @tool
-def mark_onboarding_complete() -> str:
-    """Call this once the guided onboarding interview's main areas (preferences, people,
-    routine, interests) feel reasonably covered — only in onboarding mode, not during
-    ordinary chat or profile Q&A. Switches the dashboard to the profile Q&A view instead
-    of the interview. Safe to call more than once."""
-    onboarding_state.mark_onboarding_complete()
-    logger.info("Onboarding marked complete.")
-    return "Onboarding marked complete."
-
-
-@tool
 def set_home_location(location: str) -> str:
-    """Call this during guided onboarding as soon as the user answers where they live —
-    only in onboarding mode, never ordinary chat or profile Q&A. Resolves the free-text
+    """Call this as soon as the user says where they live. Resolves the free-text
     place name to a canonical location + IANA timezone via geocoding (don't guess the
     timezone yourself) and saves both as the app's standing location/timezone settings.
-    Separate from the About Me profile — do not also record it with remember_about_me.
 
     Args:
         location: The place the user said they live, as close to their own words as

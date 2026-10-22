@@ -149,7 +149,7 @@ ADDED = "Event added successfully. UID: 1234-abcd. Added 'Dinner' for today, Thu
 
 def test_template_uses_only_what_was_saved():
     info = _turn(["add_calendar_event"], [("add_calendar_event", ADDED)])
-    assert writer.template_reply(mode=None, agent_run=False, info=info) == \
+    assert writer.template_reply(mode=None, info=info) == \
         "Added 'Dinner' for today, Thursday 15 October, 8:15 PM to 9:15 PM."
 
 
@@ -159,21 +159,21 @@ def test_template_skips_failed_attempts_and_passes_reminder_text_through():
         [("add_calendar_event", "Failed to add the event. 2026-10-14 20:15 is in the past"),
          ("add_calendar_event", ADDED)],
     )
-    assert writer.template_reply(mode=None, agent_run=False, info=info).startswith("Added 'Dinner'")
+    assert writer.template_reply(mode=None, info=info).startswith("Added 'Dinner'")
     info = _turn(["set_reminder"], [("set_reminder", "Got it — I'll remind you to 'x' at Thursday, 15 October 2026 08:15 PM.")])
-    assert writer.template_reply(mode=None, agent_run=False, info=info).startswith("Got it")
+    assert writer.template_reply(mode=None, info=info).startswith("Got it")
 
 
 def test_template_not_used_for_errors_other_tools_or_writer_modes():
     err = _turn(["add_calendar_event"], [("add_calendar_event", "Failed to add the event. nope")])
-    assert writer.template_reply(mode=None, agent_run=False, info=err) is None
+    assert writer.template_reply(mode=None, info=err) is None
     mixed = _turn(["get_calendar_events", "add_calendar_event"],
                   [("get_calendar_events", "[]"), ("add_calendar_event", ADDED)])
-    assert writer.template_reply(mode=None, agent_run=False, info=mixed) is None
+    assert writer.template_reply(mode=None, info=mixed) is None
     ok = _turn(["add_calendar_event"], [("add_calendar_event", ADDED)])
-    assert writer.template_reply(mode="day_planning", agent_run=False, info=ok) is None
+    assert writer.template_reply(mode="day_planning", info=ok) is None
     old_style = _turn(["delete_calendar_event"], [("delete_calendar_event", "Event deleted successfully.")])
-    assert writer.template_reply(mode=None, agent_run=False, info=old_style) is None
+    assert writer.template_reply(mode=None, info=old_style) is None
 
 
 def test_finalize_reply_logs_template_route_even_with_writer_off(monkeypatch, tmp_path):
@@ -183,7 +183,7 @@ def test_finalize_reply_logs_template_route_even_with_writer_off(monkeypatch, tm
     msgs = [HumanMessage(content="x"), AIMessage(content="", tool_calls=[{"name": "add_calendar_event", "args": {}, "id": "c0"}]),
             ToolMessage(content=ADDED, tool_call_id="c0", name="add_calendar_event")]
     out = asyncio.run(writer.finalize_reply(msgs, draft="Added, tonight at 9pm", thread_id="t", mode=None,
-                                            one_shot=True, agent_run=False))
+                                            one_shot=True))
     assert out.startswith("Added 'Dinner' for today")
     row = writer_log.get_writer_log("t")[0]
     assert row["route"] == "template" and row["reason"] == "calendar_reminder_write"
@@ -240,8 +240,8 @@ def test_claim_without_a_tool_is_replaced_but_supported_claims_are_not():
     assert not writer.unsupported_claim("You have nothing on today.", none)
     read_only = _turn(["get_calendar_events"], [("get_calendar_events", "[]")])
     assert writer.unsupported_claim("Moved it to 9pm.", read_only)
-    saved_note = _turn(["save_note"], [("save_note", "Note saved")])
-    assert not writer.unsupported_claim("Saved.", saved_note)
+    planned = _turn(["add_planning_task"], [("add_planning_task", "Task noted")])
+    assert not writer.unsupported_claim("Saved.", planned)
     failed = _turn(["add_calendar_event"], [("add_calendar_event", "Failed to add the event. x")])
     assert not writer.unsupported_claim("Added.", failed)
 
@@ -251,7 +251,7 @@ def test_finalize_replaces_unsupported_claim(monkeypatch, tmp_path):
     writer_log.init_db()
     monkeypatch.setattr(settings, "lmstudio_writer_model", "")
     out = asyncio.run(writer.finalize_reply([HumanMessage(content="fix it")], draft="Fixed, set for 8:15pm tonight.",
-                                            thread_id="t", mode=None, one_shot=True, agent_run=False))
+                                            thread_id="t", mode=None, one_shot=True))
     assert out == writer.NO_CHANGE_REPLY
     assert writer_log.get_writer_log("t")[0]["reason"] == "unsupported_claim"
 
@@ -317,7 +317,7 @@ def _art_info(args, user="Look up the Art Park event in Canberra and add it", se
 
 def test_event_added_after_search_with_guessed_time_and_no_venue_says_so():
     info = _art_info({"title": "ARTPARK", "start": "2026-10-17 18:00:00"})
-    out = writer.template_reply(mode=None, agent_run=False, info=info)
+    out = writer.template_reply(mode=None, info=info)
     assert out.startswith("Added 'ARTPARK' for tomorrow, Saturday 17 October, 6:00 PM")
     assert "6:00 PM is a guess" in out and "one-hour default" in out
     assert "No venue or description was saved" in out

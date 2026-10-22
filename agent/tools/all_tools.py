@@ -13,7 +13,6 @@ from langchain_core.tools import tool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from mcp.types import CallToolResult, TextContent
 
-from agent.memory import MemoryStore
 from agent.settings import settings
 
 from agent.tools.alerts import cancel_reminder, list_reminders, set_reminder, set_timer
@@ -22,10 +21,8 @@ from agent.tools.checkin import get_reflection_prompt
 from agent.tools.general import (
     fetch_webpage,
     get_current_datetime,
-    mark_onboarding_complete,
     set_home_location,
 )
-from agent.tools.notes import make_note_tools
 from agent.tools.planning import get_tools as get_planning_tools
 from agent.tools.weather import get_tools as get_weather_tools
 
@@ -56,13 +53,12 @@ async def _truncate_large_mcp_results(request, handler):
 # Tool registry — imported by graph.py
 # ---------------------------------------------------------------------------
 
-def get_tools(memory: MemoryStore):
+def get_tools():
 
     tools = []
 
     tools.extend(get_calendar_tools())
     tools.extend(get_weather_tools())
-    tools.extend(make_note_tools(memory))
     tools.extend(get_planning_tools())
     tools.extend([
         get_current_datetime,
@@ -72,7 +68,6 @@ def get_tools(memory: MemoryStore):
         cancel_reminder,
         get_reflection_prompt,
         fetch_webpage,
-        mark_onboarding_complete,
         set_home_location,
     ])
 

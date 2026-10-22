@@ -6,15 +6,11 @@ drives every turn exactly as before; this module decides when a bigger local
 model (settings.lmstudio_writer_model, "writer") should write what the user
 actually reads, and does the writing.
 
-Two hooks, both called from agent/graph.py:
+One hook, called from agent/graph.py:
 
   * Rule A — finalize_reply(): after the tool model produces a turn's final
     (no-tool-call) reply, either keep its draft or have the writer redo it.
     Decided by decide() from mode, tools used, tool errors and draft length.
-  * Rule B — rewrite_tool_calls(): before ToolNode executes a note-writing
-    tool, optionally replace its long text argument with a writer rewrite
-    (tidy) or a writer-composed version (compose, project agent runs).
-    Used at execution time only — never stored back into thread history.
 
 Everything fails soft: no writer model configured, wrong provider, timeout,
 error, or invalid output -> the tool model's own text is used unchanged, and
@@ -44,25 +40,20 @@ WRITER_TIMEOUT_SECONDS = 90
 # rambling (its prose is the weak spot) rather than a short confirmation.
 CONFIRMATION_MAX_CHARS = 240
 DATA_REPLY_MAX_CHARS = 500
-# Rule B only touches note-writing arguments at least this long; shorter
-# ones stay as the tool model wrote them.
-NOTE_REWRITE_MIN_CHARS = 400
 # What the tool model sees of a writer-authored message in later turns —
 # long writer prose in its history would pull it toward long prose itself.
 TOOL_VIEW_MAX_CHARS = 200
 
 WRITER_FLAG = "by_writer"
 
-ALWAYS_WRITER_MODES = {"onboarding", "profile_chat", "day_planning", "project_chat"}
+ALWAYS_WRITER_MODES = {"day_planning"}
 
 # Tools whose result is a short fixed confirmation — the tool model's own
 # one-line acknowledgement is fine for these.
 CONFIRMATION_TOOLS = {
     "set_reminder", "set_timer", "cancel_reminder",
     "add_calendar_event", "delete_calendar_event", "update_calendar_event",
-    "save_note", "append_to_note", "update_note_section",
-    "remember_about_me", "get_or_create_linked_note", "get_or_create_project",
-    "mark_onboarding_complete", "set_home_location", "add_planning_task",
+    "set_home_location", "add_planning_task",
     "get_current_datetime",
 }
 # Writes whose confirmation is built in code from the tool result, so the
@@ -75,35 +66,11 @@ _RESULT_LEAD_RE = re.compile(r"^Event (?:added|updated|deleted) successfully\.(?
 # Tools whose output the user needs turned into real prose.
 PROSE_TOOLS = {"generate_schedule_blocks", "get_reflection_prompt", "fetch_webpage"}
 
-NOTE_CONTENT_FIELDS = {
-    "save_note": "content",
-    "append_to_note": "content",
-    "update_note_section": "new_content",
-}
-
 MODE_GUIDANCE = {
-    "onboarding": (
-        "This is a getting-to-know-you interview building the user's profile. Briefly acknowledge "
-        "anything that was just recorded, then ask exactly one next question. Don't re-ask anything "
-        "the tool results show is already known. Only say something was recorded if a tool result "
-        "above shows it; never list a person or item that has no matching tool call."
-    ),
-    "profile_chat": (
-        "The user is asking about or correcting their own profile. Answer from what the tool results "
-        "show is recorded; if you changed something, say what."
-    ),
     "day_planning": (
         "Summarise the resulting schedule plainly: what's planned and when, anything that didn't fit, "
         "and anything from recent reflections that shaped it. If the user gave arrangement guidance "
         "that couldn't be satisfied, say so."
-    ),
-    "project_chat": (
-        "The conversation is scoped to one project. Answer from the project's notes in the tool "
-        "results and conversation; say so if something isn't covered there."
-    ),
-    "agent_run": (
-        "This was an autonomous run with no follow-up possible. Say what was done and where the "
-        "result lives (note titles). Do not paste the full content back."
     ),
 }
 
@@ -124,28 +91,6 @@ VOICE_STYLE = (
     "- This reply is read as a short push notification after a voice command: plain text only "
     "(no markdown), at most three sentences, no follow-up question unless something is truly missing.\n"
 )
-
-TIDY_PROMPT = """Clean up the text below so it reads clearly as part of a personal note. Fix grammar and clumsy phrasing, fix markdown structure (consistent headings and bullets), and keep the user's meaning.
-
-Do not add, remove or change any fact, name, number, date, time, URL or [[link]]. Do not add commentary. Keep it about the same length.
-
-TEXT:
-{text}
-
-Reply with only the cleaned-up text."""
-
-COMPOSE_PROMPT = """You are writing the content of a note for the user's project "{project}". Goal the user gave:
-{goal}
-
-A smaller model drafted this (possibly thin or rough) — keep every fact, URL and [[link]] it contains:
-{draft}
-
-Source material gathered this turn (search results, fetched pages, existing notes):
-{sources}
-
-Write the finished note body in clear markdown. Use only the draft and the source material for facts — do not invent details. If the sources don't cover something the goal asks for, say what's missing rather than filling it in.
-
-Reply with only the note body."""
 
 _ERROR_PREFIXES = (
     "failed", "error", "couldn't", "could not", "no note found", "no pending reminder",
@@ -202,7 +147,7 @@ def current_turn(messages: list[BaseMessage]) -> TurnInfo:
     return info
 
 
-def decide(*, mode: str | None, one_shot: bool, agent_run: bool, info: TurnInfo, draft: str) -> tuple[bool, str]:
+def decide(*, mode: str | None, one_shot: bool, info: TurnInfo, draft: str) -> tuple[bool, str]:
     """(use_writer, reason). Pure — Rule A."""
     if not draft.strip():
         return True, "empty_draft"
@@ -210,8 +155,6 @@ def decide(*, mode: str | None, one_shot: bool, agent_run: bool, info: TurnInfo,
         return True, "tool_error"
     if PROSE_TOOLS & set(info.tool_names):
         return True, "prose_tool"
-    if agent_run:
-        return True, "mode:agent_run"
     if mode in ALWAYS_WRITER_MODES:
         return True, f"mode:{mode}"
     if one_shot:
@@ -294,11 +237,11 @@ def event_write_notes(info: TurnInfo) -> list[str]:
     return notes
 
 
-def template_reply(*, mode: str | None, agent_run: bool, info: TurnInfo) -> str | None:
+def template_reply(*, mode: str | None, info: TurnInfo) -> str | None:
     """Pure. The user-facing sentence(s) of this turn's successful calendar /
     reminder writes (plus caveats from `event_write_notes`), or None when the
     turn isn't only such writes and lookups (or any result lacks a sentence)."""
-    if agent_run or mode in ALWAYS_WRITER_MODES:
+    if mode in ALWAYS_WRITER_MODES:
         return None
     names = set(info.tool_names)
     if not names & TEMPLATE_TOOLS or any(n not in TEMPLATE_TOOLS and not _is_lookup(n) for n in names):
@@ -464,14 +407,12 @@ async def rewrite_reply(
     draft: str,
     mode: str | None = None,
     one_shot: bool = False,
-    agent_run: bool = False,
     timeout: float = WRITER_TIMEOUT_SECONDS,
     surface: str | None = None,
 ) -> str:
     """Ask the writer model for the turn's final reply. Raises on failure."""
     info = current_turn(messages)
-    guidance_key = "agent_run" if agent_run else mode
-    guidance = MODE_GUIDANCE.get(guidance_key or "", "")
+    guidance = MODE_GUIDANCE.get(mode or "", "")
     system = WRITER_SYSTEM.format(
         style=VOICE_STYLE if one_shot else "",
         mode_guidance=f"- {guidance}\n" if guidance else "",
@@ -504,12 +445,11 @@ async def finalize_reply(
     thread_id: str | None,
     mode: str | None,
     one_shot: bool,
-    agent_run: bool,
 ) -> str | None:
     """Rule A. Returns replacement text, or None to keep the tool model's draft."""
-    surface = model_assignments.surface_key(mode, one_shot, agent_run)
+    surface = model_assignments.surface_key(mode, one_shot)
     info = current_turn(messages)
-    templated = template_reply(mode=mode, agent_run=agent_run, info=info)
+    templated = template_reply(mode=mode, info=info)
     if templated:
         await _log(thread_id=thread_id, kind="reply", mode=mode, reason="calendar_reminder_write",
                    tools=info.tool_names, draft=draft, route="template", model=None, final=templated)
@@ -525,16 +465,16 @@ async def finalize_reply(
         return NO_CHANGE_REPLY
     if not writer_enabled(surface):
         return None
-    use_writer, reason = decide(mode=mode, one_shot=one_shot, agent_run=agent_run, info=info, draft=draft)
+    use_writer, reason = decide(mode=mode, one_shot=one_shot, info=info, draft=draft)
     model = model_assignments.writer_model(surface)
-    log_kwargs = dict(thread_id=thread_id, kind="reply", mode=("agent_run" if agent_run else mode),
+    log_kwargs = dict(thread_id=thread_id, kind="reply", mode=mode,
                       reason=reason, tools=info.tool_names, draft=draft)
     if not use_writer:
         await _log(route="tool_model", model=None, final=draft, **log_kwargs)
         return None
     started = time.monotonic()
     try:
-        text = await rewrite_reply(messages, draft=draft, mode=mode, one_shot=one_shot, agent_run=agent_run, surface=surface)
+        text = await rewrite_reply(messages, draft=draft, mode=mode, one_shot=one_shot, surface=surface)
     except Exception as e:  # noqa: BLE001 — any writer failure must fall back to the draft
         logger.warning("writer failed (%s), keeping tool-model draft: %r", reason, e)
         await _log(route="fallback", model=model, final=draft, latency_ms=_ms(started),
@@ -542,88 +482,6 @@ async def finalize_reply(
         return None
     await _log(route="writer", model=model, final=text, latency_ms=_ms(started), **log_kwargs)
     return text
-
-
-# ---------------------------------------------------------------------------
-# Rule B — long text arguments of note-writing tools
-# ---------------------------------------------------------------------------
-
-_URL_RE = re.compile(r"https?://[^\s)>\]]+")
-_LINK_RE = re.compile(r"\[\[[^\]]+\]\]")
-_NUM_RE = re.compile(r"\d+(?:[.:,/-]\d+)*")
-
-
-def _anchors(text: str) -> set[str]:
-    return set(_URL_RE.findall(text)) | set(_LINK_RE.findall(text)) | set(_NUM_RE.findall(text))
-
-
-def valid_rewrite(original: str, new: str, *, compose: bool) -> bool:
-    if not new.strip():
-        return False
-    if compose:
-        return len(new) >= 0.8 * len(original) and (set(_URL_RE.findall(original)) <= set(_URL_RE.findall(new)))
-    if not 0.5 * len(original) <= len(new) <= 2.2 * len(original):
-        return False
-    return _anchors(original) <= _anchors(new)
-
-
-def _project_from_thread(thread_id: str | None) -> str:
-    return thread_id.split("project_", 1)[1] if thread_id and thread_id.startswith("project_") else "this project"
-
-
-async def rewrite_tool_calls(
-    messages: list[BaseMessage],
-    *,
-    thread_id: str | None,
-    mode: str | None,
-    agent_run: bool,
-    one_shot: bool = False,
-) -> list[dict] | None:
-    """Rule B. Returns replacement tool_calls for the last AI message, or None
-    when nothing changed. The caller must use these for execution only."""
-    surface = model_assignments.surface_key(mode, one_shot, agent_run)
-    if not writer_enabled(surface) or not messages or messages[-1].type != "ai":
-        return None
-    calls = [dict(tc) for tc in (getattr(messages[-1], "tool_calls", None) or [])]
-    compose = agent_run
-    changed = False
-    info = current_turn(messages[:-1])
-    for call in calls:
-        field_name = NOTE_CONTENT_FIELDS.get(call["name"])
-        args = dict(call.get("args") or {})
-        original = args.get(field_name) if field_name else None
-        if not isinstance(original, str) or not original.strip():
-            continue
-        if not compose and len(original) < NOTE_REWRITE_MIN_CHARS:
-            continue
-        if compose:
-            prompt = COMPOSE_PROMPT.format(
-                project=_project_from_thread(thread_id),
-                goal=info.user_message,
-                draft=original,
-                sources=_render_work(info, per_result=4000, total=14000),
-            )
-        else:
-            prompt = TIDY_PROMPT.format(text=original)
-        started = time.monotonic()
-        kind = f"arg:{call['name']}.{field_name}"
-        base = dict(thread_id=thread_id, kind=kind, mode=("agent_run" if agent_run else mode),
-                    reason="compose" if compose else "tidy", tools=[call["name"]],
-                    model=model_assignments.writer_model(surface), draft=original)
-        try:
-            new = await _invoke([HumanMessage(content=prompt)], temperature=0.3, timeout=WRITER_TIMEOUT_SECONDS, surface=surface)
-        except Exception as e:  # noqa: BLE001
-            logger.warning("writer arg rewrite failed for %s: %r", kind, e)
-            await _log(route="fallback", final=original, latency_ms=_ms(started), error=f"{type(e).__name__}: {e}", **base)
-            continue
-        if not valid_rewrite(original, new, compose=compose):
-            await _log(route="fallback", final=original, latency_ms=_ms(started), error="validation_failed", **base)
-            continue
-        args[field_name] = new
-        call["args"] = args
-        changed = True
-        await _log(route="writer", final=new, latency_ms=_ms(started), **base)
-    return calls if changed else None
 
 
 def _ms(started: float) -> float:

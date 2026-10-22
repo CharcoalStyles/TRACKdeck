@@ -8,9 +8,7 @@ function formatTokenCount(n: number): string {
 
 interface ChatWidgetProps {
   threadId: string | null
-  mode?: 'onboarding' | 'profile_chat' | 'project_chat' | null
   oneShot?: boolean
-  agentRun?: boolean
   greeting?: string | null
   alwaysGreetIfEmpty?: boolean
   onSendStart?: () => void
@@ -19,9 +17,7 @@ interface ChatWidgetProps {
 
 export default function ChatWidget({
   threadId,
-  mode = null,
   oneShot = false,
-  agentRun = false,
   greeting = null,
   alwaysGreetIfEmpty = false,
   onSendStart,
@@ -29,9 +25,7 @@ export default function ChatWidget({
 }: ChatWidgetProps) {
   const { messages, send, isSending, size, clearConversation } = useChat({
     threadId,
-    mode,
     oneShot,
-    agentRun,
     greeting,
     alwaysGreetIfEmpty,
     onSendStart,

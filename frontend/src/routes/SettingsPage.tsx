@@ -39,57 +39,7 @@ export default function SettingsPage() {
       <RecallCard data={data} onSaved={invalidate} />
       <ContextBudgetCard data={data} onSaved={invalidate} />
       <McpServersCard data={data} onSaved={invalidate} />
-      <ResetAboutMeCard />
     </div>
-  )
-}
-
-function ResetAboutMeCard() {
-  const queryClient = useQueryClient()
-  const status = useSaveStatus()
-
-  const mutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await api.POST('/onboarding/reset')
-      if (error) throw new Error()
-    },
-    onMutate: () => status.setState('saving'),
-    onSuccess: () => {
-      status.setState('saved')
-      queryClient.invalidateQueries({ queryKey: ['settings'] })
-      queryClient.invalidateQueries({ queryKey: ['settings-probe'] })
-    },
-    onError: () => status.setState('error'),
-  })
-
-  function handleReset() {
-    if (
-      !window.confirm(
-        'Reset About Me? This deletes your profile note and restarts onboarding from the basics form. This cannot be undone.'
-      )
-    ) {
-      return
-    }
-    mutation.mutate()
-  }
-
-  return (
-    <Card>
-      <h2 className="mb-1 text-lg font-semibold">Reset Profile</h2>
-      <p className="mb-3 text-sm text-text-muted">
-        Deletes your About Me note and clears the onboarding conversation, so the basics form
-        and guided interview start fresh next time you visit Profile. Notes linked from About
-        Me (individual people) and other settings are left untouched.
-      </p>
-      <button
-        type="button"
-        onClick={handleReset}
-        className="rounded-lg border border-danger px-4 py-2 text-sm font-semibold text-danger hover:bg-danger/10"
-      >
-        Reset About Me
-      </button>
-      <SaveStatus state={status.state} savedMessage="Reset." />
-    </Card>
   )
 }
 
