@@ -1730,8 +1730,8 @@ export interface components {
             fired_at: number | null;
             /** Resolved At */
             resolved_at: number | null;
-            /** Reply */
-            reply: string | null;
+            /** Answer */
+            answer: string | null;
             /** Personalization Level */
             personalization_level: string;
             /** Helpfulness */

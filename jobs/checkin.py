@@ -44,11 +44,9 @@ from apscheduler.jobstores.base import JobLookupError
 from apscheduler.triggers.date import DateTrigger
 
 from agent.checkin_prompts import FALLBACK_CATEGORY, PROMPTS
-from agent.memory import MemoryStore
-from agent.runtime import AgentResult, create_background_thread, run_agent
 from agent.scheduler import scheduler
 from agent.settings import settings
-from utils import checkins_store
+from utils import checkin_log, checkins_store
 from utils.notify import notify_error, send_gotify
 
 logger = logging.getLogger(__name__)
@@ -107,11 +105,6 @@ async def get_or_create_day_target(day_start_utc: int) -> int:
     return target
 
 
-def _mint_thread() -> tuple[str, str]:
-    info = create_background_thread()
-    return info.thread_id, info.keyword
-
-
 def _checkin_click_url(checkin: dict) -> str | None:
     """Deep-link into static/checkin.html for Gotify's tap-to-open extras.
     None (no click action, plain notification still fires) if
@@ -129,23 +122,21 @@ def _checkin_click_url(checkin: dict) -> str | None:
     return f"{base.rstrip('/')}/static/checkin.html?{params}"
 
 
-async def answer_checkin(checkin_id: str, text: str) -> AgentResult | None:
-    """Resolve a check-in by treating `text` (typed or transcribed) as the
-    reply. Shared by every reply path (device voice, magic-link voice,
-    magic-link text). Returns None if checkin_id is stale/unresolvable
-    (unknown, already resolved, or never fired) so an *authenticated*
-    caller can fall back to normal thread resolution — the magic-link
-    routes in main.py/voice.py must NOT do that fallback themselves: an
-    anonymous visitor with a stale id must get a hard error, never a
-    live, unscoped conversation thread."""
+async def answer_checkin(checkin_id: str, text: str) -> bool:
+    """Resolve a check-in by recording `text` (typed or transcribed) as the
+    user's answer in the vault's Check-ins/ file. No agent turn runs.
+    Shared by every reply path (device voice, magic-link voice, magic-link
+    text). Returns False if checkin_id is stale/unresolvable (unknown,
+    already resolved, or never fired) so an *authenticated* caller can fall
+    back to normal handling — the magic-link routes in main.py/voice.py
+    must NOT do that fallback themselves: an anonymous visitor with a stale
+    id must get a hard error, never a live conversation."""
     checkin = await asyncio.to_thread(checkins_store.get_checkin, checkin_id)
-    if checkin is None or checkin["status"] != "pending" or checkin["thread_id"] is None:
+    if checkin is None or checkin["status"] != "pending" or checkin["fired_at"] is None:
         logger.warning("checkin_id %s not resolvable — falling back to normal resolution", checkin_id)
-        return None
-    text_for_agent = f'(Replying to check-in prompt: "{checkin["prompt_text"]}") {text}'
-    result = await run_agent(text_for_agent, thread_id=checkin["thread_id"], one_shot=True)
-    await resolve_checkin(checkin_id, outcome="answered")
-    return result
+        return False
+    await resolve_checkin(checkin_id, outcome="answered", answer=text)
+    return True
 
 
 async def _personalize_prompt(category: str) -> tuple[str, str]:
@@ -238,17 +229,8 @@ async def fire_checkin(checkin_id: str) -> None:
         if checkin is None or checkin["status"] != "pending" or checkin["fired_at"] is not None:
             return
 
-        thread_id: str | None = None
-        keyword: str | None = None
-        if checkin["retry_of"] is not None:
-            original = await asyncio.to_thread(checkins_store.get_checkin, checkin["retry_of"])
-            if original and original["thread_id"]:
-                thread_id, keyword = original["thread_id"], original["keyword"]
-        if thread_id is None:
-            thread_id, keyword = _mint_thread()
-
         fired_at = int(time.time())
-        await asyncio.to_thread(checkins_store.mark_fired, checkin_id, thread_id, keyword, fired_at)
+        await asyncio.to_thread(checkins_store.mark_fired, checkin_id, fired_at)
         await asyncio.to_thread(
             send_gotify,
             f"Check-in ({checkin['category']})",
@@ -299,14 +281,24 @@ async def _schedule_next(resolved: dict, outcome: str) -> None:
     await _create_and_schedule(scheduled_at, category, retry_of)
 
 
-async def resolve_checkin(checkin_id: str, outcome: str) -> None:
-    """outcome: 'answered' | 'skipped' | 'expired'. Called from voice.py
-    (answered), main.py's skip endpoint (skipped), and expire_checkin
-    (expired)."""
+async def resolve_checkin(checkin_id: str, outcome: str, answer: str | None = None) -> None:
+    """outcome: 'answered' | 'skipped' | 'expired'. Called from
+    answer_checkin (answered), main.py's skip endpoint (skipped), and
+    expire_checkin (expired). Also records the check-in in the vault's
+    Check-ins/ file for its day (utils/checkin_log.py)."""
     checkin = await asyncio.to_thread(checkins_store.get_checkin, checkin_id)
     if checkin is None or checkin["status"] != "pending":
         return  # already resolved elsewhere — don't double-schedule
-    await asyncio.to_thread(checkins_store.mark_resolved, checkin_id, outcome, int(time.time()))
+    resolved_at = int(time.time())
+    await asyncio.to_thread(checkins_store.mark_resolved, checkin_id, outcome, resolved_at)
+    try:
+        local_dt = datetime.fromtimestamp(checkin["fired_at"] or resolved_at, settings.zoneinfo())
+        await asyncio.to_thread(
+            checkin_log.append_entry, checkin_id, local_dt, outcome, checkin["prompt_text"], answer
+        )
+    except Exception as e:
+        logger.error("Check-in %s resolved but could not be written to the vault: %s", checkin_id, e)
+        notify_error(f"Check-in vault write failed ({checkin_id})", e)
     try:
         scheduler.remove_job(f"checkin_expire:{checkin_id}")
     except JobLookupError:
@@ -333,22 +325,22 @@ async def next_wake_at() -> int:
     return int(wake_dt.astimezone(timezone.utc).timestamp())
 
 
-async def reflections_between(memory: MemoryStore, start_ts: int, end_ts: int) -> list[dict]:
+async def reflections_between(start_ts: int, end_ts: int) -> list[dict]:
     """Structured record of every check-in resolved within
     [start_ts, end_ts] (UTC epoch seconds) — answered, skipped, or
-    expired. An answered check-in's reply text is looked up by its own
-    dedicated thread from Chroma (checkins.db doesn't store the reply
-    itself — every check-in mints its own thread via _mint_thread, and
-    agent.runtime.run_agent summarizes+embeds each turn there like any
-    other conversation); skipped/expired ones have reply=None. Used by
-    main.py's GET /checkins/today for the dashboard's check-in history
-    page."""
+    expired. Scheduling fields come from checkins.db; an answered
+    check-in's text is read back from the vault's Check-ins/ file for the
+    local day it was resolved on; skipped/expired ones have answer=None.
+    Used by main.py's GET /checkins/today."""
     resolved = await asyncio.to_thread(checkins_store.list_resolved_between, start_ts, end_ts)
+    zone = settings.zoneinfo()
+    answers_by_day: dict[str, dict[str, str | None]] = {}
     results = []
     for checkin in resolved:
-        reply = None
-        if checkin["status"] == "answered" and checkin["thread_id"]:
-            reply = memory.get_conversation_by_thread(checkin["thread_id"])
+        day = datetime.fromtimestamp(checkin["fired_at"] or checkin["resolved_at"], zone).strftime("%Y-%m-%d")
+        if day not in answers_by_day:
+            entries = await asyncio.to_thread(checkin_log.read_entries, day)
+            answers_by_day[day] = {e["id"]: e["answer"] for e in entries}
         results.append(
             {
                 "id": checkin["id"],
@@ -358,7 +350,7 @@ async def reflections_between(memory: MemoryStore, start_ts: int, end_ts: int) -
                 "scheduled_at": checkin["scheduled_at"],
                 "fired_at": checkin["fired_at"],
                 "resolved_at": checkin["resolved_at"],
-                "reply": reply,
+                "answer": answers_by_day[day].get(checkin["id"]),
                 "personalization_level": checkin["personalization_level"],
                 "helpfulness": checkin["helpfulness"],
             }

@@ -62,9 +62,9 @@ export default function CheckinsAdminPage() {
                 {STATUS_LABEL[checkin.status] ?? checkin.status}
               </span>
             </h2>
-            <p className={`text-sm text-text-muted ${checkin.reply ? 'mb-3' : ''}`}>{checkin.prompt_text}</p>
-            {checkin.reply && (
-              <p className="border-l-[3px] border-accent pl-3 text-sm text-text-primary">{checkin.reply}</p>
+            <p className={`text-sm text-text-muted ${checkin.answer ? 'mb-3' : ''}`}>{checkin.prompt_text}</p>
+            {checkin.answer && (
+              <p className="border-l-[3px] border-accent pl-3 text-sm text-text-primary">{checkin.answer}</p>
             )}
           </Card>
         ))

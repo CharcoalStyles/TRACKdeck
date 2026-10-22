@@ -33,8 +33,6 @@ def init_db() -> None:
                 id TEXT PRIMARY KEY,
                 category TEXT NOT NULL,
                 prompt_text TEXT NOT NULL,
-                thread_id TEXT,
-                keyword TEXT,
                 scheduled_at INTEGER NOT NULL,
                 fired_at INTEGER,
                 status TEXT NOT NULL DEFAULT 'pending',
@@ -85,12 +83,9 @@ def create_checkin(
         )
 
 
-def mark_fired(checkin_id: str, thread_id: str, keyword: str, fired_at: int) -> None:
+def mark_fired(checkin_id: str, fired_at: int) -> None:
     with _connect() as conn:
-        conn.execute(
-            "UPDATE checkins SET thread_id = ?, keyword = ?, fired_at = ? WHERE id = ?",
-            (thread_id, keyword, fired_at, checkin_id),
-        )
+        conn.execute("UPDATE checkins SET fired_at = ? WHERE id = ?", (fired_at, checkin_id))
 
 
 def mark_resolved(checkin_id: str, status: str, resolved_at: int) -> None:

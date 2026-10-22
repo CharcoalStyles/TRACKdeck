@@ -44,10 +44,9 @@ set either in production:
 
 A third optional field, checkin_id, IS meant for real hardware: it tags a
 reply as answering a specific mental-health check-in prompt
-(jobs/checkin.py) the device just displayed, so the reply is routed to
-that check-in's own thread (agent.runtime.run_agent's explicit thread_id
-path) instead of being resolved by keyword/recency, and the check-in gets
-marked answered.
+(jobs/checkin.py) the device just displayed: no agent turn runs, the
+transcription is recorded as the answer in the vault's Check-ins/ file for
+the day and the check-in is marked answered.
 """
 import asyncio
 import logging
@@ -90,9 +89,9 @@ async def _transcribe_and_run(
     fire-and-forget path, an HTTP error for the synchronous testing path).
 
     checkin_id, when set, tags this as an answer to a specific
-    jobs/checkin.py mental-health check-in prompt: the reply is routed to
-    that check-in's own thread instead of resolved by keyword/recency, and
-    the check-in is marked answered.
+    jobs/checkin.py mental-health check-in prompt: the transcription is
+    recorded as that check-in's answer (no agent turn) and the check-in is
+    marked answered.
     """
     transcription = transcribe_audio(audio_path)
 
@@ -106,9 +105,8 @@ async def _transcribe_and_run(
         # the device was recording) doesn't drop the user's spoken reply —
         # answer_checkin already logs and returns None, so we just fall
         # through to normal resolution below.
-        result = await checkin_jobs.answer_checkin(checkin_id, transcription)
-        if result is not None:
-            return transcription, result.reply, result.keyword
+        if await checkin_jobs.answer_checkin(checkin_id, transcription):
+            return transcription, "", ""
 
     result = await run_agent(transcription, one_shot=one_shot)
     return transcription, result.reply, result.keyword
@@ -190,7 +188,6 @@ async def receive_checkin_voice(checkin_id: str, file: UploadFile = File(...)):
     if not transcription:
         return {"transcription": "", "reply": ""}
 
-    result = await checkin_jobs.answer_checkin(checkin_id, transcription)
-    if result is None:
+    if not await checkin_jobs.answer_checkin(checkin_id, transcription):
         raise HTTPException(status_code=409, detail="Check-in is no longer awaiting a reply")
-    return {"transcription": transcription, "reply": result.reply}
+    return {"transcription": transcription, "reply": "Saved."}

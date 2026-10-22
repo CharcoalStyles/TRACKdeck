@@ -13,8 +13,8 @@ agent.runtime.run_agent on every successful turn) and asks the LLM to
 write a short recap, rather than emailing the raw log.
 
 Today's answered mental-health check-ins (jobs/checkin.py) are pulled out
-separately via checkins_store.list_answered_between and their replies
-looked up by thread, so gratitude/mood/wins reflections get their own
+separately via checkins_store.list_answered_between and their answers
+read from the vault's Check-ins/ file, so gratitude/mood/wins reflections get their own
 prompt section instead of blending anonymously into the general log.
 """
 from __future__ import annotations
@@ -31,7 +31,7 @@ from agent.memory import MemoryStore
 from agent.runtime import app_state, prune_thread_locks
 from agent.settings import settings
 from jobs import checkin as checkin_jobs
-from utils import checkins_store, vault
+from utils import checkin_log, checkins_store, vault
 from utils.llm_client import get_writer_llm, stringify_content
 from utils.mailer import send_email
 from utils.notify import notify_error
@@ -123,26 +123,19 @@ def _write_recap(entries: list[str], reflections: list[str], history: list[str] 
     return stringify_content(response.content) or ""
 
 
-def _todays_checkin_reflections(memory: MemoryStore, answered: list[dict]) -> tuple[list[str], set[str]]:
-    """Today's answered check-ins (jobs/checkin.py), formatted as
-    prompt/reply pairs, plus the set of their thread_ids so the caller can
-    keep them out of the generic conversation log. A reply's summary lives
-    in Chroma under the check-in's own dedicated thread, not in
-    checkins.db itself, so this looks it up via
-    MemoryStore.get_conversation_by_thread. Takes the already-fetched
-    answered list rather than querying itself — send_daily_digest needs
-    that same list for the rating block below too."""
+def _todays_checkin_reflections(answered: list[dict], day_str: str) -> list[str]:
+    """Today's answered check-ins, formatted as prompt/answer pairs read
+    back from the vault's Check-ins/ file (utils/checkin_log.py). Takes the
+    already-fetched answered list rather than querying itself —
+    send_daily_digest needs that same list for the rating block below
+    too."""
+    answers = {e["id"]: e["answer"] for e in checkin_log.read_entries(day_str)}
     reflections = []
-    thread_ids = set()
     for checkin in answered:
-        thread_id = checkin["thread_id"]
-        if not thread_id:
-            continue
-        thread_ids.add(thread_id)
-        reply = memory.get_conversation_by_thread(thread_id)
-        if reply:
-            reflections.append(f'Prompt ({checkin["category"]}): "{checkin["prompt_text"]}"\nReply: {reply}')
-    return reflections, thread_ids
+        answer = answers.get(checkin["id"])
+        if answer:
+            reflections.append(f'Prompt ({checkin["category"]}): "{checkin["prompt_text"]}"\nReply: {answer}')
+    return reflections
 
 
 def _build_rating_block(answered: list[dict]) -> str:
@@ -249,11 +242,11 @@ async def send_daily_digest(memory: MemoryStore) -> None:
     try:
         start_ts, end_ts = _todays_utc_bounds()
         answered = await asyncio.to_thread(checkins_store.list_answered_between, start_ts, end_ts)
-        reflections, checkin_thread_ids = await asyncio.to_thread(
-            _todays_checkin_reflections, memory, answered
-        )
-        entries = memory.get_conversations_between(start_ts, end_ts, exclude_thread_ids=checkin_thread_ids)
         today_local = datetime.now(settings.zoneinfo()).date()
+        reflections = await asyncio.to_thread(
+            _todays_checkin_reflections, answered, today_local.strftime("%Y-%m-%d")
+        )
+        entries = memory.get_conversations_between(start_ts, end_ts)
         history = await asyncio.to_thread(_load_previous_recaps, today_local)
         recap = await asyncio.to_thread(_write_recap, entries, reflections, history)
     except Exception as e:

@@ -414,7 +414,7 @@ class CheckinRecord(BaseModel):
     scheduled_at: int
     fired_at: int | None
     resolved_at: int | None
-    reply: str | None
+    answer: str | None
     personalization_level: str
     helpfulness: str | None
 
@@ -574,7 +574,7 @@ async def todays_checkins(_: Annotated[None, Depends(auth.require_session_or_tok
     end_local = datetime.combine(now_local.date(), dtime.max, tzinfo=local_tz)
     start_ts = int(start_local.astimezone(timezone.utc).timestamp())
     end_ts = int(end_local.astimezone(timezone.utc).timestamp())
-    reflections = await checkin_jobs.reflections_between(app_state.memory, start_ts, end_ts)
+    reflections = await checkin_jobs.reflections_between(start_ts, end_ts)
     return {"checkins": reflections}
 
 
@@ -1303,10 +1303,9 @@ async def reply_checkin(checkin_id: str, request: CheckinReplyRequest):
     Magic-link text reply for static/checkin.html — same trust model as
     skip_checkin_public above.
     """
-    result = await checkin_jobs.answer_checkin(checkin_id, request.text)
-    if result is None:
+    if not await checkin_jobs.answer_checkin(checkin_id, request.text):
         raise HTTPException(status_code=409, detail="Check-in is no longer awaiting a reply")
-    return {"reply": result.reply}
+    return {"reply": "Saved."}
 
 
 @app.get("/checkin/{checkin_id}/rate")
