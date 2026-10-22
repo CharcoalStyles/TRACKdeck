@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
 from agent.settings import settings
-from utils import writer_log
+from utils import event_log, writer_log
 from utils.datetime import format_now_human
 from utils.llm_client import get_writer_llm
 
@@ -102,6 +102,7 @@ class TurnInfo:
     user_message: str = ""
     tool_calls: list[tuple[str, dict]] = field(default_factory=list)
     results: list[tuple[str, str, bool]] = field(default_factory=list)  # (tool, content, is_error)
+    steps: list[dict] = field(default_factory=list)  # ordered {name, args, result, error}, one per call
 
     @property
     def tool_names(self) -> list[str]:
@@ -135,14 +136,21 @@ def current_turn(messages: list[BaseMessage]) -> TurnInfo:
     start = max((i for i, m in enumerate(messages) if m.type == "human"), default=-1)
     info = TurnInfo(user_message=_text(messages[start].content) if start >= 0 else "")
     call_names: dict[str, str] = {}
+    steps: dict[str, dict] = {}
     for m in messages[start + 1:]:
         if m.type == "ai":
             for tc in getattr(m, "tool_calls", None) or []:
                 info.tool_calls.append((tc["name"], tc.get("args") or {}))
                 call_names[tc["id"]] = tc["name"]
+                steps[tc["id"]] = {"name": tc["name"], "args": tc.get("args") or {}, "result": None, "error": None}
+                info.steps.append(steps[tc["id"]])
         elif m.type == "tool":
-            name = call_names.get(getattr(m, "tool_call_id", ""), getattr(m, "name", None) or "tool")
-            info.results.append((name, _text(m.content), is_error_result(m)))
+            call_id = getattr(m, "tool_call_id", "")
+            name = call_names.get(call_id, getattr(m, "name", None) or "tool")
+            content, err = _text(m.content), is_error_result(m)
+            info.results.append((name, content, err))
+            if call_id in steps:
+                steps[call_id]["result"], steps[call_id]["error"] = content, err
     return info
 
 
@@ -485,6 +493,8 @@ def _ms(started: float) -> float:
 
 
 async def _log(**kwargs) -> None:
+    if kwargs.get("kind") == "reply" and kwargs.get("route"):
+        event_log.note_reply_route(kwargs["route"])
     try:
         await asyncio.to_thread(writer_log.log_writer, **kwargs)
     except Exception:  # noqa: BLE001 — logging must never break a turn

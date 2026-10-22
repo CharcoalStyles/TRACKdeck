@@ -13,6 +13,7 @@ from utils.datetime import (
     get_todays_datetime, text_to_utc, add_time_to_UTC_text, parse_local_datetime,
     format_span, past_start_message,
 )
+from utils import event_log
 from utils.caldav_client import (
     get_event, get_events_in_range, create_or_update_event, delete_event, _parse_ics_datetime,
 )
@@ -101,6 +102,7 @@ def add_calendar_event(title: str, start: str, end: Optional[str] = None, descri
     )
 
     if response.get("success"):
+        event_log.note_artifact("calendar_event", uid, "create", title=title, start=start_UTC, end=end_UTC)
         return f"Event added successfully. UID: {uid}. Added '{title}' for {_span_text(start_UTC, end_UTC)}."
     else:
         return f"Failed to add event. {response.get('error') or response.get('message') or 'Unknown error'}"
@@ -120,6 +122,7 @@ def delete_calendar_event(uid: str) -> str:
     response = delete_event(uid)
 
     if response.get("success"):
+        event_log.note_artifact("calendar_event", uid, "delete", title=title)
         return f"Event deleted successfully. Deleted '{title}'." if title else "Event deleted successfully."
     else:
         return f"Failed to delete event. {response.get('error') or response.get('message') or 'Unknown error'}"
@@ -195,6 +198,7 @@ def update_calendar_event(uid: str, title: str, start: str, end: str, descriptio
     )
 
     if response.get("success"):
+        event_log.note_artifact("calendar_event", uid, "update", title=title, start=start_UTC, end=end_UTC)
         return f"Event updated successfully. Updated '{title}' to {_span_text(start_UTC, end_UTC)}."
     else:
         return f"Failed to update event. {response.get('error') or response.get('message') or 'Unknown error'}"
@@ -275,6 +279,9 @@ def move_calendar_event(event: str, new_start: str) -> str:
         rrule=None,
     )
     if response.get("success"):
+        event_log.note_artifact(
+            "calendar_event", ev["uid"], "update", title=ev.get("summary"), start=new_start_utc, end=new_end_utc,
+        )
         return f"Event updated successfully. Moved '{ev.get('summary')}' to {_span_text(new_start_utc, new_end_utc)}."
     return f"Failed to move event. {response.get('error') or response.get('message') or 'Unknown error'}"
 

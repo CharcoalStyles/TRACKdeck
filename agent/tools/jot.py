@@ -22,7 +22,12 @@ def save_capture(text: str, source: str, via: str) -> str:
     how it got there: "tool" (the model chose jot_note) or "fallback" (a
     one-shot turn where no tool was chosen)."""
     capture_id = daily_notes.append_capture(datetime.now(settings.zoneinfo()), text)
-    event_log.log_event("capture", capture_id=capture_id, source=source, via=via, text=" ".join(text.split()))
+    flat = " ".join(text.split())
+    event_log.log_event(
+        "capture", capture_id=capture_id, source=source, via=via, text=flat,
+        origin_interaction_id=event_log.current_interaction_id(),
+    )
+    event_log.note_artifact("capture", capture_id, "create", log=False, text=flat)
     return capture_id
 
 

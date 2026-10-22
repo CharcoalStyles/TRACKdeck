@@ -6,7 +6,9 @@ LLM connection is configured via environment variables.
 """
 
 import asyncio
+import hashlib
 import json
+import os
 from datetime import datetime
 import logging
 
@@ -188,7 +190,18 @@ def _held_back_message(call: dict) -> ToolMessage:
     )
 
 
+_prompt_version = ""
+
+
+def get_prompt_version() -> str:
+    """Identifies what the tool model was shown: a hash of the system prompt
+    and the tool schemas, plus the git sha when the build provides one
+    (GIT_SHA env). Set by build_graph."""
+    return _prompt_version
+
+
 def build_graph(checkpointer, mcp_tools: list | None = None):
+    global _prompt_version
     tools = get_tools()
     if mcp_tools:
         local_names = {t.name for t in tools}
@@ -207,6 +220,10 @@ def build_graph(checkpointer, mcp_tools: list | None = None):
     # reply, and lower temperature favours consistent selection over warmth.
     # Building the client is pure object construction, so it is cached once.
     llm_with_tools = get_chat_llm(temperature=0.2).bind_tools(tools)
+    schemas = json.dumps([convert_to_openai_tool(t) for t in tools], sort_keys=True)
+    digest = hashlib.sha256((SYSTEM_PROMPT + schemas).encode()).hexdigest()[:12]
+    sha = os.environ.get("GIT_SHA", "").strip()
+    _prompt_version = f"{sha[:10]}+{digest}" if sha else digest
 
     mode_tools = {}
     for mode_key, names in MODE_TOOL_NAMES.items():

@@ -34,12 +34,13 @@ from fastapi import HTTPException
 
 from langchain_core.messages.utils import count_tokens_approximately
 
-from agent.graph import get_fixed_overhead_tokens
+from agent.graph import get_fixed_overhead_tokens, get_prompt_version
 from agent.keywords import generate_keyword, match_keyword_prefix
 from agent.memory import MemoryStore
 from agent.settings import settings
 from agent.tools.jot import save_capture
 from agent.writer import current_turn
+from utils import event_log
 from utils.event_log import log_event
 from utils.llm_client import stringify_content
 from utils.lmstudio_client import get_history_budget_tokens
@@ -384,6 +385,26 @@ class AgentResult:
     keyword: str
 
 
+STEP_RESULT_MAX_CHARS = 4000
+_REPLY_BY = {"template": "template", "tool_model": "lfm", "fallback": "lfm", "writer": "gemma"}
+
+
+def _truncate_step(step: dict) -> dict:
+    result = step["result"]
+    if isinstance(result, str) and len(result) > STEP_RESULT_MAX_CHARS:
+        result = result[:STEP_RESULT_MAX_CHARS] + "…[truncated]"
+    return {**step, "result": result}
+
+
+def _reply_by(route: str | None, fallback_capture: bool) -> str:
+    """Who wrote the final reply: template, lfm (the tool model), gemma (the
+    writer) or fallback (the canned capture reply). A writer that failed
+    leaves the tool model's draft, so that counts as lfm."""
+    if fallback_capture:
+        return "fallback"
+    return _REPLY_BY.get(route or "", "lfm")
+
+
 async def run_agent(
     text: str,
     thread_id: str | None = None,
@@ -436,37 +457,45 @@ async def run_agent(
         "user_text": cleaned_text, "source": source,
     }}
 
-    async with get_thread_lock(thread_id):
-        result = await app_state.graph.ainvoke(
-            {"messages": [{"role": "user", "content": cleaned_text}]},
-            config=config,
+    interaction = event_log.begin_interaction()
+    try:
+        async with get_thread_lock(thread_id):
+            result = await app_state.graph.ainvoke(
+                {"messages": [{"role": "user", "content": cleaned_text}]},
+                config=config,
+            )
+            for msg in result["messages"]:
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    for tool_call in msg.tool_calls:
+                        logger.info("Tool called: %s(%s)", tool_call["name"], tool_call["args"])
+                elif msg.type == "tool":
+                    logger.debug("Tool output: %s", msg.content)
+
+        reply = next(
+            (stringify_content(m.content) for m in reversed(result["messages"]) if m.content),
+            "Done.",
         )
-        for msg in result["messages"]:
-            if hasattr(msg, "tool_calls") and msg.tool_calls:
-                for tool_call in msg.tool_calls:
-                    logger.info("Tool called: %s(%s)", tool_call["name"], tool_call["args"])
-            elif msg.type == "tool":
-                logger.debug("Tool output: %s", msg.content)
 
-    reply = next(
-        (stringify_content(m.content) for m in reversed(result["messages"]) if m.content),
-        "Done.",
-    )
-
-    turn = current_turn(result["messages"])
-    fallback_capture = (one_shot or source == "voice") and mode is None and not turn.tool_calls
-    if fallback_capture:
-        try:
-            save_capture(cleaned_text, source=source, via="fallback")
-            reply = FALLBACK_CAPTURE_REPLY
-        except OSError as e:
-            logger.error("Fallback capture failed: %s", e)
-            notify_error("Could not save a voice capture", e)
-    log_event(
-        "interaction", source=source, thread_id=thread_id, one_shot=one_shot, mode=mode,
-        user_text=cleaned_text, tools=[{"name": n, "args": a} for n, a in turn.tool_calls],
-        reply=reply, fallback_capture=fallback_capture,
-    )
+        turn = current_turn(result["messages"])
+        fallback_capture = (one_shot or source == "voice") and mode is None and not turn.tool_calls
+        if fallback_capture:
+            try:
+                save_capture(cleaned_text, source=source, via="fallback")
+                reply = FALLBACK_CAPTURE_REPLY
+            except OSError as e:
+                logger.error("Fallback capture failed: %s", e)
+                notify_error("Could not save a voice capture", e)
+        log_event(
+            "interaction", interaction_id=interaction.id, source=source, thread_id=thread_id,
+            one_shot=one_shot, mode=mode, timezone=settings.timezone, user_text=cleaned_text,
+            tools=[_truncate_step(step) for step in turn.steps],
+            reply=reply, reply_by=_reply_by(interaction.reply_route, fallback_capture),
+            fallback_capture=fallback_capture,
+            models={"tool": settings.lmstudio_chat_model, "writer": settings.lmstudio_writer_model or None},
+            prompt_version=get_prompt_version(), artifacts=interaction.artifacts,
+        )
+    finally:
+        event_log.end_interaction()
 
     summary = f"User: {cleaned_text}\nAssistant: {reply}"
     # Writer-model replies (agent/writer.py) can be long; recall and the

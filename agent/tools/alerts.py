@@ -10,7 +10,7 @@ from langchain_core.tools import tool
 from agent.scheduler import scheduler
 from agent.settings import settings
 from jobs.reminders import fire_reminder
-from utils import reminders_store
+from utils import event_log, reminders_store
 from utils.datetime import parse_local_datetime, past_start_message
 
 logger = logging.getLogger(__name__)
@@ -42,6 +42,7 @@ def _create_reminder(message: str, when: str) -> str:
         replace_existing=True,
     )
 
+    event_log.note_artifact("reminder", reminder_id, "create", message=message, due=due_local.isoformat())
     logger.info("Reminder set: '%s' at %s (id=%s)", message, due_local.isoformat(), reminder_id)
     return f"Got it — I'll remind you to '{message}' at {due_local.strftime('%A, %d %B %Y %I:%M %p')}."
 
@@ -109,4 +110,5 @@ def cancel_reminder(message: str) -> str:
         scheduler.remove_job(f"reminder:{r['id']}")
     except JobLookupError:
         pass
+    event_log.note_artifact("reminder", r["id"], "cancel", message=r["message"])
     return f"Cancelled reminder: '{r['message']}'."
