@@ -133,8 +133,6 @@ from utils import (
     reminders_store,
     settings_store,
     task_library_store,
-    tool_router_log,
-    tool_suggestion_log,
     vault,
     writer_log,
 )
@@ -153,7 +151,6 @@ from routes.calendar_proxy import router as calendar_proxy_router
 from routes.alert_sounds import router as alert_sounds_router
 from routes.reflection import router as reflection_router
 from routes.day_plans import router as day_plans_router
-from routes.laya_playground import router as laya_playground_router
 from routes.task_library import router as task_library_router
 
 # ---------------------------------------------------------------------------
@@ -254,8 +251,6 @@ async def lifespan(app: FastAPI):
         await asyncio.to_thread(device_errors_store.init_db)
         await asyncio.to_thread(activity_log_store.init_db)
         await asyncio.to_thread(recall_log_store.init_db)
-        await asyncio.to_thread(tool_router_log.init_db)
-        await asyncio.to_thread(tool_suggestion_log.init_db)
         await asyncio.to_thread(writer_log.init_db)
         await asyncio.to_thread(day_plans_store.init_db)
         await asyncio.to_thread(task_library_store.init_db)
@@ -395,7 +390,6 @@ app.include_router(alert_sounds_router)  # /alert-sounds, /device/alert-sounds/{
 app.include_router(reflection_router)  # /reflection
 app.include_router(day_plans_router)  # /day-plans
 app.include_router(task_library_router)  # /task-library
-app.include_router(laya_playground_router)  # /laya-playground — see its own docstring; not deployed/wired to real tool-calling yet
 
 
 # ---------------------------------------------------------------------------
@@ -969,15 +963,6 @@ class SettingsUpdate(BaseModel):
     # llm_provider is "openrouter" (utils/openrouter_client.py, GET
     # /debug/openrouter-models).
     openrouter_chat_model: str | None = None
-    # Off by default (agent/settings.py's tool_router_enabled) — narrows
-    # which tools are bound per turn via agent/tool_router.py. A testing
-    # toggle for an A/B comparison, live no restart.
-    tool_router_enabled: bool | None = None
-    # Off by default (agent/settings.py's tool_suggestion_enabled) — appends
-    # an "I think these tools will help..." hint to the system prompt via
-    # agent/tool_suggestion.py, without changing which tools are bound. A
-    # separate testing toggle from tool_router_enabled, live no restart.
-    tool_suggestion_enabled: bool | None = None
 
     @model_validator(mode="after")
     def _check_values(self):
@@ -1052,8 +1037,6 @@ class SettingsResponse(BaseModel):
     # POST /settings' own validation (SettingsUpdate._check_values).
     openrouter_configured: bool
     lmstudio_writer_model: str
-    tool_router_enabled: bool
-    tool_suggestion_enabled: bool
     onboarding_complete: bool
     basics_complete: bool
 
@@ -1084,8 +1067,6 @@ def _current_settings() -> dict:
         "llm_provider": settings.llm_provider,
         "lmstudio_writer_model": settings.lmstudio_writer_model,
         "openrouter_configured": openrouter_configured(),
-        "tool_router_enabled": settings.tool_router_enabled,
-        "tool_suggestion_enabled": settings.tool_suggestion_enabled,
         # Read-only here — deliberately not part of SettingsUpdate below, so
         # it can only be set via agent/tools/general.py's
         # mark_onboarding_complete tool, not a direct POST /settings call.
@@ -1112,12 +1093,6 @@ async def _apply_settings_update(update: SettingsUpdate) -> None:
     if update.learning_mode is not None:
         settings.learning_mode = update.learning_mode
         changed["learning_mode"] = "true" if update.learning_mode else "false"
-    if update.tool_router_enabled is not None:
-        settings.tool_router_enabled = update.tool_router_enabled
-        changed["tool_router_enabled"] = "true" if update.tool_router_enabled else "false"
-    if update.tool_suggestion_enabled is not None:
-        settings.tool_suggestion_enabled = update.tool_suggestion_enabled
-        changed["tool_suggestion_enabled"] = "true" if update.tool_suggestion_enabled else "false"
     if update.default_location is not None:
         settings.default_location = update.default_location.strip()
         changed["default_location"] = settings.default_location

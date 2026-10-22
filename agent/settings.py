@@ -362,28 +362,6 @@ class Settings:
     # isn't worth a live UI toggle.
     llm_provider: str = os.environ.get("LLM_PROVIDER", "lmstudio")
 
-    # Off by default. When on, agent/tool_router.py narrows which tool
-    # schemas are bound per turn (via a Laya Choice call over ~9 tool
-    # categories) instead of always offering the full tool list — see
-    # agent/tool_router.py's module docstring for why it never suppresses
-    # tool-calling outright, only narrows which tools are offered. A
-    # testing toggle for an A/B comparison against the unmodified
-    # baseline, not a deployment knob — no env var, same reasoning as
-    # default_location above. Fully live, no restart: agent/graph.py's
-    # call_llm reads it fresh every turn, same pattern as llm_provider.
-    tool_router_enabled: bool = False
-
-    # Off by default. When on, agent/tool_suggestion.py appends an "I think
-    # these tools will help..." hint built from Laya (a per-tool Choice) to
-    # the system prompt, WITHOUT changing which tool schemas are bound —
-    # unlike tool_router_enabled's narrowing above, a wrong suggestion here
-    # can only be ignored, never make a tool unavailable. A separate
-    # testing toggle from tool_router_enabled so the two can be A/B tested
-    # independently — no env var, same reasoning as default_location above.
-    # Fully live, no restart: agent/graph.py's call_llm reads it fresh
-    # every turn, same pattern as tool_router_enabled.
-    tool_suggestion_enabled: bool = False
-
     def zoneinfo(self) -> ZoneInfo:
         return ZoneInfo(self.timezone)
 
@@ -460,7 +438,3 @@ def apply_persisted(values: dict[str, str]) -> None:
         settings.gotify_token = values["gotify_token"]
     if "mcp_servers" in values:
         settings.mcp_servers = values["mcp_servers"]
-    if "tool_router_enabled" in values:
-        settings.tool_router_enabled = values["tool_router_enabled"] == "true"
-    if "tool_suggestion_enabled" in values:
-        settings.tool_suggestion_enabled = values["tool_suggestion_enabled"] == "true"

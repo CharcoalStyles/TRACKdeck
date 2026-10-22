@@ -49,8 +49,6 @@ def env(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "llm_provider", "lmstudio")
     monkeypatch.setattr(settings, "lmstudio_chat_model", "lfm-test")
     monkeypatch.setattr(settings, "lmstudio_writer_model", "gemma-test")
-    monkeypatch.setattr(settings, "tool_router_enabled", False)
-    monkeypatch.setattr(settings, "tool_suggestion_enabled", False)
     monkeypatch.setattr(writer_log, "DB_PATH", str(tmp_path / "w.db"))
     writer_log.init_db()
 

@@ -25,8 +25,6 @@ from agent import model_assignments, writer
 from agent.date_guard import clean_search_queries, fix_relative_dates
 from agent.memory import MemoryStore
 from agent.settings import settings
-from agent.tool_router import build_category_index, choose_tool_subset
-from agent.tool_suggestion import build_suggestion_text, build_tool_candidates, suggest_tools
 from agent.tools.all_tools import get_tools
 from utils import vault
 from utils.datetime import format_now_human
@@ -34,8 +32,6 @@ from utils.llm_client import get_chat_llm
 from utils.lmstudio_client import get_history_budget_tokens
 from utils.openrouter_client import get_history_budget_tokens as get_openrouter_history_budget_tokens
 from utils.recall_log_store import log_recall
-from utils.tool_router_log import log_tool_router
-from utils.tool_suggestion_log import log_tool_suggestion
 
 logger = logging.getLogger(__name__)
 
@@ -393,25 +389,6 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
             )
         return llm_with_tools_by_provider[provider]
 
-    # Optional, feature-flagged narrowing of which tools get bound per turn
-    # (agent/tool_router.py, settings.tool_router_enabled — off by default).
-    # category_index is built once here, same "tool list is fixed for the
-    # process lifetime" reasoning as _tools_token_estimate below. Bounded —
-    # at most one entry per (provider, distinct combination of categories
-    # actually seen) — since routing can select any subset of ~9
-    # categories, not just one, worst case is 2^9 × 3 providers, but in
-    # practice only whatever combinations real requests actually produce
-    # ever get built. Separate cache from llm_with_tools_by_provider so the
-    # full-tool-list path above is never affected by anything routing does.
-    category_index = build_category_index(tools)
-    llm_with_narrowed_tools_by_key = {}
-
-    # Optional, feature-flagged tool suggestion (agent/tool_suggestion.py,
-    # settings.tool_suggestion_enabled — off by default) — unlike routing
-    # above, this never touches which tools are bound, only appends a hint
-    # to the system prompt, so it needs no bind-cache of its own.
-    tool_candidates = build_tool_candidates(tools)
-
     mode_tools = {}
     for mode_key, names in MODE_TOOL_NAMES.items():
         subset = [t for t in tools if t.name in names]
@@ -426,16 +403,6 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
                 mode_tools[mode_key]
             )
         return llm_with_mode_tools_by_key[key]
-
-    def get_llm_with_narrowed_tools(provider: str, categories: list[str], subset: list):
-        # categories can be any non-empty subset of the ~9 categories now
-        # (multi-category selection, see agent/tool_router.py) — sorted so
-        # {"weather", "reminders"} and {"reminders", "weather"} share a
-        # cache entry instead of building the same bind twice.
-        key = (provider, tuple(sorted(categories)))
-        if key not in llm_with_narrowed_tools_by_key:
-            llm_with_narrowed_tools_by_key[key] = get_chat_llm(temperature=0.2, provider=provider).bind_tools(subset)
-        return llm_with_narrowed_tools_by_key[key]
 
     # Tool list is fixed for the process lifetime, so this is computed once here
     # rather than every call_llm turn. ponytail: reuses the same chars/4 approximate
@@ -545,14 +512,7 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
         # present instead of depending on a tool call actually happening.
         datetime_block = f"\n\nCURRENT DATE AND TIME: {format_now_human(settings.zoneinfo())}"
 
-        suggestion_block = ""
-        if settings.tool_suggestion_enabled:
-            suggestion_decision = await suggest_tools(last_user_msg, tool_candidates)
-            if thread_id:
-                await asyncio.to_thread(log_tool_suggestion, thread_id, last_user_msg, suggestion_decision)
-            suggestion_block = build_suggestion_text(suggestion_decision.suggested)
-
-        system = SystemMessage(content=SYSTEM_PROMPT + addendum + datetime_block + suggestion_block + memory_block)
+        system = SystemMessage(content=SYSTEM_PROMPT + addendum + datetime_block + memory_block)
         # "onboarding"/"profile_chat"/"project_<slug>" threads reuse the same
         # thread_id forever and are never swept (see PROJECT_THREAD_PREFIX
         # comment above), so unlike normal threads their history can grow
@@ -608,14 +568,6 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
         mode_key = "agent_run" if (project_slug and agent_run) else mode
         if mode_key in mode_tools:
             llm_with_tools = get_llm_with_mode_tools(provider, mode_key)
-        elif settings.tool_router_enabled:
-            decision = await choose_tool_subset(last_user_msg, category_index, tools)
-            if thread_id:
-                await asyncio.to_thread(log_tool_router, thread_id, last_user_msg, decision)
-            llm_with_tools = (
-                get_llm_with_narrowed_tools(provider, decision.categories, decision.tools)
-                if decision.narrowed else get_llm_with_tools(provider)
-            )
         else:
             llm_with_tools = get_llm_with_tools(provider)
         # Both lmstudio and openrouter have a dashboard-editable model

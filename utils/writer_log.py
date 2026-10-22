@@ -7,8 +7,7 @@ writer model), why, and — for long-text tool arguments — whether the writer'
 rewrite was used. Exists to make the split legible and to supply real
 before/after pairs as eval/training data later.
 
-Same plain-sqlite3, blocking-calls-wrapped-in-asyncio.to_thread convention
-as utils/tool_router_log.py.
+Plain sqlite3, blocking calls wrapped in asyncio.to_thread.
 """
 from __future__ import annotations
 
