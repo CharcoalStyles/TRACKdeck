@@ -5,11 +5,10 @@ Tools for the Sunday/Saturday task-planning note: capturing tasks and
 turning that list into a timeline of sprint/break blocks merged around
 the day's actual calendar events.
 
-add_planning_task is deliberately a single-item tool, same shape as
-log_activity — a voice brain-dump of several tasks ("25 min dishes, 30
-min laundry...") is handled by the LLM calling it once per item under
-the system prompt's multi-part-request rule, not by a bespoke ingestion
-pipeline.
+add_planning_task is deliberately a single-item tool — a voice brain-dump
+of several tasks ("25 min dishes, 30 min laundry...") is handled by the
+LLM calling it once per item under the system prompt's multi-part-request
+rule, not by a bespoke ingestion pipeline.
 
 generate_schedule_blocks talks to utils.caldav_client and
 utils.reminders_store/agent.scheduler directly rather than through the

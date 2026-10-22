@@ -109,7 +109,6 @@ from agent.settings import (
 from agent.tools.all_tools import get_mcp_tools
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
-from jobs import activity_log as activity_log_jobs
 from jobs import checkin as checkin_jobs
 from jobs.bedtime import send_bedtime_reminder
 from jobs.calendar_sync import sync_calendar_reminders
@@ -122,7 +121,6 @@ from jobs.reminders import create_test_reminder, fire_reminder
 from agent.tools.general import resolve_location
 from agent.vault_watcher import reconcile_vault, watch_vault
 from utils import (
-    activity_log_store,
     alert_sounds_store,
     checkins_store,
     day_plans_store,
@@ -249,7 +247,6 @@ async def lifespan(app: FastAPI):
         await asyncio.to_thread(device_state.init_db)
         await asyncio.to_thread(alert_sounds_store.init_db)
         await asyncio.to_thread(device_errors_store.init_db)
-        await asyncio.to_thread(activity_log_store.init_db)
         await asyncio.to_thread(recall_log_store.init_db)
         await asyncio.to_thread(writer_log.init_db)
         await asyncio.to_thread(day_plans_store.init_db)
@@ -531,38 +528,6 @@ class CheckinsTodayResponse(BaseModel):
     checkins: list[CheckinRecord]
 
 
-class ActivityLogEntry(BaseModel):
-    id: str
-    occurred_at: int
-    activity_type: str
-    subject: str
-    duration: str | None
-    mood_energy: int | None
-    reflection: str | None
-    created_at: int
-
-
-class ActivityLogResponse(BaseModel):
-    entries: list[ActivityLogEntry]
-
-
-class MoodByDay(BaseModel):
-    date: str
-    avg_mood: float
-    count: int
-
-
-class DurationByType(BaseModel):
-    activity_type: str
-    total_minutes: float
-    entry_count: int
-
-
-class ActivityLogSummaryResponse(BaseModel):
-    mood_by_day: list[MoodByDay]
-    duration_by_type: list[DurationByType]
-
-
 class Reminder(BaseModel):
     id: str
     message: str
@@ -717,49 +682,6 @@ async def todays_checkins(_: Annotated[None, Depends(auth.require_session_or_tok
     end_ts = int(end_local.astimezone(timezone.utc).timestamp())
     reflections = await checkin_jobs.reflections_between(app_state.memory, start_ts, end_ts)
     return {"checkins": reflections}
-
-
-def _activity_log_range(days: int) -> tuple[int, int]:
-    local_tz = settings.zoneinfo()
-    now_local = datetime.now(local_tz)
-    start_local = datetime.combine((now_local - timedelta(days=days)).date(), dtime.min, tzinfo=local_tz)
-    end_local = datetime.combine(now_local.date(), dtime.max, tzinfo=local_tz)
-    start_ts = int(start_local.astimezone(timezone.utc).timestamp())
-    end_ts = int(end_local.astimezone(timezone.utc).timestamp())
-    return start_ts, end_ts
-
-
-@app.get("/activity-log", response_model=ActivityLogResponse)
-async def list_activity_log(
-    _: Annotated[None, Depends(auth.require_session_or_token)],
-    days: int = 30,
-    activity_type: str | None = None,
-):
-    """Raw entries for the dashboard's Activity Log page, most recent
-    first, over the trailing `days` local-calendar days (default 30).
-    Optional activity_type filter for the page's type dropdown.
-    """
-    start_ts, end_ts = _activity_log_range(days)
-    entries = await asyncio.to_thread(
-        activity_log_store.list_between, start_ts, end_ts, activity_type
-    )
-    return {"entries": entries}
-
-
-@app.get("/activity-log/summary", response_model=ActivityLogSummaryResponse)
-async def activity_log_summary(
-    _: Annotated[None, Depends(auth.require_session_or_token)],
-    days: int = 30,
-):
-    """Pre-aggregated data for the dashboard's two charts, over the
-    trailing `days` local-calendar days — mood/energy averaged per day,
-    and total duration per activity type (entries with an unparseable
-    duration, e.g. "All Day", are excluded from the duration aggregate
-    but still appear in GET /activity-log's raw list).
-    """
-    start_ts, end_ts = _activity_log_range(days)
-    entries = await asyncio.to_thread(activity_log_store.list_between, start_ts, end_ts)
-    return activity_log_jobs.summarize(entries)
 
 
 @app.get("/vault/notes", response_model=VaultNotesResponse)

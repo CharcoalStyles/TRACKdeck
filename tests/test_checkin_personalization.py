@@ -5,12 +5,11 @@ import jobs.checkin as checkin_mod
 
 
 def _stub_context(monkeypatch, has_context=True):
-    """Bypass real vault/activity_log reads — _personalize_prompt only
-    needs *some* non-empty context to proceed past its early-out."""
+    """Bypass real vault reads — _personalize_prompt only needs *some*
+    non-empty context to proceed past its early-out."""
     monkeypatch.setattr(
         checkin_mod.vault, "get_or_create_about_me", lambda: SimpleNamespace(body="## Values\nHonesty\n")
     )
-    monkeypatch.setattr(checkin_mod.activity_log_store, "list_between", lambda *a, **k: [])
     if not has_context:
         monkeypatch.setattr(checkin_mod.vault, "get_or_create_about_me", lambda: SimpleNamespace(body=""))
 

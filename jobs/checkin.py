@@ -49,7 +49,7 @@ from agent.memory import MemoryStore
 from agent.runtime import AgentResult, create_background_thread, run_agent
 from agent.scheduler import scheduler
 from agent.settings import settings
-from utils import activity_log_store, checkins_store, vault
+from utils import checkins_store, vault
 from utils.llm_client import get_chat_llm, get_writer_llm, stringify_content
 from utils.notify import notify_error, send_gotify
 
@@ -213,22 +213,16 @@ def _llm_moderate_reword(base_prompt: str, context: str) -> str:
     return (stringify_content(response.content) or "").strip()
 
 
-def _personalization_context(values_text: str | None, recent_activity: list[dict]) -> str:
-    parts = []
+def _personalization_context(values_text: str | None) -> str:
     if values_text:
-        parts.append(f"Their stated personal values:\n{values_text}")
-    if recent_activity:
-        summary = "; ".join(f"{a['activity_type']}: {a['subject']}" for a in recent_activity[:8])
-        parts.append(f"Their logged activity in the last 24h: {summary}")
-    return "\n\n".join(parts)
+        return f"Their stated personal values:\n{values_text}"
+    return ""
 
 
 async def _gather_context() -> str:
     about_me = await asyncio.to_thread(vault.get_or_create_about_me)
     values_text = vault.get_section(about_me.body, "Values")
-    now = int(time.time())
-    recent_activity = await asyncio.to_thread(activity_log_store.list_between, now - 86400, now)
-    return _personalization_context(values_text, recent_activity)
+    return _personalization_context(values_text)
 
 
 async def _personalize_prompt(category: str) -> tuple[str, str]:

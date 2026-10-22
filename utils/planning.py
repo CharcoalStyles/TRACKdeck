@@ -39,8 +39,7 @@ LONG_TASK_THRESHOLD_MINUTES = 25
 def parse_target_tasks(section_text: str) -> list[tuple[str, int]]:
     """Extracts (description, minutes) from a "## Tasks" section's
     checklist lines. Checked-off ("- [x]") and unparseable lines are
-    silently skipped — same "don't guess, just exclude" convention
-    jobs/activity_log.py's duration parsing already uses."""
+    silently skipped rather than guessed at."""
     tasks = []
     for line in section_text.splitlines():
         match = TASK_LINE.match(line.strip())

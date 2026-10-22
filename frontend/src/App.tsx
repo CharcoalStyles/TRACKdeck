@@ -12,7 +12,6 @@ import RemindersPage from './routes/RemindersPage'
 import CheckinsAdminPage from './routes/CheckinsAdminPage'
 import AlertSoundsPage from './routes/AlertSoundsPage'
 import ErrorsPage from './routes/ErrorsPage'
-import ActivityLogPage from './routes/ActivityLogPage'
 import ThreadDebugPage from './routes/ThreadDebugPage'
 import TestingPage from './routes/TestingPage'
 import ReflectionPage from './routes/ReflectionPage'
@@ -35,7 +34,6 @@ export default function App() {
           <Route path="/admin/checkins" element={<CheckinsAdminPage />} />
           <Route path="/admin/alert-sounds" element={<AlertSoundsPage />} />
           <Route path="/admin/errors" element={<ErrorsPage />} />
-          <Route path="/activity-log" element={<ActivityLogPage />} />
           <Route path="/admin/thread-debug" element={<ThreadDebugPage />} />
           <Route path="/admin/testing" element={<TestingPage />} />
           <Route path="/admin/models" element={<ModelsPage />} />

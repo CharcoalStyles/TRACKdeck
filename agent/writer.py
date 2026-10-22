@@ -60,7 +60,7 @@ ALWAYS_WRITER_MODES = {"onboarding", "profile_chat", "day_planning", "project_ch
 CONFIRMATION_TOOLS = {
     "set_reminder", "set_timer", "cancel_reminder",
     "add_calendar_event", "delete_calendar_event", "update_calendar_event",
-    "log_activity", "save_note", "append_to_note", "update_note_section",
+    "save_note", "append_to_note", "update_note_section",
     "remember_about_me", "get_or_create_linked_note", "get_or_create_project",
     "mark_onboarding_complete", "set_home_location", "add_planning_task",
     "get_current_datetime",
