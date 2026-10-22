@@ -8,7 +8,6 @@ from agent.settings import settings
 
 @pytest.fixture(autouse=True)
 def base(monkeypatch):
-    monkeypatch.setattr(settings, "llm_provider", "lmstudio")
     monkeypatch.setattr(settings, "lmstudio_chat_model", "lfm")
     monkeypatch.setattr(settings, "lmstudio_writer_model", "gemma")
     monkeypatch.setattr(settings, "model_assignments", "{}")

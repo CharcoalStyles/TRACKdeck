@@ -112,7 +112,6 @@ def test_shorten_and_tool_model_view():
 
 @pytest.fixture
 def enabled(monkeypatch, tmp_path):
-    monkeypatch.setattr(settings, "llm_provider", "lmstudio")
     monkeypatch.setattr(settings, "lmstudio_writer_model", "gemma-test")
     monkeypatch.setattr(writer_log, "DB_PATH", str(tmp_path / "w.db"))
     writer_log.init_db()
@@ -135,12 +134,6 @@ def finalize(msgs, draft, **kw):
 
 def test_finalize_disabled_without_writer_model(monkeypatch):
     monkeypatch.setattr(settings, "lmstudio_writer_model", "")
-    assert finalize([HumanMessage(content="hi")], "hello") is None
-
-
-def test_finalize_disabled_on_other_provider(monkeypatch):
-    monkeypatch.setattr(settings, "llm_provider", "openrouter")
-    monkeypatch.setattr(settings, "lmstudio_writer_model", "gemma-test")
     assert finalize([HumanMessage(content="hi")], "hello") is None
 
 

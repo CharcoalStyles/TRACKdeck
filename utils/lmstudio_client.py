@@ -11,9 +11,7 @@ management API's /models endpoint has both — loaded_context_length (what
 the model was actually loaded with, e.g. tuned down from its max to fit
 RAM — as opposed to max_context_length, its architectural ceiling) and
 every downloaded model regardless of whether it's currently loaded.
-Backs the dashboard's LM Studio Models admin card, same idea as
-utils/openrouter_client.py's catalog but sourced locally instead of from
-a public internet endpoint.
+Backs the dashboard's LM Studio Models admin card.
 
 Optional and best-effort throughout: if LMSTUDIO_MANAGEMENT_URL isn't
 set, the model isn't currently loaded, or the request fails for any

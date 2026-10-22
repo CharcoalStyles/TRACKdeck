@@ -39,7 +39,6 @@ class FakeToolModel:
 
 @pytest.fixture
 def env(monkeypatch, tmp_path):
-    monkeypatch.setattr(settings, "llm_provider", "lmstudio")
     monkeypatch.setattr(settings, "lmstudio_chat_model", "lfm-test")
     monkeypatch.setattr(settings, "lmstudio_writer_model", "gemma-test")
     monkeypatch.setattr(writer_log, "DB_PATH", str(tmp_path / "w.db"))
@@ -60,7 +59,7 @@ def env(monkeypatch, tmp_path):
 
     def make(replies, mcp_tools=None):
         fake = FakeToolModel(replies)
-        monkeypatch.setattr(graph_mod, "get_chat_llm", lambda temperature=0.7, provider=None: fake)
+        monkeypatch.setattr(graph_mod, "get_chat_llm", lambda temperature=0.7: fake)
         return fake, graph_mod.build_graph(MemorySaver(), mcp_tools=mcp_tools)
 
     return make, state

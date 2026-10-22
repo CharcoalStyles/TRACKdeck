@@ -310,7 +310,7 @@ def unbacked_detail_claim(draft: str, info: TurnInfo) -> str | None:
 
 
 def writer_enabled(surface: str | None = None) -> bool:
-    return settings.llm_provider == "lmstudio" and bool(model_assignments.writer_model(surface))
+    return bool(model_assignments.writer_model(surface))
 
 
 def shorten_for_tool_model(text: str, limit: int = TOOL_VIEW_MAX_CHARS) -> str:

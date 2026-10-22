@@ -28,7 +28,6 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <LlmProviderCard data={data} onSaved={invalidate} />
       <ModelAssignmentsCard data={data} onSaved={invalidate} />
       <LocationTimeCard data={data} onSaved={invalidate} />
       <DigestCard data={data} onSaved={invalidate} />
@@ -56,70 +55,8 @@ type Settings = NonNullable<ReturnType<typeof useQuery<{
   device_poll_interval_seconds: number
   max_history_tokens: number
   mcp_servers: string
-  llm_provider: string
   lmstudio_writer_model: string
-  openrouter_configured: boolean
 }>>['data']>
-
-function LlmProviderCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
-  const status = useSaveStatus()
-
-  const mutation = useMutation({
-    mutationFn: async (llm_provider: string) => {
-      const { error } = await api.POST('/settings', { body: { llm_provider } })
-      if (error) throw new Error()
-    },
-    onMutate: () => status.setState('saving'),
-    onSuccess: () => {
-      status.setState('saved')
-      onSaved()
-    },
-    onError: () => {
-      status.setErrorMessage('Failed to switch — check OPENROUTER_API_KEY is set in .env.')
-      status.setState('error')
-    },
-  })
-
-  const provider = data?.llm_provider ?? 'lmstudio'
-  const openrouterConfigured = !!data?.openrouter_configured
-  const isKnownProvider = provider === 'lmstudio' || provider === 'openrouter'
-
-  return (
-    <Card>
-      <h2 className="mb-1 text-lg font-semibold">LLM Provider</h2>
-      <p className="mb-3 text-sm text-text-muted">
-        Which chat-completion backend the assistant uses for every conversation. Switches
-        immediately, no restart needed.
-      </p>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <ProviderOption
-          label="LM Studio"
-          sublabel="Local, on your own hardware."
-          selected={provider === 'lmstudio'}
-          onSelect={() => mutation.mutate('lmstudio')}
-        />
-        <ProviderOption
-          label="OpenRouter"
-          sublabel={
-            openrouterConfigured
-              ? 'Hosted — pick a model on the OpenRouter Models page.'
-              : 'Needs OPENROUTER_API_KEY set in .env first.'
-          }
-          selected={provider === 'openrouter'}
-          disabled={!openrouterConfigured}
-          onSelect={() => mutation.mutate('openrouter')}
-        />
-      </div>
-      {!isKnownProvider && (
-        <p className="mt-3 text-sm text-text-muted">
-          Currently using <span className="text-text-primary">{provider}</span> (set via
-          LLM_PROVIDER at startup) — not switchable from here.
-        </p>
-      )}
-      <SaveStatus state={status.state} errorMessage={status.errorMessage} />
-    </Card>
-  )
-}
 
 type WriterChoice = 'default' | 'tool' | 'custom'
 type RowDraft = { tool: string; writerChoice: WriterChoice; writerCustom: string }
@@ -224,13 +161,6 @@ function ModelAssignmentsCard({ data, onSaved }: { data?: Settings; onSaved: () 
         <strong>reply model</strong> writes what you read. Blank means the default. Every model
         named here must be loaded in LM Studio. Applies immediately.
       </p>
-
-      {matrix && !matrix.split_applies && (
-        <p className="mb-3 rounded border border-border bg-card-alt px-3 py-2 text-sm text-text-muted">
-          The provider is <span className="text-text-primary">{matrix.provider}</span>. A separate
-          writer only applies on LM Studio, so the table below is inactive.
-        </p>
-      )}
 
       <div className="mb-4 grid gap-3 md:grid-cols-2">
         <FieldRow label="Default tool model">
@@ -386,37 +316,6 @@ function ModelName({
         {isOverride ? 'override' : 'default'}
       </span>
     </div>
-  )
-}
-
-function ProviderOption({
-  label,
-  sublabel,
-  selected,
-  disabled,
-  onSelect,
-}: {
-  label: string
-  sublabel: string
-  selected: boolean
-  disabled?: boolean
-  onSelect: () => void
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onSelect}
-      className={`flex-1 rounded-lg border px-4 py-3 text-left text-sm transition ${
-        selected ? 'border-accent bg-accent/10' : 'border-border bg-card-alt hover:border-accent'
-      } ${disabled ? 'cursor-not-allowed opacity-50 hover:border-border' : ''}`}
-    >
-      <div className="flex items-center justify-between font-semibold text-text-primary">
-        {label}
-        {selected && <span className="text-xs font-semibold text-accent">Active</span>}
-      </div>
-      <div className="mt-1 text-xs text-text-muted">{sublabel}</div>
-    </button>
   )
 }
 

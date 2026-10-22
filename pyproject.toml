@@ -27,7 +27,6 @@ dependencies = [
     "langchain-mcp-adapters>=0.3.1",
     "mcp>=1.24.0,<2.0.0",
     "trafilatura>=2.2.0",
-    "langchain-google-genai>=4.4.0",
     # Listed directly (not just pulled in transitively via pydecide[laya]
     # below) so the [tool.uv.sources] CPU-index redirect below actually
     # takes effect — uv didn't honor it for torch two extras-levels deep

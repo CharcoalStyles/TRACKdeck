@@ -120,8 +120,6 @@ def matrix() -> dict:
             "reply_model": w_model or t_model,
         })
     return {
-        "provider": settings.llm_provider,
-        "split_applies": settings.llm_provider == "lmstudio",
         "default_tool_model": settings.lmstudio_chat_model,
         "default_writer_model": settings.lmstudio_writer_model,
         "no_writer_value": NO_WRITER,
