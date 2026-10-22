@@ -7,10 +7,9 @@ Scheduled (see main.py) via settings.digest_time/settings.timezone,
 defaulting to 20:45 local — 35 minutes before a 21:20 bedtime-routine
 read, giving it headroom to run even on a slow day or a slow local model.
 
-Pulls today's conversation summaries out of long-term memory (the
-`conversations` Chroma collection, already populated by
-agent.runtime.run_agent on every successful turn) and asks the LLM to
-write a short recap, rather than emailing the raw log.
+Pulls today's turns out of the event log (utils/event_log.py, written by
+agent.runtime.run_agent on every turn) and asks the LLM to write a short
+recap, rather than emailing the raw log.
 
 Today's answered mental-health check-ins (jobs/checkin.py) are pulled out
 separately via checkins_store.list_answered_between and their answers
@@ -27,11 +26,10 @@ from datetime import date, datetime, timedelta
 from datetime import time as dtime
 from zoneinfo import ZoneInfo
 
-from agent.memory import MemoryStore
 from agent.runtime import app_state, prune_thread_locks
 from agent.settings import settings
 from jobs import checkin as checkin_jobs
-from utils import checkin_log, checkins_store, vault
+from utils import checkin_log, checkins_store, event_log, vault
 from utils.llm_client import get_writer_llm, stringify_content
 from utils.mailer import send_email
 from utils.notify import notify_error
@@ -89,6 +87,14 @@ def _todays_utc_bounds(now_local: datetime | None = None) -> tuple[int, int]:
     start_utc = int(start_local.astimezone(ZoneInfo("UTC")).timestamp())
     end_utc = int(end_local.astimezone(ZoneInfo("UTC")).timestamp())
     return start_utc, end_utc
+
+
+def _todays_interactions(today: date) -> list[str]:
+    """Today's turns from the event log, as "User: ... / Assistant: ..." entries."""
+    tz = settings.zoneinfo()
+    start = datetime.combine(today, dtime.min, tzinfo=tz)
+    events = event_log.events_between(start, start + timedelta(days=1), kind="interaction")
+    return [f"User: {e.get('user_text', '')}\nAssistant: {e.get('reply', '')}" for e in events]
 
 
 def _load_previous_recaps(today: date, days: int = HISTORY_DAYS) -> list[str]:
@@ -226,7 +232,7 @@ def _prune_received_notes() -> int:
     return pruned
 
 
-async def send_daily_digest(memory: MemoryStore) -> None:
+async def send_daily_digest() -> None:
     """Build today's recap, email it and write it into the vault, then
     sweep the thread/keyword registry. Called by the scheduler in main.py.
 
@@ -246,7 +252,7 @@ async def send_daily_digest(memory: MemoryStore) -> None:
         reflections = await asyncio.to_thread(
             _todays_checkin_reflections, answered, today_local.strftime("%Y-%m-%d")
         )
-        entries = memory.get_conversations_between(start_ts, end_ts)
+        entries = await asyncio.to_thread(_todays_interactions, today_local)
         history = await asyncio.to_thread(_load_previous_recaps, today_local)
         recap = await asyncio.to_thread(_write_recap, entries, reflections, history)
     except Exception as e:

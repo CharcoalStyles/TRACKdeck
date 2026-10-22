@@ -95,11 +95,6 @@ class _FakeGraph:
 
 @pytest.fixture
 def agent_env(env, monkeypatch):
-    class _Mem:
-        def save_conversation_summary(self, *a, **k):
-            pass
-
-    monkeypatch.setattr(runtime.app_state, "memory", _Mem())
     monkeypatch.setattr(runtime, "send_gotify", lambda *a, **k: None)
     return env
 
@@ -251,3 +246,22 @@ def test_prompt_version_file_written_once(env, monkeypatch):
     assert graph._record_prompt_version(tools) == version and path.read_text() == "{}"
     monkeypatch.delenv("GIT_SHA")
     assert graph._record_prompt_version(tools) == version.split("+")[1]
+
+
+def test_events_between_spans_months_and_filters_kind(env):
+    d = event_log.log_dir()
+    d.mkdir(parents=True)
+    import json as _j
+    rows = {
+        "2026-09": [{"kind": "interaction", "ts": "2026-09-30T23:00:00+00:00", "user_text": "a"},
+                    {"kind": "capture", "ts": "2026-09-30T23:30:00+00:00"}],
+        "2026-10": [{"kind": "interaction", "ts": "2026-10-01T00:30:00+00:00", "user_text": "b"},
+                    {"kind": "interaction", "ts": "2026-10-02T00:00:00+00:00", "user_text": "c"}],
+    }
+    for month, evs in rows.items():
+        (d / f"events-{month}.jsonl").write_text("\n".join(_j.dumps(e) for e in evs) + "\n")
+    start = datetime(2026, 9, 30, tzinfo=timezone.utc)
+    end = datetime(2026, 10, 2, tzinfo=timezone.utc)
+    got = event_log.events_between(start, end, kind="interaction")
+    assert [e["user_text"] for e in got] == ["a", "b"]
+    assert len(event_log.events_between(start, end)) == 3

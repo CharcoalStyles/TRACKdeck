@@ -121,6 +121,23 @@ def read_events(month: str) -> list[dict]:
     return out
 
 
+def events_between(start: datetime, end: datetime, kind: str | None = None) -> list[dict]:
+    """Events with start <= ts < end (timezone-aware datetimes), oldest first,
+    optionally of one kind. Spans month files."""
+    out: list[dict] = []
+    year, month = start.year, start.month
+    while (year, month) <= (end.year, end.month):
+        for ev in read_events(f"{year:04d}-{month:02d}"):
+            try:
+                ts = datetime.fromisoformat(ev["ts"])
+            except (KeyError, ValueError):
+                continue
+            if start <= ts < end and (kind is None or ev.get("kind") == kind):
+                out.append(ev)
+        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+    return out
+
+
 def origin_of(artifact_type: str, artifact_id: str) -> str | None:
     """The interaction that created this calendar event / reminder / capture,
     or None (made outside the assistant, or before logging)."""

@@ -36,7 +36,6 @@ from langchain_core.messages.utils import count_tokens_approximately
 
 from agent.graph import get_fixed_overhead_tokens, get_prompt_version
 from agent.keywords import generate_keyword, match_keyword_prefix
-from agent.memory import MemoryStore
 from agent.settings import settings
 from agent.tools.jot import save_capture
 from agent.writer import current_turn
@@ -52,7 +51,6 @@ logger = logging.getLogger(__name__)
 # A new default thread starts if more than this many seconds pass with
 # no request and no keyword-addressed continuation.
 SESSION_TIMEOUT_SECONDS = 5 * 60
-SUMMARY_REPLY_MAX_CHARS = 1200
 
 
 @dataclass
@@ -64,7 +62,6 @@ class ThreadInfo:
 
 class AppState:
     graph = None
-    memory: MemoryStore = None
     default_thread_id: str | None = None
     default_last_activity: float = 0.0
     threads: dict[str, ThreadInfo] = {}
@@ -498,11 +495,6 @@ async def run_agent(
         event_log.end_interaction()
 
     summary = f"User: {cleaned_text}\nAssistant: {reply}"
-    # Writer-model replies (agent/writer.py) can be long; recall and the
-    # daily digest only need the gist, so the stored summary is capped while
-    # the push notification keeps the full reply.
-    stored_reply = reply if len(reply) <= SUMMARY_REPLY_MAX_CHARS else reply[:SUMMARY_REPLY_MAX_CHARS] + "…"
-    stored_summary = f"User: {cleaned_text}\nAssistant: {stored_reply}"
     label = f"Assistant [{keyword}]" if keyword else "Assistant"
     # Priority 3 keeps this in Android's low-importance channel (silent,
     # shows in the shade) rather than the default channel (sound +
@@ -510,16 +502,5 @@ async def run_agent(
     # utils.notify.notify_error stay at priority 8, which is the tier
     # meant to interrupt you.
     await asyncio.to_thread(send_gotify, label, summary, priority=3)
-
-    # The reply is already final at this point — a failure here (embeddings
-    # backend down, Chroma write error) shouldn't turn a successful turn
-    # into an unhandled 500 on /text, or a false "voice pipeline failed"
-    # alert from /voice's catch-all. Isolate it, but still surface it since
-    # a silent failure here means future recall silently degrades.
-    try:
-        app_state.memory.save_conversation_summary(stored_summary, thread_id=thread_id)
-    except Exception as e:
-        logger.error("Failed to save conversation summary for thread %s: %s", thread_id, e)
-        notify_error("Conversation memory save failed (reply was still delivered)", e)
 
     return AgentResult(reply=reply, thread_id=thread_id, keyword=keyword)

@@ -2,8 +2,7 @@
 utils/llm_client.py
 --------------------
 Single factory for the chat-completion LLM client: always LM Studio's
-OpenAI-compatible endpoint. Embeddings use the same endpoint, see
-agent/memory.py's make_embedding_function.
+OpenAI-compatible endpoint.
 """
 from __future__ import annotations
 

@@ -64,7 +64,6 @@ if os.environ.get("SESSION_SECRET_KEY") in (None, _PLACEHOLDER_SESSION_SECRET_KE
 
 import auth
 from agent.graph import build_graph
-from agent.memory import MemoryStore, make_chroma_client, make_embedding_function
 from agent.runtime import (
     app_state,
     clear_thread,
@@ -140,7 +139,7 @@ from routes.task_library import router as task_library_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Every store below (settings.db, memory.db, chroma_db, ...) resolves
+    # Every store below (settings.db, memory.db, ...) resolves
     # its path as "data/<name>" relative to cwd — local dev and Docker
     # alike (see docker-compose.yml's matching bind-mount targets) — so
     # this has to exist before the very first one connects.
@@ -152,10 +151,6 @@ async def lifespan(app: FastAPI):
     # bake settings.digest_time/bedtime in at add_job() time.
     await asyncio.to_thread(settings_store.init_db)
     apply_persisted(await asyncio.to_thread(settings_store.load_all))
-
-    chroma_client = make_chroma_client()
-    embedding_fn = make_embedding_function()
-    app_state.memory = MemoryStore(chroma_client, embedding_fn)
 
     vault.ensure_vault_dirs()
 
@@ -199,7 +194,6 @@ async def lifespan(app: FastAPI):
         scheduler.add_job(
             send_daily_digest,
             trigger=digest_trigger(),
-            args=[app_state.memory],
             id="daily_digest",
             replace_existing=True,
         )
@@ -583,7 +577,6 @@ async def health():
     return {
         "status": "ok",
         "graph_ready": app_state.graph is not None,
-        "memory_ready": app_state.memory is not None,
         "scheduler_running": scheduler.running,
     }
 
@@ -874,7 +867,7 @@ async def trigger_digest_now(_: Annotated[None, Depends(auth.require_session_or_
     20:45 schedule. Sends a real email on every call — remove or comment
     this out once you're done testing the pipeline end to end.
     """
-    await send_daily_digest(app_state.memory)
+    await send_daily_digest()
     return {"status": "sent"}
 
 

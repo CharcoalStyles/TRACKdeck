@@ -33,7 +33,7 @@ WORKDIR /app
 ENV HOME=/tmp
 
 # docker-compose.yml bind-mounts many individual files/dirs under
-# /app/data/ (memory.db, chroma_db/, ...) but never /app/data itself —
+# /app/data/ (memory.db, ...) but never /app/data itself —
 # and .dockerignore excludes data/ from the build context entirely, so
 # without this the directory doesn't exist in the image. Docker would
 # then auto-create it as root the moment the bind mounts are set up, at

@@ -12,7 +12,7 @@
 #      values for the three secrets the app refuses to start without
 #      (API_TOKEN, DASHBOARD_PASSWORD, SESSION_SECRET_KEY)
 #   2. Downloads the Piper TTS voice model
-#   3. Creates the memory.db/reminders.db/.../chroma_db paths as the right
+#   3. Creates the memory.db/reminders.db/... paths as the right
 #      file TYPE (file vs directory) — docker-compose bind-mounts each of
 #      these, and if one doesn't exist on the host yet, Docker creates it
 #      as the wrong type (usually a directory) and the app fails to open it
@@ -106,8 +106,8 @@ fi
 echo
 echo "== 3. memory.db / reminders.db / checkins.db / settings.db / alert_sounds.db /"
 echo "      device_errors.db / device_state.db /"
-echo "      writer_log.db / day_plans.db / task_library.db /"
-echo "      chroma_db (docker-compose bind mounts) =="
+echo "      writer_log.db / day_plans.db / task_library.db"
+echo "      (docker-compose bind mounts) =="
 DATA_DIR="./data"
 mkdir -p "$DATA_DIR"
 
@@ -145,14 +145,6 @@ elif [[ -d "$ALERT_SOUNDS_DIR" ]]; then
 else
     echo "  Creating $ALERT_SOUNDS_DIR..."
     mkdir -p "$ALERT_SOUNDS_DIR"
-fi
-
-CHROMA_DIR="${DATA_DIR}/chroma_db"
-if [[ -d "$CHROMA_DIR" ]]; then
-    echo "  OK: $CHROMA_DIR already exists as a directory."
-else
-    echo "  Creating $CHROMA_DIR..."
-    mkdir -p "$CHROMA_DIR"
 fi
 
 LOGS_DIR="${DATA_DIR}/logs"

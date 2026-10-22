@@ -11,7 +11,7 @@ state machine: no DB row is created, it doesn't count toward the day's
 3-5 target, and it has no cooldown/fallback interaction. The exchange
 happens in the assistant's normal conversation thread (no checkin_id,
 see voice.py), so it's captured by the ordinary conversation-history/
-Chroma pipeline and shows up in jobs/digest.py's generic recap like any
+event log and shows up in jobs/digest.py's generic recap like any
 other topic, just without the dedicated "reflections" formatting that
 section gives rows that exist in checkins_store.
 """

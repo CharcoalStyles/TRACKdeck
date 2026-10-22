@@ -1,25 +1,17 @@
 #!/usr/bin/env bash
 # reset_knowledge.sh
 #
-# Wipes the assistant's accumulated memory: conversation recall, the
-# notes search index, and short-term thread checkpoints — then re-runs
+# Wipes the assistant's short-term thread checkpoints (memory.db) and
+# the raw received voice recordings — then re-runs
 # setup.sh to recreate empty placeholders in their place (same file/
 # directory TYPE Docker's bind mounts expect — see setup.sh's own
 # comments). setup.sh never overwrites .env/.env.docker/.env.example, so
 # this never touches those either. Run from the project root.
 #
-# Every store (settings.db, memory.db, chroma_db, ...) resolves its path
+# Every store (settings.db, memory.db, ...) resolves its path
 # as "data/<name>" relative to cwd, so local (`uv run uvicorn ...`) and
 # Docker (`docker compose up`) both always land on the same ./data/
 # location — nothing candidate/deployment-mode-specific to search for.
-#
-# onboarding_complete.flag (see utils/onboarding_state.py) is wiped
-# alongside memory.db, not treated as durable state — it reflects whether
-# the "onboarding" thread's conversation reached a natural conclusion, and
-# that conversation's history lives in memory.db, which this script always
-# clears. Leaving the flag standing after memory.db is wiped would mean
-# static/profile.html defaults to the Profile Q&A view over an onboarding
-# thread that no longer has any history — an inconsistent state.
 #
 # The Obsidian vault (your actual notes, About Me) is NOT touched
 # by default. It's synced live to every device you've paired via
@@ -30,7 +22,7 @@
 # and device_errors.db (device error history, see utils/device_errors_store.py)
 # are also NOT touched, deliberately and unconditionally — they're
 # structured logs meant to persist for future trend/digest use, not
-# disposable state like Chroma/memory.db are.
+# disposable state like memory.db is.
 #
 # settings.db (standing app-level toggles, see utils/settings_store.py) is
 # likewise NOT touched — it's durable configuration (timezone, digest
@@ -68,10 +60,7 @@ done
 
 # --- Locate whichever paths actually exist -----------------------------
 
-CHROMA_DIR="./data/chroma_db"
 MEMORY_DB="./data/memory.db"
-ONBOARDING_FLAG="./data/onboarding_complete.flag"
-ONBOARDING_BASICS_FLAG="./data/onboarding_basics.flag"
 RECEIVED_NOTES_DIR="./received_notes"
 
 # Vault path: respect VAULT_PATH from .env if present, else the coded
@@ -81,38 +70,17 @@ if [[ -f .env ]] && grep -q '^VAULT_PATH=' .env; then
     VAULT_DIR="$(grep '^VAULT_PATH=' .env | tail -1 | cut -d'=' -f2-)"
 fi
 
-found_chroma=()
-[[ -d "$CHROMA_DIR" ]] && found_chroma+=("$CHROMA_DIR")
-
 found_memory_db=()
 [[ -f "$MEMORY_DB" ]] && found_memory_db+=("$MEMORY_DB")
-
-found_onboarding_flag=()
-[[ -f "$ONBOARDING_FLAG" ]] && found_onboarding_flag+=("$ONBOARDING_FLAG")
-[[ -f "$ONBOARDING_BASICS_FLAG" ]] && found_onboarding_flag+=("$ONBOARDING_BASICS_FLAG")
 
 # --- Report what will happen -------------------------------------------
 
 echo "This will permanently delete:"
-if [[ ${#found_chroma[@]} -eq 0 ]]; then
-    echo "  - Chroma (conversations + notes index): none found, nothing to do"
-else
-    for c in "${found_chroma[@]}"; do
-        echo "  - Chroma (conversations + notes index): $c"
-    done
-fi
 if [[ ${#found_memory_db[@]} -eq 0 ]]; then
     echo "  - Thread checkpoints (memory.db): none found, nothing to do"
 else
     for m in "${found_memory_db[@]}"; do
         echo "  - Thread checkpoints (memory.db): $m"
-    done
-fi
-if [[ ${#found_onboarding_flag[@]} -eq 0 ]]; then
-    echo "  - Onboarding-complete flag: none found, nothing to do"
-else
-    for o in "${found_onboarding_flag[@]}"; do
-        echo "  - Onboarding-complete flag: $o (so the Profile page shows the onboarding interview again)"
     done
 fi
 if [[ -d "$RECEIVED_NOTES_DIR" ]]; then
@@ -149,19 +117,9 @@ read -r -p "Press Enter once it's stopped (or Ctrl+C to cancel)... "
 
 echo
 
-for c in "${found_chroma[@]}"; do
-    echo "Wiping $c ..."
-    rm -rf "${c:?}"
-done
-
 for m in "${found_memory_db[@]}"; do
     echo "Wiping $m ..."
     rm -f "${m:?}"
-done
-
-for o in "${found_onboarding_flag[@]}"; do
-    echo "Clearing $o ..."
-    rm -f "${o:?}"
 done
 
 if [[ -d "$RECEIVED_NOTES_DIR" ]]; then
@@ -175,8 +133,8 @@ if $WIPE_VAULT; then
 fi
 
 echo
-echo "Re-running setup.sh to recreate empty placeholders (chroma_db, memory.db,"
-echo "onboarding_complete.flag, ...) as this user — it never touches"
+echo "Re-running setup.sh to recreate empty placeholders (memory.db, ...)"
+echo "as this user — it never touches"
 echo ".env/.env.docker/.env.example, so nothing configured is affected."
 echo
 ./setup.sh
