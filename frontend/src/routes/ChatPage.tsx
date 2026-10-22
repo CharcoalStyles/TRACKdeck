@@ -1,94 +1,40 @@
-import { useEffect, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { api } from '../api/client'
 import ChatWidget from '../components/chat/ChatWidget'
 
+// One conversation at a time: no thread list. Sending continues the most
+// recent thread (or starts one after the idle timeout, or on a spoken
+// keyword); "New chat" starts a fresh one on purpose.
 export default function ChatPage() {
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(null)
-  const queryClient = useQueryClient()
-  const navigate = useNavigate()
+  const [threadId, setThreadId] = useState<string | null>(null)
 
-  // A fresh, un-onboarded install lands on the basics form instead of an
-  // empty chat page — same settings-probe query ProfilePage uses, so this
-  // shares its cache rather than firing a second request.
-  const settingsProbe = useQuery({
-    queryKey: ['settings-probe'],
-    queryFn: async () => {
-      const { data } = await api.GET('/settings')
-      return data as { basics_complete?: boolean } | undefined
-    },
-  })
-  useEffect(() => {
-    if (settingsProbe.data && !settingsProbe.data.basics_complete) {
-      navigate('/profile', { replace: true })
-    }
-  }, [settingsProbe.data, navigate])
-
-  const threadsQuery = useQuery({
-    queryKey: ['threads'],
-    queryFn: async () => {
-      const { data } = await api.GET('/threads')
-      return data ?? []
-    },
-  })
-
-  const newThreadMutation = useMutation({
+  const newThread = useMutation({
     mutationFn: async () => {
       const { data, error } = await api.POST('/threads/new')
       if (error || !data) throw new Error('Failed to start new chat')
       return data
     },
-    onSuccess: (data) => {
-      setActiveThreadId(data.thread_id)
-      queryClient.invalidateQueries({ queryKey: ['threads'] })
-    },
+    onSuccess: (data) => setThreadId(data.thread_id),
   })
 
-  const threads = threadsQuery.data ?? []
-
   return (
-    <div className="flex flex-col md:flex-row grow gap-0 -m-4">
-      <aside className="flex w-full md:w-55 shrink-0 flex-col border-r border-[#2a2a2a] bg-header p-4">
+    <div className="mx-auto flex w-full max-w-2xl grow flex-col gap-3">
+      <div className="flex justify-end">
         <button
-          onClick={() => newThreadMutation.mutate()}
-          className="mb-4 rounded-lg border border-accent px-3 py-2 text-sm font-semibold text-accent hover:bg-[#1c2b2c]"
+          type="button"
+          onClick={() => newThread.mutate()}
+          disabled={newThread.isPending}
+          className="rounded-lg border border-accent px-3 py-1.5 text-sm font-semibold text-accent hover:bg-[#1c2b2c] disabled:opacity-50"
         >
-          + New Chat
+          New chat
         </button>
-        <div className="flex flex-1 flex-col gap-1 overflow-y-auto">
-          {threads.length === 0 ? (
-            <div className="px-2.5 py-2 text-sm text-text-faint">
-              {threadsQuery.isPending ? 'Loading...' : 'No conversations yet today — start one below.'}
-            </div>
-          ) : (
-            threads.map((t) => (
-              <button
-                key={t.thread_id}
-                onClick={() => setActiveThreadId(t.thread_id)}
-                title={t.keyword}
-                className={`overflow-hidden text-ellipsis whitespace-nowrap rounded-md px-2.5 py-2 text-left text-sm ${
-                  t.thread_id === activeThreadId
-                    ? 'bg-[#1c2b2c] font-semibold text-accent'
-                    : 'text-[#aaaaaa] hover:bg-[#222222] hover:text-text-primary'
-                }`}
-              >
-                {t.keyword}
-              </button>
-            ))
-          )}
-        </div>
-      </aside>
-      <main className="flex grow flex-col p-5">
-        <ChatWidget
-          threadId={activeThreadId}
-          greeting="Pick a conversation on the left, or start a new one — this talks to the same agent as everything else, no fixed mode."
-          onReply={(data) => {
-            setActiveThreadId(data.thread_id)
-            queryClient.invalidateQueries({ queryKey: ['threads'] })
-          }}
-        />
-      </main>
+      </div>
+      <ChatWidget
+        threadId={threadId}
+        greeting="Ask about your day, or say what you want written down."
+        onReply={(data) => setThreadId(data.thread_id)}
+      />
     </div>
   )
 }

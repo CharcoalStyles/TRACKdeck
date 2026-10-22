@@ -64,3 +64,31 @@ def read_captures(date_str: str) -> list[dict]:
         if m:
             out.append({"id": m[4], "time": m[2], "text": m[3], "done": m[1] == "x"})
     return out
+
+
+def update_capture(
+    date_str: str, capture_id: str, *, text: str | None = None, done: bool | None = None
+) -> dict | None:
+    """Change one capture's text and/or tick state in place; returns the
+    updated capture, or None when that day or id doesn't exist. Raises
+    ValueError on empty replacement text."""
+    flat = None
+    if text is not None:
+        flat = " ".join(text.split())
+        if not flat:
+            raise ValueError("empty capture")
+    path = daily_notes_file(date_str)
+    with _lock:
+        if not path.exists():
+            return None
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for i, raw in enumerate(lines):
+            m = _LINE_RE.match(raw)
+            if not m or m[4] != capture_id:
+                continue
+            new_done = (m[1] == "x") if done is None else done
+            new_text = m[3] if flat is None else flat
+            lines[i] = f"- [{'x' if new_done else ' '}] {m[2]} {new_text} ^{capture_id}"
+            vault.write_note_atomic(path, "\n".join(lines) + "\n")
+            return {"id": capture_id, "time": m[2], "text": new_text, "done": new_done}
+    return None

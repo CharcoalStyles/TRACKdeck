@@ -293,6 +293,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/captures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Captures
+         * @description Captures for today and the previous days-1 days, newest day first;
+         *     days without captures are left out (today is always present).
+         */
+        get: operations["list_captures_captures_get"];
+        put?: never;
+        /** Add Capture */
+        post: operations["add_capture_captures_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/captures/{date_str}/{capture_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Edit Capture */
+        patch: operations["edit_capture_captures__date_str___capture_id__patch"];
+        trace?: never;
+    };
+    "/captures/{date_str}/{capture_id}/convert": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Convert Capture
+         * @description Turn a capture into a reminder, a calendar event or a planning task,
+         *     then tick it off. Nothing is created if the time is rejected.
+         */
+        post: operations["convert_capture_captures__date_str___capture_id__convert_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/today": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Today */
+        get: operations["today_today_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/login": {
         parameters: {
             query?: never;
@@ -1229,6 +1306,55 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Capture */
+        Capture: {
+            /** Id */
+            id: string;
+            /** Time */
+            time: string;
+            /** Text */
+            text: string;
+            /** Done */
+            done: boolean;
+        };
+        /** CaptureConvert */
+        CaptureConvert: {
+            /**
+             * To
+             * @enum {string}
+             */
+            to: "reminder" | "event" | "task";
+            /** When */
+            when?: string | null;
+            /** Minutes */
+            minutes?: number | null;
+        };
+        /** CaptureCreate */
+        CaptureCreate: {
+            /** Text */
+            text: string;
+        };
+        /** CaptureDay */
+        CaptureDay: {
+            /** Date */
+            date: string;
+            /** Captures */
+            captures: components["schemas"]["Capture"][];
+        };
+        /** CaptureEdit */
+        CaptureEdit: {
+            /** Text */
+            text?: string | null;
+            /** Done */
+            done?: boolean | null;
+        };
+        /** CapturesResponse */
+        CapturesResponse: {
+            /** Days */
+            days: components["schemas"]["CaptureDay"][];
+            /** Unticked */
+            unticked: number;
+        };
         /** CheckinRecord */
         CheckinRecord: {
             /** Id */
@@ -1690,6 +1816,46 @@ export interface components {
             keyword: string;
             /** Last Activity */
             last_activity: number;
+        };
+        /** TodayCheckin */
+        TodayCheckin: {
+            /** Time */
+            time: string;
+            /** Prompt */
+            prompt: string;
+            /** Answer */
+            answer: string;
+        };
+        /** TodayEvent */
+        TodayEvent: {
+            /** Title */
+            title: string;
+            /** Start */
+            start: string;
+            /** End */
+            end?: string | null;
+        };
+        /** TodayReminder */
+        TodayReminder: {
+            /** Id */
+            id: string;
+            /** Message */
+            message: string;
+            /** Time */
+            time: string;
+        };
+        /** TodayResponse */
+        TodayResponse: {
+            /** Date */
+            date: string;
+            /** Weekday */
+            weekday: string;
+            /** Events */
+            events: components["schemas"]["TodayEvent"][];
+            /** Reminders */
+            reminders: components["schemas"]["TodayReminder"][];
+            /** Checkins */
+            checkins: components["schemas"]["TodayCheckin"][];
         };
         /** TranscribeResponse */
         TranscribeResponse: {
@@ -2580,6 +2746,181 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_captures_captures_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapturesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_capture_captures_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaptureCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Capture"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_capture_captures__date_str___capture_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path: {
+                date_str: string;
+                capture_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaptureEdit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Capture"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    convert_capture_captures__date_str___capture_id__convert_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path: {
+                date_str: string;
+                capture_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaptureConvert"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Capture"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    today_today_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TodayResponse"];
                 };
             };
             /** @description Validation Error */

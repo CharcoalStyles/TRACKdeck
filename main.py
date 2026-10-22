@@ -136,6 +136,8 @@ from routes.alert_sounds import router as alert_sounds_router
 from routes.reflection import router as reflection_router
 from routes.day_planning import router as day_planning_router
 from routes.task_library import router as task_library_router
+from routes.captures import router as captures_router
+from routes.today import router as today_router
 
 # ---------------------------------------------------------------------------
 # Lifespan
@@ -358,6 +360,8 @@ app.include_router(alert_sounds_router)  # /alert-sounds, /device/alert-sounds/{
 app.include_router(reflection_router)  # /reflection
 app.include_router(day_planning_router)  # /day-plans/run
 app.include_router(task_library_router)  # /task-library
+app.include_router(captures_router)  # /captures
+app.include_router(today_router)  # /today
 
 
 # ---------------------------------------------------------------------------

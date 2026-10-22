@@ -2,6 +2,8 @@ import { Route, Routes } from 'react-router-dom'
 import RequireAuth from './components/RequireAuth'
 import AppShell from './components/layout/AppShell'
 import LoginPage from './routes/LoginPage'
+import HomePage from './routes/HomePage'
+import CapturesPage from './routes/CapturesPage'
 import ChatPage from './routes/ChatPage'
 import SettingsPage from './routes/SettingsPage'
 import RemindersPage from './routes/RemindersPage'
@@ -20,7 +22,9 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>
-          <Route path="/" element={<ChatPage />} />
+          <Route path="/" element={<HomePage />} />
+          <Route path="/captures" element={<CapturesPage />} />
+          <Route path="/chat" element={<ChatPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/reminders" element={<RemindersPage />} />
           <Route path="/admin/checkins" element={<CheckinsAdminPage />} />

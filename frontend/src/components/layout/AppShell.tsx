@@ -72,13 +72,16 @@ const MainNav = () => {
   return (
     <>
       <NavLink to="/" end className={navLinkClass}>
+        Today
+      </NavLink>
+      <NavLink to="/captures" className={navLinkClass}>
+        Captures
+      </NavLink>
+      <NavLink to="/chat" className={navLinkClass}>
         Chat
       </NavLink>
       <NavLink to="/day-planning" className={navLinkClass}>
         Plan Day
-      </NavLink>
-      <NavLink to="/reflection" className={navLinkClass}>
-        Planning
       </NavLink>
       <NavLink to="/reminders" className={navLinkClass}>
         To-Dos
