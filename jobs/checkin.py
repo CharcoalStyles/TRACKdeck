@@ -42,15 +42,13 @@ from urllib.parse import urlencode
 
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.triggers.date import DateTrigger
-from langchain_core.language_models.chat_models import BaseChatModel
 
 from agent.checkin_prompts import FALLBACK_CATEGORY, PROMPTS
 from agent.memory import MemoryStore
 from agent.runtime import AgentResult, create_background_thread, run_agent
 from agent.scheduler import scheduler
 from agent.settings import settings
-from utils import checkins_store, vault
-from utils.llm_client import get_chat_llm, get_writer_llm, stringify_content
+from utils import checkins_store
 from utils.notify import notify_error, send_gotify
 
 logger = logging.getLogger(__name__)
@@ -60,42 +58,6 @@ FALLBACK_RETRY_RANGE = (timedelta(minutes=30), timedelta(minutes=90))
 WAKE_JITTER_RANGE = (timedelta(minutes=0), timedelta(minutes=45))
 CHECKIN_EXPIRY = timedelta(hours=2)  # fired-but-never-answered -> 'expired'
 CHECKIN_PRIORITY = 3  # silent/routine — the device's eink display is the primary surface
-
-PERSONALIZATION_LEVELS = ("none", "select", "light")  # the live rotation real
-# check-ins are randomly assigned from — "moderate" (below) is deliberately
-# excluded, reachable only via preview_personalization for manual testing.
-
-SELECT_PROMPT_TEMPLATE = """You are choosing which single check-in prompt best fits this \
-person right now, from a fixed list. Output ONLY one of the listed prompts, copied \
-character-for-character — do not write a new one, do not alter punctuation or wording.
-
-{context}
-
-Candidate prompts:
-{candidates}
-
-Reply with ONLY the chosen prompt text, nothing else."""
-
-LIGHT_PROMPT_TEMPLATE = """Lightly reword the check-in prompt below so it references \
-something specific about this person. Keep the same rough length and tone, keep the same \
-core meaning, and it must still end in a question mark.
-
-{context}
-
-Base prompt: "{base_prompt}"
-
-Reply with ONLY the reworded prompt, nothing else — no quotes, no preamble."""
-
-MODERATE_PROMPT_TEMPLATE = """Rework the check-in prompt below so it draws more directly \
-on this person's context — you can restructure the sentence, not just swap in a \
-reference, as long as the core meaning and category of prompt stay the same. Keep it \
-roughly the same length, and it must still end in a question mark.
-
-{context}
-
-Base prompt: "{base_prompt}"
-
-Reply with ONLY the reworked prompt, nothing else — no quotes, no preamble."""
 
 
 def _random_delay(bounds: tuple[timedelta, timedelta]) -> timedelta:
@@ -186,133 +148,12 @@ async def answer_checkin(checkin_id: str, text: str) -> AgentResult | None:
     return result
 
 
-def _personalization_llm() -> BaseChatModel:
-    return get_writer_llm(temperature=0.35, surface="checkin")
-
-
-def _llm_select(bank: list[str], context: str) -> str:
-    """Blocking — call via asyncio.to_thread, wrapped in asyncio.wait_for."""
-    candidates = "\n".join(f"{i + 1}. {p}" for i, p in enumerate(bank))
-    llm = _personalization_llm()
-    response = llm.invoke(SELECT_PROMPT_TEMPLATE.format(context=context, candidates=candidates))
-    return (stringify_content(response.content) or "").strip()
-
-
-def _llm_light_reword(base_prompt: str, context: str) -> str:
-    """Blocking — call via asyncio.to_thread."""
-    llm = _personalization_llm()
-    response = llm.invoke(LIGHT_PROMPT_TEMPLATE.format(context=context, base_prompt=base_prompt))
-    return (stringify_content(response.content) or "").strip()
-
-
-def _llm_moderate_reword(base_prompt: str, context: str) -> str:
-    """Blocking — call via asyncio.to_thread. Preview-only (see
-    PERSONALIZATION_LEVELS) — not part of the live rotation."""
-    llm = _personalization_llm()
-    response = llm.invoke(MODERATE_PROMPT_TEMPLATE.format(context=context, base_prompt=base_prompt))
-    return (stringify_content(response.content) or "").strip()
-
-
-def _personalization_context(values_text: str | None) -> str:
-    if values_text:
-        return f"Their stated personal values:\n{values_text}"
-    return ""
-
-
-async def _gather_context() -> str:
-    about_me = await asyncio.to_thread(vault.get_or_create_about_me)
-    values_text = vault.get_section(about_me.body, "Values")
-    return _personalization_context(values_text)
-
-
 async def _personalize_prompt(category: str) -> tuple[str, str]:
-    """Picks the prompt text and returns (prompt_text, level_actually_delivered)
-    — NOT the level attempted. "select"/"light" fall back to the plain bank
-    pick (recording "none") on any validation miss or LLM error, so a
-    check-in's recorded level always reflects what the user actually
-    received, keeping later helpfulness ratings honest.
-
-    No timeout on the LLM call — check-in timing was never meant to be
-    tight (there's no external trigger like location/heart-rate driving
-    it, just a semi-randomized spread through the day), so there's nothing
-    for a fast local response to protect; a slow model just takes longer
-    to schedule the next one.
-
-    Random three-way split (none/select/light) per check-in is deliberate —
-    it's the A/B mechanism for comparing whether personalization is worth it
-    for this person at all, decided from their own helpfulness ratings over
-    time rather than assumed upfront. "moderate" is excluded from this live
-    rotation on purpose — see preview_personalization to try it out first."""
-    bank = PROMPTS[category]
-    level = random.choice(PERSONALIZATION_LEVELS)
-    if level == "none":
-        return random.choice(bank), "none"
-
-    context = await _gather_context()
-    if not context:
-        # Nothing to personalize against yet (no Values section, no recent
-        # activity) — skip the LLM call entirely rather than spend a round
-        # trip asking it to personalize against nothing.
-        return random.choice(bank), "none"
-
-    try:
-        if level == "select":
-            chosen = await asyncio.to_thread(_llm_select, bank, context)
-            if chosen in bank:
-                return chosen, "select"
-        else:  # "light"
-            base = random.choice(bank)
-            reworded = await asyncio.to_thread(_llm_light_reword, base, context)
-            if reworded and reworded.endswith("?") and len(reworded) < 300:
-                return reworded, "light"
-    except Exception as e:
-        logger.warning("Check-in personalization (%s) failed, falling back: %s", level, e)
-
-    return random.choice(bank), "none"
-
-
-async def preview_personalization(category: str, level: str, base_prompt: str | None = None) -> dict:
-    """Debug-only: run one personalization level on demand and return the
-    raw LLM output plus whether it would pass the real validation — without
-    creating a checkin row, scheduling anything, or silently falling back.
-    The point is to let you actually see what a given (possibly slow) local
-    model returns, not hide a bad output behind a fallback the way the live
-    path does. "moderate" only exists on this path — it's never part of
-    PERSONALIZATION_LEVELS, so it can't be picked for a real check-in.
-
-    base_prompt lets "light" and "moderate" be pointed at the exact same
-    bank prompt (rather than each grabbing their own random one), so the
-    two rewrites are actually comparable side by side. Falls back to a
-    random pick from the category if omitted; ignored for "select", which
-    picks across the whole bank rather than rewording one specific line."""
-    bank = PROMPTS[category]
-    if base_prompt is not None and base_prompt not in bank:
-        raise ValueError(f"{base_prompt!r} is not one of the built-in {category!r} prompts")
-    context = await _gather_context()
-
-    if level == "select":
-        raw = await asyncio.to_thread(_llm_select, bank, context)
-        valid = raw in bank
-        base_prompt = None
-    elif level == "light":
-        base_prompt = base_prompt or random.choice(bank)
-        raw = await asyncio.to_thread(_llm_light_reword, base_prompt, context)
-        valid = bool(raw) and raw.endswith("?") and len(raw) < 300
-    elif level == "moderate":
-        base_prompt = base_prompt or random.choice(bank)
-        raw = await asyncio.to_thread(_llm_moderate_reword, base_prompt, context)
-        valid = bool(raw) and raw.endswith("?") and len(raw) < 300
-    else:
-        raise ValueError(f"Unknown personalization level: {level}")
-
-    return {
-        "category": category,
-        "level": level,
-        "context_used": context or None,
-        "base_prompt": base_prompt,
-        "result": raw,
-        "would_pass_validation": valid,
-    }
+    """Picks a random prompt from the category's bank. No personalization —
+    About Me (its only context source) is gone, so there's nothing left to
+    personalize against. Keeps the (prompt_text, level) shape callers
+    expect; level is always "none"."""
+    return random.choice(PROMPTS[category]), "none"
 
 
 def _rate_urls(checkin_id: str) -> tuple[str, str] | None:
