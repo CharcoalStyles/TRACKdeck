@@ -1,695 +1,282 @@
-# Personal Assistant Backend
+# trackdeck
 
-A self-hosted, local-first personal assistant: FastAPI + LangGraph on the backend, a local
-LLM via LM Studio, an Obsidian vault (synced with Syncthing) as the notes system, and a
-push-to-talk ESP32-S3 as the primary hardware interface — with a browser dashboard as a
-full alternative for anyone who can't or doesn't want the hardware.
+A self-hosted day-organiser. It keeps your calendar and reminders, catches passing thoughts as
+you speak them, asks a few short reflective questions across the day, and writes you a morning
+message, an evening message and weekly and monthly reviews. Everything runs locally: FastAPI and
+LangGraph on a Mac Mini, local models through LM Studio, an Obsidian vault as the notes system,
+Radicale as the calendar, and a push-to-talk ESP32-S3 as the primary hardware interface. A browser
+dashboard does everything the device does, for anyone without the hardware.
 
-Everything runs on a Mac Mini M2 (16GB shared memory), which shapes a lot of the design
-decisions below: prefer cheap deterministic logic over extra LLM calls, keep dependencies
-light, and don't make the model do more reasoning than it needs to for a given step.
-
-## Contents
-
-- [Architecture at a glance](#architecture-at-a-glance)
-- [Planned: split-model architecture](#planned-split-model-architecture-lfm--a-bigger-writer)
-- [Core concepts](#core-concepts)
-  - [The three memory systems](#the-three-memory-systems)
-  - [Threading and keyword addressing](#threading-and-keyword-addressing)
-  - [System prompt modes](#system-prompt-modes)
-- [Features](#features)
-  - [Voice pipeline (ESP32)](#voice-pipeline-esp32)
-  - [Notes vault](#notes-vault)
-  - [About Me / profile](#about-me-profile)
-  - [Calendar, weather, web search](#calendar-weather-web-search)
-  - [Reminders](#reminders)
-  - [Calendar reminder sync](#calendar-reminder-sync)
-  - [Bedtime reminder](#bedtime-reminder)
-  - [Device sync](#device-sync)
-  - [Notifications](#notifications)
-  - [Daily digest](#daily-digest)
-  - [Dashboard](#dashboard)
-- [Project structure](#project-structure)
-- [Configuration](#configuration)
-- [API reference](#api-reference)
-- [Running it](#running-it)
-  - [First-run calendar setup](#first-run-calendar-setup)
-- [Known limitations](#known-limitations)
-- [Things we've talked about adding](#things-weve-talked-about-adding)
-
----
-
-## Architecture at a glance
+This is v2, built from v1 (tag `v1-final`) by subtraction. The profile and onboarding system,
+vector recall, the daily digest, the vault watcher and hosted-model providers are gone.
 
 ```
 ESP32-S3 (push-to-talk) ──┐
                            ├──> FastAPI (main.py) ──> LangGraph agent (agent/graph.py)
 Browser dashboard ─────────┘         │                        │
-                                      │                        ├──> LM Studio (local LLM)
-                              APScheduler                      ├──> Tools (calendar, weather,
-                              (daily digest,                   │     notes, web search, ...)
-                               20:45 local)                    └──> Chroma (recall + notes index)
+                                      │                        ├──> LM Studio: tool model + writer model
+                              APScheduler                      ├──> 19 tools
+                              (morning, evening, weekly,        └──> Event log (data/logs/*.jsonl)
+                               monthly, bedtime, reminders,
+                               check-ins, calendar sync)
                                       │
-                                      ├──> Gotify (push notifications)
-                                      └──> SMTP (daily recap email)
+                                      ├──> Gotify (push)  └──> SMTP (email copy)
 
 Obsidian vault (./data/vault) <──sync──> Syncthing <──sync──> your other devices
+Radicale (CalDAV) <──────────────────────────────────────── your phone / Thunderbird
 ```
 
-Three containers in `docker-compose.yml`: the FastAPI app, Syncthing (with a shared volume
-between them for the vault), and Radicale (a bundled CalDAV server for the calendar
-integration — swap it out for an external CalDAV server if you'd rather, see Configuration
-below). LM Studio, Gotify, and your mail provider are external services the app talks to
-over HTTP/SMTP — none of them run in this compose file.
+## What it does
 
-## Planned: split-model architecture (LFM + a bigger writer)
+- **Captures.** Say or type something to remember. The tool model saves it as a line in today's
+  `Daily Notes/` file. If a one-shot or voice turn ends without any tool being chosen, the words are
+  saved anyway ("Saved to today's captures."), so nothing spoken is lost. Captures can be ticked
+  off, edited, deleted, or converted into a calendar event or reminder from the dashboard.
+- **Calendar.** Add, move, update, delete and look up events by voice or text (plain CalDAV; any
+  server works, Radicale is bundled). The dashboard's Today pane shows any day and edits events
+  directly.
+- **Reminders and timers.** "Remind me in 10 minutes", "set a 25 minute timer", "30 minutes before
+  my dentist appointment". One-off; a recurring need is a calendar event. Pending reminders survive
+  restarts; anything overdue fires immediately.
+- **Check-ins.** Short reflective prompts at random times between `wake_time` and
+  `latest_checkin_time`, answered on the device, by magic link or in the dashboard. Answers are
+  stored in the vault.
+- **Day planning.** Give it a list of tasks and the hours you have; it builds schedule blocks
+  around your fixed commitments. Ad hoc, run when you want it (the dashboard's Day planning page).
+- **Messages.** A morning day-ahead message, an evening message, a Sunday weekly review and a
+  monthly review, by Gotify and email.
+- **Weather and web.** Open-Meteo forecasts, SearXNG search and page fetching.
 
-**Status: implemented, off by default (2026-10-12).** Set `lmstudio_writer_model` (Settings page's
-Writer Model card, or `LMSTUDIO_WRITER_MODEL`) to turn it on; blank means every LLM call uses
-the single chat model exactly as before. See "As implemented" below for what the code actually
-does — the routing list that follows is the original design intent. The plan is what the LoRA work
-(`scratchpad/training_data/`) and the digest taste test
-(`scratchpad/training_data/digest_eval/`, 24 synthetic days x 9 models, scored 1-5 by the
-user) are building towards.
+### The messages
 
-**Why split.** Fine-tuning `liquid/lfm2.5-1.2b` on this app's tool-calling data moved it from
-26/45 to 38/45 on the held-out tool eval, but it did nothing for prose: in the digest taste
-test every LFM variant (stock, v1, v2) averaged about 2.1/5, while 8-9B local models scored
-3.75-4.5 (Gemma 4 E4B 4.50, Granite 4.1 8B 4.00, Llama 3.1 8B 3.92, Qwen 3.5 9B 3.83,
-Llama 3.3 8B 3.75; Claude-written reference 3.17). LFM is good at *condensing* data, just
-not at turning it into text the user wants to read. So each model does what it is good at:
+All context for these is gathered by ordinary code that reads vault files by date range
+(`utils/day_context.py`), never by tools; the writer model only ever sees what it is handed.
 
-| Role | Model | Used for |
+| Message | When | Contents |
 |---|---|---|
-| **Tool-caller / gatherer** | LoRA-trained LFM2.5 1.2B (fast, small, always loaded) | Choosing and calling tools, short factual replies, condensing raw data (log entries, search results, calendar agendas) into a compact brief |
-| **Writer** | A larger local model (8-9B class; **choice still open**, see the table above) | Anything that produces substantial or lasting prose |
-
-**Routing, by interaction shape:**
-
-1. **One-shot turns** (the ESP32 voice-note path, `one_shot=True`): LFM handles the whole
-   turn: tool calls and the short confirmation. This is the common case and stays fast and
-   cheap.
-2. **Anything that writes into a note** (saving or editing a vault note, creating a linked
-   note, drafting text for the user): LFM still picks the tool and gathers the inputs, but
-   the note *text* is written by the writer model and passed to the tool. Note text is
-   durable and read later, so prose quality matters more than latency.
-3. **Scheduled prose** (the daily digest; check-in prompt wording is a candidate): backend
-   code gathers the data deterministically, optionally has LFM condense it, then hands the
-   brief to the writer. No tools involved.
-4. **Multi-turn back-and-forth** (dashboard chat, mid-conversation follow-ups): expected to
-   be rare for this user, so these go to the writer model for the conversational text, with
-   LFM still available for the tool-calling steps inside the turn.
-
-Rule of thumb: LFM gathers, the bigger model writes. If the output will be stored, emailed
-or read at length, the writer produces it.
-
-**As implemented** (`agent/writer.py`, hooks in `agent/graph.py`, log in `utils/writer_log.py`,
-`GET /debug/writer-log`). Only active when `llm_provider` is `lmstudio` and a writer model is
-set; any writer failure or 90 s timeout silently keeps the tool model's own text.
-
-- **Rule A — final replies.** The tool model runs the turn as before. When it produces the
-  final (no-tool-call) reply, `writer.decide()` either keeps that draft or has the writer redo
-  it, given the conversation, the tool calls/results and the draft. Writer when, in order: the
-  draft is empty; a tool's latest result this turn is an error (the tool model tends to say
-  "Done" over failures); `generate_schedule_blocks` / `get_reflection_prompt` / `fetch_webpage`
-  were used; the mode is `onboarding`, `profile_chat`, `day_planning`, `project_chat` or a
-  project agent run (always writer); or, outside `one_shot`, there were no tool calls (plain
-  conversation) or the draft is longer than 240 chars (confirmation tools only) / 500 chars
-  (anything else). `one_shot` voice turns otherwise keep the tool model's reply. Writer
-  replies are tagged (`additional_kwargs["by_writer"]`) and shown to the tool model shortened
-  to ~200 chars in later turns so long prose in its history doesn't pull it toward long prose.
-- **Rule B — note text.** Before `ToolNode` runs `save_note` / `append_to_note` /
-  `update_note_section`, a content argument of 400+ chars is tidied by the writer (anchors —
-  numbers, URLs, `[[links]]` — must survive or the original is used). In a project *agent run*
-  it is instead composed by the writer from the turn's search/fetch/read results. The rewrite
-  is used for that execution only; the stored tool call keeps the tool model's original args
-  (its chat template can't round-trip arbitrary text such as double quotes). Short notes and
-  `remember_about_me` facts are never rewritten.
-- **Per-mode tool narrowing.** Onboarding, profile chat, day planning, project chat and project
-  agent runs bind only their own small tool set (`MODE_TOOL_NAMES` in `agent/graph.py`) instead
-  of every tool; this applies regardless of the writer setting.
-- **Per-mode model assignments** (`agent/model_assignments.py`, Settings page "Models by Mode",
-  `GET /settings/model-assignments`). Each surface (chat, voice one-shot, onboarding, profile
-  chat, day planning, project chat, project agent run, daily digest, check-ins) can override
-  its tool model and its reply (writer) model; blank means the global default
-  (`lmstudio_chat_model` / `lmstudio_writer_model`). A reply override of `@tool` ("Tool model
-  only") means no separate writer for that surface. The overrides live in `settings.db` as the
-  `model_assignments` JSON setting. Every distinct model named must be loaded in LM Studio.
-  The history budget follows the surface's tool model.
-- **Other pieces.** The daily digest and check-in rewording use their surface's writer (falling
-  back to the chat model when a surface has none). The cross-thread recall summary stores at
-  most 1200 chars of a reply.
-
-**Hallucination guard (applies to every writer prompt).** Larger models invented trends
-("over recent weeks...") when the prompt asked for them without supplying the data. Writer
-prompts must (a) pass in whatever history the claim would rest on, (b) say a trend counts only
-if it is visible in that supplied history on 3+ days, and (c) say nothing about trends
-otherwise. The daily digest now does this: see `_load_previous_recaps` in `jobs/digest.py`.
-
-**Open decisions.** Which writer model(s) to standardize on (Gemma 4 E4B led, but the
-second half of the taste test, days D13-D24 with the repeat-topic and rough-mood days, is
-still to be scored); whether to use one writer for everything or different ones for digest
-vs note writing; how the 16GB Mac Mini keeps both models resident (LM Studio JIT loading
-vs. keeping LFM loaded and swapping the writer); and whether a second quality check
-(rating note text and check-in wording the same way) is worth running before committing.
-
-## Core concepts
-
-### The three memory systems
-
-Easy to conflate, genuinely separate, each solving a different problem:
-
-1. **LangGraph checkpoint** (`memory.db`, SQLite via `AsyncSqliteSaver`) — short-term,
-   thread-scoped. The actual raw message history for one conversation, replayed on every
-   turn in that thread. This is what makes a thread "continuable."
-2. **Chroma `conversations` collection** — long-term, cross-thread semantic recall. Every
-   successful turn gets summarized and embedded (`agent/runtime.py`'s `run_agent`); every
-   subsequent call injects the 3 most similar past summaries as "RELEVANT PAST CONTEXT"
-   into the system prompt, regardless of which thread they came from.
-3. **Chroma `notes` collection** — a search index *over* the Obsidian vault, not a store of
-   its own. The vault (markdown files on disk) is the source of truth; Chroma is a
-   disposable, rebuildable cache. If it's ever wrong, `/debug/reconcile-vault` rebuilds it
-   from the files.
-
-### Threading and keyword addressing
-
-Two ways a request lands in a thread, keyword always wins when both apply:
-
-- **Recency** — continue the most recently active thread if used within 5 minutes
-  (`SESSION_TIMEOUT_SECONDS` in `agent/runtime.py`); otherwise start a new one.
-- **Keyword prefix** — every thread gets a generated two-word phrase (`agent/keywords.py`,
-  e.g. "Copper Wolf") when it's created. Saying/typing that phrase as a prefix
-  ("Copper Wolf, actually make that 3pm") reopens that specific thread regardless of how
-  long ago it was last used. Matching is fuzzy (stdlib `difflib`, no extra dependency) to
-  tolerate Whisper mis-transcriptions, and only ever checks the first two words of an
-  utterance.
-
-Threads are unified regardless of where they came from — a conversation started by voice
-and one started by typing in the dashboard are handled identically, including expiry.
-
-Threads (and their keywords) are **swept nightly** at digest time
-(`jobs/digest.py`), freeing the keywords for reuse and clearing the sidebar. This is a
-deliberate, known trade-off — see [Known limitations](#known-limitations).
-
-### System prompt modes
-
-`agent/graph.py` builds the system prompt from a base + one optional addendum, chosen per
-request via LangGraph's `config` (not persisted into thread state — it's a per-call
-setting, never baked into the conversation history):
-
-| Mode | Trigger | Behavior |
-|---|---|---|
-| Default | always | Date/time grounding, multi-part request completion, fact-verification rules |
-| `one_shot` | `one_shot=True` on `/text` or `/voice` | Never ends on a clarifying question — makes a reasonable assumption, states it, completes the task. Simulates the real ESP32 constraint (no way to hear a follow-up) for testing before the hardware exists |
-| Learning mode | `settings.learning_mode` (standing toggle) | Passive — opportunistically records durable facts about the user as they come up naturally, via `remember_about_me` |
-| `onboarding` | `mode="onboarding"`, fixed thread `"onboarding"` | Active — drives a getting-to-know-you interview using a checklist as a guide, not a script; records as it goes, not at the end; the basics form itself is written into About Me directly by `agent/profile_import.py` (no LLM; free text verbatim, one linked note per person) and the model only runs the follow-up interview. It can't mark onboarding complete: the dashboard's Finished button does, which switches the merged Onboarding/Profile page to its Profile Q&A view by default |
-| `profile_chat` | `mode="profile_chat"`, fixed thread `"profile_chat"` | Scoped to answering/correcting what's in the profile |
-
-Learning mode and the two active modes are mutually exclusive per turn.
-
-## Features
-
-### Voice pipeline (ESP32)
-
-`voice.py` — `POST /voice` is fire-and-forget by design: the device uploads audio, gets an
-immediate `202` with an empty body, and can drop its wifi connection right away. Actual
-transcription (faster-whisper, CPU) and the agent turn happen in a background task *after*
-the response is sent.
-
-There's deliberately no synthesized voice reply and no HTTP feedback to the device — that
-was an explicit call to avoid keeping the ESP32's wifi connection open longer than
-necessary. Instead:
-- Silence (no speech detected) is discarded quietly.
-- Real failures push to Gotify at high priority.
-- Successes push to Gotify at low priority (silent on Android once the channel's
-  configured — see [Notifications](#notifications)), and get recapped in the nightly digest.
-
-Two form fields exist purely for testing via the dashboard, and should never be set by real
-hardware: `sync` (wait for and return the result instead of firing-and-forgetting) and
-`one_shot`.
-
-### Notes vault
-
-`utils/vault.py` + `agent/vault_watcher.py`. Plain markdown files with YAML frontmatter
-(`id`, `title`, `created`, `updated`, `tags`, `aliases`, `source`, `linked_notes`), synced
-across devices via Syncthing, edited by hand in Obsidian or by the agent.
-
-- **Flat vault, no category folders** — tags and `[[links]]` do the organizing.
-  `Inbox/` is the one special folder: a landing pad for anything not created through direct
-  agent interaction (e.g. a note typed on your phone). Set Obsidian's "default location for
-  new notes" to `Inbox` so this happens automatically.
-- **Inbox auto-ingestion** — the watcher picks up a raw file, asks the LLM for just a title
-  and tags (a narrow, cheap call — not summarization), writes it as a proper note at the
-  vault root, indexes it, deletes the Inbox copy, and pushes a Gotify confirmation.
-- **Reconciliation is the correctness guarantee, the watcher is a freshness optimization.**
-  A full sweep runs at startup and on demand (`POST /debug/reconcile-vault`): indexes
-  anything unindexed or changed (by mtime), removes orphaned index entries, catches up any
-  Inbox files left over from downtime. The live watcher (`watchfiles`) handles the common
-  case in near-real-time, but nothing depends on it being perfectly reliable.
-- **Atomic writes** (temp file + `os.replace`) so a concurrent reader — or Syncthing
-  mid-sync — never sees a half-written file. `*.sync-conflict-*` files are explicitly
-  ignored, never indexed.
-- **Section-scoped editing** — `append_to_section`/`replace_section` operate on one `##`
-  heading only, provably never touching anything outside it (this is unit-tested logic, not
-  just prompted behavior).
-
-### About Me / profile
-
-The two hardest-won lessons from building this, both fixed structurally rather than by
-prompting harder:
-
-1. **Deterministic lookup, not search.** The About Me note lives at a fixed path
-   (`about-me.md`), found via `get_or_create_about_me()` — never through `search_notes`,
-   never by a remembered id. Early on, routing it through the generic
-   search-then-remember-the-id flow was exactly the kind of multi-step chain a smaller
-   local model didn't reliably get right.
-2. **Section blast radius must match what's being corrected.** `remember_about_me`'s
-   `replace` mode replaces an entire heading — safe for a section that's one coherent
-   topic ("Current Status"), unsafe for a section that's actually a collection ("People"
-   holding several different people). Correcting one person's info once wiped everyone
-   else's, because the tool did exactly what it was asked, on a section whose shape didn't
-   match the request.
-
-   The fix: `get_or_create_linked_note(topic, category)`. About Me's frontmatter holds a
-   `linked_notes` registry (topic name → note id) — a plain dict lookup, not search. Each
-   distinct person/project/topic gets its own note, found the same reliable way every time,
-   with an index line (`- [[Alex]]`) left in the relevant About Me section. Once the model
-   has that id, it uses the same `read_note`/`append_to_note`/`update_note_section` tools
-   as any other note — no parallel tool surface, no new failure mode.
-
-Manual, precise corrections (fixing a typo, a wrong number) are expected to happen by hand
-in Obsidian — the agent's tools are deliberately append/section-scoped, not general
-find-and-replace, so it structurally can't mangle prose it wasn't asked to touch.
-
-### Calendar, weather, web search
-
-- **Calendar** (`agent/tools/calendar.py`, `utils/caldav_client.py`) — plain CalDAV,
-  protocol-generic. Bundled by default with Radicale (see "First-run calendar setup"
-  below), or point at any external CalDAV server (Nextcloud, Baikal, Fastmail, etc.).
-  `add_calendar_event`, `get_calendar_events`, `update_calendar_event`,
-  `move_calendar_event` (title or UID + new start; keeps length), `delete_calendar_event`,
-  `get_todays_events`. Writes are guarded in code, not by the model: a start already in
-  the past is refused with the current date, a "tonight"/"tomorrow" request whose call
-  carries a different date is corrected (`agent/date_guard.py`), cross-thread recall is
-  skipped for scheduling requests, and the confirmation is built from the saved result
-  (`writer.template_reply`) so it can only say what was stored.
-- **Weather** (`agent/tools/weather.py`) — Open-Meteo, no API key needed.
-- **Web search** (`agent/tools/general.py`) — SearXNG, self-hosted. Falls back to a plain
-  "not connected" message if `SEARXNG_URL` isn't set.
-
-### Reminders
-
-`agent/tools/alerts.py`'s `set_reminder`/`set_timer` are real. `when` arrives as an
-absolute local date/time — the system prompt's mandatory date/time-grounding rule (see
-[System prompt modes](#system-prompt-modes)) already makes the LLM resolve relative
-language ("in 10 minutes", "tomorrow at 9am") into an absolute value before calling any
-tool, the same convention `add_calendar_event`'s `start` param already relies on. Parsing
-is shared: `utils/datetime.py`'s `parse_local_datetime` does the work, and `text_to_utc`
-(used by the calendar tools) is now a thin wrapper around it.
-
-A reminder is a row in `reminders.db` (`utils/reminders_store.py`, plain stdlib `sqlite3`
-— no new dependency, matches the sync style the tool functions already use) plus a one-shot
-APScheduler job (`agent/scheduler.py`'s shared `scheduler`, job id `reminder:<id>`,
-`DateTrigger`) that calls `jobs/reminders.py`'s `fire_reminder` at the due time.
-`list_reminders`/`cancel_reminder` round out the tool set — cancellation matches by
-substring against the reminder's message text.
-
-On startup, `main.py`'s `lifespan` re-hydrates every pending reminder from the DB into the
-scheduler (the DB, not the in-memory scheduler, is the source of truth across restarts).
-Anything already overdue — the app was down past its fire time — fires immediately instead
-of being silently dropped.
-
-Calendar-relative reminders ("remind me 30 minutes before my dentist appointment") also
-work **on-demand**: the agent already has `get_todays_events`/`get_calendar_events`, so it
-computes the offset itself and calls `set_reminder` with the resulting absolute time — no
-calendar involvement needed beyond that single turn. Reminders are **one-off only**, no
-recurrence rules; a genuinely recurring need is a calendar event, not a reminder.
-
-`POST /debug/reminders/fire/{reminder_id}` fires a specific pending reminder immediately,
-for testing delivery without waiting on the real due time.
-
-### Calendar reminder sync
-
-Events are also often added, moved, or deleted directly in a calendar app — outside any
-conversation with the agent — and CalDAV has no push mechanism to notify this app when
-that happens. `jobs/calendar_sync.py`'s `sync_calendar_reminders` polls for it instead, on
-its own APScheduler `IntervalTrigger` job (`"calendar_reminder_sync"`), plus one immediate
-run at startup via `next_run_time`. The poll interval is
-`settings.calendar_sync_interval_minutes` (default 30, 1–1440 valid range) —
-live-reschedulable via `/settings`, same pattern as `digest_time`/`bedtime`.
-
-The opt-in is the calendar's own native reminder: an event with a `VALARM` (RFC 5545 — the
-same "remind me" toggle any calendar app's event editor already exposes — a native CalDAV
-client like Thunderbird or your phone's calendar app, not Radicale's own web UI, which has
-no event editor at all, see "First-run calendar setup") gets a matching row in
-`reminders.db`, keyed by the event's UID
-(`upsert_calendar_reminder`) so re-syncing the same unchanged event is a no-op rather than
-piling up duplicate reminders. `utils/caldav_client.py`'s `parse_ics` now also
-collects each `VALARM`'s `TRIGGER` value; `parse_ics_duration` turns the RFC 5545 duration
-string (e.g. `-PT30M`) into a `timedelta`, applied against the event's start time. An event
-with more than one alarm uses whichever is closest to the start time — a calendar app's
-basic reminder picker only ever sets one, so this is a rare case. Only a UTC (`Z`-suffixed)
-`DTSTART` is understood; an event whose calendar app wrote a floating/TZID-local start
-instead won't parse and is silently skipped rather than guessed at — worth checking against
-whatever client actually creates the event if reminders seem to be missing.
-
-Removal is handled by checking directly rather than assuming: any already-tracked
-calendar-linked reminder not seen in the latest range query gets a direct `get_event(uid)`
-check before anything happens to it, so an event that was simply pushed further out than
-the 14-day lookahead (still real, still has its alarm) doesn't get its reminder cancelled
-by mistake — only a genuinely deleted event, or one whose alarm was removed, does.
-Once a reminder has fired or been cancelled (including by hand, via `cancel_reminder`), a
-later sync pass leaves it alone unless the event's computed due time has actually changed,
-so cancelling a calendar-derived reminder sticks rather than being silently recreated on
-the next poll.
-
-`POST /debug/calendar-sync` runs a sync pass immediately, for testing.
-
-### Bedtime reminder
-
-`jobs/bedtime.py`, its own APScheduler cron job (`"bedtime_reminder"`) at
-`settings.bedtime` (default 21:20, see [Daily digest](#daily-digest) for why 20:45 is
-offset 35 minutes earlier). A fixed, simple Gotify push — no calendar cross-referencing,
-that would be scope beyond what was asked for. Deliberately a separate mechanism from both
-the digest and ad-hoc reminders: same delivery channel, different trigger, different
-purpose (the digest recaps the day; this just says it's time to wind down).
-
-### Device sync
-
-`POST /device/sync` (`auth.py`'s `require_device_token`) is what the ESP32-S3 calls on
-every deep-sleep wake — a flat polling interval (`settings.device_poll_interval_seconds`,
-default 300s, dashboard-editable so the cadence can be retuned without reflashing firmware)
-rather than the earlier variable-RTC-wake design, since a battery budget built around a
-fixed cadence is simpler to reason about and test. The device is a **preview/display
-layer, not the delivery mechanism** — Gotify pushes and the APScheduler jobs elsewhere in
-this codebase are what actually fire reminders/check-ins/bedtime regardless of whether the
-device is online; this endpoint only decides what to *show* on its eink display.
-
-The device may POST optional telemetry in the request body (`battery_mv`, `wake_reason`,
-`firmware_version`, `rssi_dbm`, `time_awake_ms`, `reset_reason` — all nullable, since early
-firmware may not send everything yet), recorded into `device_state.db`
-(`utils/device_state.py`, a single-row store — one physical device, no fleet concept) and
-visible on the dashboard's Testing page. `time_awake_ms` (wifi connect → response received)
-is what actually validates the multi-day battery estimate instead of guessing at it;
-`reset_reason` is ESP-IDF's `esp_reset_reason()` stringified by firmware (e.g. `"power_on"`,
-`"deep_sleep_wake"`, `"brownout"`, `"watchdog"`) — the only visibility into a crash during
-the beta without a debugger attached.
-
-The response (`jobs/device_sync.py`'s `build_sync_payload`) is a full 24-hour snapshot,
-rebuilt from scratch on every call (no delta/cursor tracking, same stateless pattern
-`checkins_store.list_next_24h` already used):
-- `now`, `next_wake_at` — epoch seconds, so the device can correct its own RTC drift each
-  sync and knows when the next check-in is expected.
-- `timezone.iana`/`timezone.posix` — the POSIX TZ string (e.g.
-  `AEST-10AEDT,M10.1.0,M4.1.0/3`) is extracted straight from the compiled zoneinfo (TZif)
-  file's own v2+ footer (`utils/datetime.py`'s `posix_tz_string`) rather than hand-maintained,
-  so firmware (`setenv("TZ", ...)`) renders correct local time across DST changes instead of
-  a hardcoded offset that goes stale twice a year.
-- `poll_interval_seconds`, `bedtime` — current settings, for the device's own loop/display.
-- `checkins`, `reminders` — everything pending and due within 24h, reusing
-  `checkins_store.list_next_24h` and the new `reminders_store.list_pending_due_within_24h`.
-- `calendar_events` — a raw agenda (even events without their own alarm), via
-  `utils/caldav_client.py`'s `get_events_in_range`.
-- `weather` — current conditions plus today's min/max temp and sunrise/sunset
-  (`agent/tools/weather.py`'s `fetch_current_conditions`, factored out of the
-  `get_current_weather` tool so both share one Open-Meteo call — the daily fields ride
-  along on the same request via Open-Meteo's `daily` param, not a second call).
-
-Calendar and weather are both external services that can be briefly unreachable; either
-failing degrades to `[]`/`null` rather than failing the whole sync (which would also cost
-the far more important check-in/reminder data) — logged, not pushed through
-`notify_error`, since this runs as often as every few minutes and alerting on every
-transient outage would be pure noise.
-
-`GET /debug/device-sync` returns the same payload without recording telemetry, and
-`GET /debug/device-state` returns the last-reported telemetry — both on the dashboard's
-Testing page, for checking the payload shape and watching the beta device without needing
-real hardware or SSH access to the logs.
-
-### Notifications
-
-`utils/notify.py` (Gotify) + `utils/mailer.py` (SMTP), both deliberately simple —
-one blocking call each, run via `asyncio.to_thread` from async code.
-
-Gotify priority tiers map to Android notification channels (configured in the Gotify app's
-own settings, not in this code): routine per-turn pushes use priority 3 (the low/silent
-tier) and include the thread's keyword in the title; reminders and the bedtime push use
-priority 7 (should actually alert you); errors use priority 8 (the tier that actually
-interrupts you).
-
-### Daily digest
-
-`jobs/digest.py`, scheduled via APScheduler for 20:45 `Australia/Canberra` (35 minutes
-before a 21:20 bedtime read). Pulls the day's conversation summaries out of Chroma, asks
-the LLM to write a short recap (not a raw log dump), emails it, writes it to the vault
-(`daily-YYYY-MM-DD.md`, tag `daily-digest`), then sweeps the keyword-addressable thread
-registry for the new day. The prompt is also given the previous 7 days' recaps read back
-from those vault notes (`_load_previous_recaps`; gaps are left as gaps), and may only call
-something a trend if it appears on 3+ days of that history. The recap speaks to the user
-as their assistant, and treats suggestions as suggestions, not completed actions. `POST /debug/digest` fires it on
-demand for testing.
-
-### Dashboard
-
-`frontend/` — a React + TypeScript SPA (Vite, Tailwind CSS, TanStack Query, react-router),
-served by FastAPI from its built `dist/` output (`main.py`'s `serve_spa` catch-all route,
-registered last so it never shadows a real API route). Replaced an earlier plain
-HTML/CSS/vanilla-JS dashboard once the Projects page's markdown/gallery/chat/polling
-composition outgrew what hand-rolled DOM manipulation could comfortably carry.
-
-- **Typed API client** — `frontend/src/api/schema.ts` is generated from the backend's own
-  live OpenAPI schema (`npm run gen:types` in `frontend/`, needs a local backend running);
-  `frontend/src/api/client.ts` wraps it with `openapi-fetch` so every call is typed against
-  the real request/response models, not hand-transcribed.
-- **Auth** — one `RequireAuth` route guard (`frontend/src/components/RequireAuth.tsx`)
-  wraps every authenticated route, probing `GET /settings` the same way the old dashboard's
-  `requireSession()` did — no dedicated "am I logged in" endpoint.
-- **`static/checkin.html`** — the one page deliberately *not* part of the SPA. Reached from
-  a bare Gotify push link, possibly in a bad moment, so it stays dependency-free (no
-  React/Query/Router) rather than pulling in the app shell; `main.py` still serves it via a
-  narrow `StaticFiles` mount at its original URL so already-delivered push links never break.
-- **Reused pieces** — `ChatWidget`/`useChat` (send/receive/optimistic-bubble logic, thread
-  switching) and `ObsidianMarkdown` (wikilinks/embeds — hand-rolled, not CommonMark, ported
-  from the old vanilla parser) back every page that needs them, same idiom as the old
-  dashboard's `chat.js`/`markdown.js`.
-
-Local dev runs two processes — see Commands below. Docker builds the SPA in its own stage
-(`node:20`, discarded after `npm run build`) so the runtime image stays Node-free; see the
-`dockerfile`'s `frontend-build` stage.
-
-## Project structure
-
-```
-main.py                    FastAPI app, routes, lifespan (scheduler, watcher, reconciliation)
-voice.py                   /voice — fire-and-forget ESP32 ingestion
-agent/
-  graph.py                 LangGraph build, system prompt + mode addendums
-  runtime.py                AppState, thread resolution, run_agent()
-  keywords.py               Wordlist + fuzzy prefix matching
-  settings.py                Standing app-level toggles
-  scheduler.py                Shared APScheduler instance + cron trigger builders
-  memory.py                  Chroma wrapper (conversations + notes collections)
-  vault_watcher.py            Live watcher, Inbox ingestion, reconciliation
-  tools/
-    calendar.py, weather.py, general.py, alerts.py, notes.py, all_tools.py
-jobs/
-  digest.py                 Daily recap + keyword sweep
-  bedtime.py                 Fixed nightly wind-down nudge
-  reminders.py                Fires a single ad-hoc reminder
-  calendar_sync.py             Polls for manually added/changed/removed calendar events
-utils/
-  vault.py                  Frontmatter, atomic writes, section editing, About Me/linked notes
-  caldav_client.py           CalDAV client, protocol-generic (any CalDAV server)
-  datetime.py                 Calendar day-boundary helpers, parse_local_datetime
-  reminders_store.py           sqlite3 CRUD for reminders.db
-  llm_client.py                 get_chat_llm() — LM Studio vs. Gemini vs. OpenRouter, via LLM_PROVIDER
-  lmstudio_client.py              Live context-length lookup, LM Studio only
-  openrouter_client.py              OpenRouter's public model catalog — pricing/context-length
-                                      browser + live context-length lookup, OpenRouter only
-  notify.py, mailer.py        Gotify, SMTP
-routes/
-  synth.py                    Piper TTS (built, not wired into the production voice flow)
-  calendar_proxy.py            Reverse-proxies the bundled Radicale UI at /calendar
-frontend/                     React SPA dashboard (see above) — src/routes/ one file per page
-static/                       checkin.html only (magic-link page, deliberately outside the SPA)
-docker-compose.yml            assistant + syncthing + caldav (Radicale) services, shared vault volume
-setup.sh                        Bootstrap + prerequisite checks: .env files, Piper model, DB
-                                  bind-mount gotchas, PUID/PGID — idempotent, safe to re-run
-reset_knowledge.sh              Wipes memory/index/checkpoints, then re-runs setup.sh; vault
-                                  wipe gated behind --vault
-```
-
-## Configuration
-
-See `.env.example` for the full list. Grouped by what needs external setup:
-
-- **LM Studio** — `LMSTUDIO_OPENAI_URL`, `EMBEDDING_MODEL` (always env-only — embeddings
-  never switch providers/models). `LMSTUDIO_CHAT_MODEL` is only a first-run default now,
-  same "env var seeds it, `settings.db` owns it after that" pattern as
-  `OPENROUTER_CHAT_MODEL` below — the dashboard's LM Studio Models admin page
-  (`GET /debug/lmstudio-models`, `utils/lmstudio_client.py`) switches the active model live,
-  no restart (`agent/settings.py`'s `lmstudio_chat_model`). `LMSTUDIO_MANAGEMENT_URL` is
-  separate and optional — LM Studio's own REST API (not OpenAI-compatible), used both to
-  live-fetch the loaded model's actual context length (so history trimming matches what you
-  set in LM Studio's model loader rather than a guess) and to back that admin page's catalog
-  — every model LM Studio currently has downloaded, its context length, and whether it's
-  actually loaded right now, one click to switch. Without it, the admin page falls back to
-  a plain text field for typing the exact model id LM Studio should use by hand.
-- **`LLM_PROVIDER`** — `lmstudio` (default), `gemini`, or `openrouter`, seeds which
-  chat-completion backend `utils/llm_client.py`'s `get_chat_llm()` builds for every LLM
-  call site (the main agent, digest, check-in personalization, Inbox auto-titling).
-  Embeddings always stay on LM Studio regardless — Chroma's HNSW index locks to whatever
-  vector dimension the first embedding used, so swapping embedding providers would mean
-  wiping `./data/chroma_db`. Only a first-run default now, same "env var seeds it, then
-  `settings.db` is the source of truth" pattern as `digest_email_to`/`gotify_url` etc. —
-  the Settings page's LLM Provider card switches live between `lmstudio` and `openrouter`
-  with no restart (`agent/settings.py`'s `llm_provider`, `agent/graph.py`'s `call_llm`
-  picks it fresh every turn, caching one tool-bound client per provider actually used).
-  `gemini` is the one exception: it's honored if `LLM_PROVIDER=gemini` at startup, but
-  isn't offered by the dashboard switch (a separate hosted API key isn't worth a live UI
-  toggle for it) — set `GEMINI_API_KEY`/`GEMINI_CHAT_MODEL` when using it (get a key at
-  [aistudio.google.com/apikey](https://aistudio.google.com/apikey)). Set
-  `OPENROUTER_API_KEY`/`OPENROUTER_CHAT_MODEL` to enable `openrouter` (get a key at
-  [openrouter.ai/settings/keys](https://openrouter.ai/settings/keys)) — useful mainly for
-  its free-tier (`:free`-suffixed) models; browse what's currently available, with
-  pricing and context length, on the dashboard's OpenRouter Models admin page
-  (`GET /debug/openrouter-models`, `utils/openrouter_client.py`, sourced live from
-  OpenRouter's public `/models` endpoint — no key needed just to list). The Settings
-  page's provider switch refuses to select `openrouter` when `OPENROUTER_API_KEY` isn't
-  set (`POST /settings` rejects it with a 422). `OPENROUTER_CHAT_MODEL` is likewise only
-  the first-run default for *which* OpenRouter model is used — once `openrouter` is
-  active, the same admin page can switch the active model with one click, no restart
-  (`agent/settings.py`'s `openrouter_chat_model`, live-editable via `/settings` same as
-  `gotify_url` etc.). That page only offers switching when `openrouter` is the active
-  provider; otherwise it's a read-only catalog for picking a value to set later.
-- **CalDAV** — `CALDAV_URL`, `CALDAV_USERNAME`, `CALDAV_PASSWORD`. Points at the bundled
-  Radicale service by default (see "First-run calendar setup" below), or any external
-  CalDAV server (Nextcloud, Baikal, Fastmail, etc.).
-- **SearXNG** — `SEARXNG_URL` (optional; web search degrades gracefully without it).
-- **Gotify** — `GOTIFY_URL`, `GOTIFY_TOKEN`.
-- **SMTP** — `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`,
-  `DIGEST_EMAIL_TO`.
-- **Vault** — `VAULT_PATH` (defaults to `./data/vault`, matching the Docker layout).
-- **`API_TOKEN`** — bearer-token credential for hardware/unattended callers that can't do
-  cookies: `/voice`, `/device/sync`, `/device/checkin/{id}/skip`, `/synthesize` (see
-  `auth.py`'s `require_device_token`). Also still accepted as a fallback on every
-  dashboard-facing route below, so `curl -H "auth: $API_TOKEN"` scripting keeps working.
-- **`DASHBOARD_PASSWORD`, `SESSION_SECRET_KEY`, `SESSION_COOKIE_SECURE`,
-  `SESSION_MAX_AGE_DAYS`** — the browser dashboard's real login/session system
-  (`auth.py`'s `require_session_or_token`, `POST /login`/`POST /logout`, Starlette's
-  `SessionMiddleware`). Kept as a separate secret from `API_TOKEN` on purpose — rotating
-  the ESP32's device token shouldn't force a dashboard relogin, and vice versa.
-  `SESSION_COOKIE_SECURE` should only flip to `true` once this app sits behind an
-  HTTPS-terminating reverse proxy/tunnel; see `.env.example`'s comment for why doing it
-  earlier silently breaks login.
-- **`LEARNING_MODE_DEFAULT`** — startup default; live-changeable after that via `/settings`.
-- **`ASSISTANT_PORT`, `CALDAV_PORT`, `SYNCTHING_GUI_HOST`, `SYNCTHING_GUI_PORT`** —
-  `docker-compose.yml`-only, host-side port mappings (defaults: `8000`, `5232`,
-  `127.0.0.1`, `8384`). `SYNCTHING_GUI_HOST` stays `127.0.0.1` unless changed, so
-  Syncthing's web GUI (needed once for device pairing) is reachable from this host only,
-  never the LAN. Only take effect with `--env-file .env.docker` on the compose command —
-  see "Running it" below.
-
-`API_TOKEN`, `DASHBOARD_PASSWORD`, and `SESSION_SECRET_KEY` specifically are checked at
-startup (`main.py`) — the app refuses to boot at all if any of them is still the literal
-placeholder string from `.env.example` (or, for `SESSION_SECRET_KEY`, unset). Every other
-var above is optional/feature-gated — the app starts fine without them, just with that
-integration degraded or unavailable.
-
-## API reference
-
-| Route | Method | Auth | Purpose |
-|---|---|---|---|
-| `/login` | POST | none | Password → session cookie for the dashboard |
-| `/logout` | POST | none | Clears the session cookie |
-| `/text` | POST | session-or-token | Talk to the agent as text. `thread_id`, `one_shot`, `mode` optional |
-| `/voice` | POST | `API_TOKEN` | Audio upload. `sync`, `one_shot` form fields for testing |
-| `/threads` | GET | session-or-token | Sidebar thread list |
-| `/threads/new` | POST | session-or-token | Mint a new thread before any message |
-| `/threads/{id}/messages` | GET | session-or-token | Thread history for the sidebar |
-| `/settings` | GET | session-or-token | Current standing toggles |
-| `/settings` | POST | session-or-token | Update standing toggles |
-| `/health` | GET | none | Liveness/readiness check |
-| `/debug/digest` | POST | session-or-token | Fire the daily digest on demand |
-| `/debug/reminders/fire/{id}` | POST | session-or-token | Fire a specific pending reminder on demand |
-| `/debug/calendar-sync` | POST | session-or-token | Run a calendar reminder sync pass on demand |
-| `/debug/reconcile-vault` | POST | session-or-token | Force a full vault/index reconciliation |
-| `/device/sync` | POST | `API_TOKEN` | ESP32-S3 wake/poll — optional telemetry body, returns the 24h snapshot |
-| `/device/error` | POST | `API_TOKEN` | Standalone device error report — Gotify alert, deduped per `error_type` |
-| `/device/errors` | GET | session-or-token | History of device error reports, most recent first, for `errors.html` |
-| `/debug/device-sync` | GET | session-or-token | Preview the exact `/device/sync` payload, no telemetry recorded |
-| `/debug/device-state` | GET | session-or-token | Last telemetry the device reported |
-| `/synthesize` | POST | `API_TOKEN` | Piper TTS — built, unused in the production voice flow |
-
-"session-or-token" (`auth.py`'s `require_session_or_token`) accepts either a valid dashboard
-session cookie or the `API_TOKEN` header. `/checkin/{id}/skip`, `/checkin/{id}/reply`, and
-`/checkin/{id}/voice` are deliberately excluded from both this table's auth tiers — they're
-gated only by possessing that check-in's own UUID, a magic-link trust model unrelated to
-login (see `jobs/checkin.py`'s `answer_checkin` docstring).
+| Morning | `wake_time` | Today's calendar and reminders, today's and tomorrow's weather, yesterday's unticked captures, a heads-up on tomorrow |
+| Evening | `evening_time` | Bedtime, today's check-in prompts and your answers verbatim, a short reading across the last few days of answers, unticked captures, tomorrow. It deliberately does not recap the day: the assistant cannot know what you did, so it would invent |
+| Weekly review | Sunday, `weekly_review_time` | What the week held, what stayed open, a couple of things to decide. A pattern counts only if it shows on 3 or more separate days |
+| Monthly review | last evening or first morning (`monthly_review_timing`) | Built from the month's weekly reviews and daily commentary |
+
+The evening message is also the nightly housekeeping run: it sweeps the thread/keyword registry,
+stale thread locks and old raw voice recordings, even when the message itself failed. With
+`daily_commentary` on (the default) its text is saved to `Reviews/Daily/`. Reviews are saved under
+`Reviews/Weekly/` and `Reviews/Monthly/`; Gotify gets a shortened version, email the full text.
+`POST /debug/morning`, `/debug/evening`, `/debug/weekly-review`, `/debug/monthly-review` run each on
+demand.
+
+## Where your data lives
+
+Deleting a database must lose only transient state, never content.
+
+| What | Where |
+|---|---|
+| Captures | `Daily Notes/YYYY-MM-DD.md`, lines like `- [ ] 14:32 buy stamps ^a1b2c3d4` |
+| Check-in answers | `Check-ins/YYYY-MM-DD.md`, one file per day |
+| Daily / weekly / monthly reviews | `Reviews/Daily/`, `Reviews/Weekly/`, `Reviews/Monthly/` |
+| Planning notes | `planning-YYYY-MM-DD.md` at the vault root |
+| Calendar | CalDAV (Radicale) |
+| What happened and where it came from | `data/logs/events-YYYY-MM.jsonl` |
+| Settings | `settings.db` |
+| Reminders, task library, check-in scheduling | `reminders.db`, `task_library.db`, `checkins.db` |
+| Device state, errors, alert sounds | `device_state.db`, `device_errors.db`, `alert_sounds.db` + `alert_sounds/` |
+| Thread checkpoints, writer routing log | `memory.db`, `writer_log.db` |
+
+The **event log** is an append-only JSON-lines file per month recording each interaction (what was
+said, which tools ran, the reply, the channel), each capture (with where it came from: voice or
+dashboard, tool or fallback), each artifact created, each edit and each conversion. It exists so
+interactions can be reviewed and scored.
+
+## Models
+
+Local only, via LM Studio's OpenAI-compatible endpoint.
+
+- **Tool model**, stock `liquid/lfm2.5-1.2b` with no fine-tuning, chooses tools and handles one-shot
+  voice turns and short confirmations.
+- **Writer model**, `gemma-4-e4b-it`, writes what you read: the scheduled messages, day-planning
+  summaries, replies after tool errors, long and conversational answers.
+
+`agent/writer.py` decides per turn who writes the final reply. Successful calendar and reminder
+writes get a reply built in code from the tool result (`route=template`), so the confirmation
+always states the date and time that was actually saved. A reply claiming a change that no tool
+made is replaced with "I haven't changed anything". Every routing decision is recorded in
+`writer_log.db` (`GET /debug/writer-log`). Set `lmstudio_writer_model` blank to turn the writer off.
+
+### Guards on writes
+
+A 1.2B model copies stale dates and invents confirmations, so writes are checked in code: a start
+time in the past is refused with today's date in the error, a date is corrected when the user said
+exactly one of tonight/today/tomorrow, search queries lose dates and weekdays the user never said,
+and a write in the same batch as a search is held back one step so it can use the results. These
+are deliberate; don't loosen them.
+
+## The 19 tools
+
+| Group | Tools |
+|---|---|
+| Calendar | `get_todays_events`, `get_calendar_events`, `add_calendar_event`, `update_calendar_event`, `move_calendar_event`, `delete_calendar_event` |
+| Reminders and timers | `set_reminder`, `set_timer`, `list_reminders`, `cancel_reminder` |
+| Planning | `add_planning_task`, `generate_schedule_blocks` |
+| Weather | `get_current_weather`, `get_weather_forecast`, `get_range_forecast` |
+| Other | `get_reflection_prompt`, `jot_note`, `fetch_webpage` |
+| Web search (MCP) | `search_web` |
+
+`jot_note` takes no arguments: the app saves the user's exact words, so the model only has to pick
+the tool. `tests/test_tool_registry.py` pins this set.
+
+## Threads and keywords
+
+A request joins the most recently used thread if it was active in the last five minutes, otherwise
+it starts a new one. Every thread also gets a two-word keyword ("Copper Wolf"); saying it first
+reopens that thread whatever its age. Matching is fuzzy to tolerate mis-transcription. Keywords are
+freed each night by the evening job.
+
+## Voice
+
+`POST /voice` takes an audio upload from the ESP32. It returns an empty `202` at once and does the
+rest in the background (faster-whisper transcription, then the agent turn), so the device can drop
+wifi immediately. There is no spoken reply and no HTTP feedback to the device: success and failure
+reach you by Gotify. The `sync` and `one_shot` form fields exist only for dashboard testing.
+`checkin_id` ties a recording to an open check-in as its answer.
+
+## Device sync
+
+`POST /device/sync` is called on every deep-sleep wake at a flat interval
+(`device_poll_interval_seconds`, default 300, editable without reflashing). The device is a
+display layer; Gotify and the scheduler are what actually deliver reminders, check-ins and bedtime.
+The response is a stateless 24-hour snapshot:
+
+- `now`, `next_wake_at` (epoch seconds, so the device corrects RTC drift)
+- `timezone.iana` and `timezone.posix` (a POSIX TZ string read from the zoneinfo file, so firmware
+  renders DST correctly)
+- `poll_interval_seconds`, `bedtime`
+- `checkins` and `reminders` pending within 24 hours
+- `calendar_events`, a raw agenda, and `weather` (current plus today's min/max and sun times); either
+  failing degrades to empty rather than failing the sync
+- alert-sound metadata, diffed so the device fetches only new or changed files
+
+Optional telemetry in the request body (`battery_mv`, `wake_reason`, `firmware_version`,
+`rssi_dbm`, `time_awake_ms`, `reset_reason`) is stored in `device_state.db` and shown on the Testing
+page. `POST /device/error` is a separate channel so failures are reported even when sync never
+succeeds; each occurrence is logged, and repeat pushes of the same type are suppressed for 30
+minutes. `GET /debug/device-sync` and `GET /debug/device-state` show the payload and telemetry.
+
+## Alert sounds
+
+Upload audio on the Alert sounds page (`/admin/alert-sounds`). Files are transcoded to 16 kHz
+16-bit mono WAV and catalogued by hash; the device picks one at random when nudging about a
+reminder. A chime sound can be assigned in Settings (`chime_alert_sound_id`).
+
+## Calendar
+
+Plain CalDAV through `utils/caldav_client.py`; Radicale is bundled. Radicale's own web UI manages
+collections only (no day or week view) and is proxied at `/calendar`. To see and edit events in a
+native client (DAVx5, Thunderbird, a phone calendar), publish Radicale's port by uncommenting the
+`caldav` service's `ports:` line in `docker-compose.yml`. That port is a separate trust boundary
+from the dashboard's auth.
+
+**Calendar reminder sync.** CalDAV has no push, so `jobs/calendar_sync.py` polls every
+`calendar_sync_interval_minutes` (default 30) and once at startup. Turning on an event's own
+reminder (a `VALARM`) opts it in; each becomes a row in `reminders.db` keyed by event UID, so
+re-syncing an unchanged event is a no-op. An event pushed beyond the lookahead is checked directly
+before its reminder is cancelled, and a reminder cancelled by hand stays cancelled. Only UTC
+(`Z`-suffixed) start times are understood; an event written with a floating or TZID-local start is
+skipped. `POST /debug/calendar-sync` runs a pass now.
+
+## Dashboard
+
+A React and TypeScript single-page app, served by FastAPI from its built `dist/`.
+
+- **Home** — a Today pane (any day, with navigation; add, edit and delete events) beside the
+  Captures list
+- **Captures** — all captures by day, with voice/dashboard badges, tick, edit, delete and convert
+- **Chat** — a deliberately small chat page
+- **Day planning**, **Reminders**, **Reflection**
+- **Settings** — every setting listed below, plus models by mode
+- **Admin** — Testing (trigger jobs, device payload and telemetry), Models, Check-ins, Alert sounds,
+  Errors, Thread debug
+
+`static/checkin.html` is the one page outside the SPA: the magic-link check-in page reached from a
+push notification, with no session.
+
+## Settings
+
+All live-editable on the Settings page (`GET/POST /settings`), persisted to `settings.db`, and
+loaded at startup. Job times reschedule immediately when saved.
+
+| Group | Settings |
+|---|---|
+| Day | `default_location`, `timezone`, `wake_time`, `bedtime`, `latest_checkin_time` |
+| Messages | `evening_time`, `weekly_review_time`, `monthly_review_timing` (`last_evening` or `first_morning`), `monthly_review_evening_time`, `monthly_review_morning_time`, `daily_commentary`, `weather_enabled`, `email_to` |
+| Notifications | `gotify_url`, `gotify_token` (write-only), `public_base_url` |
+| Sync | `calendar_sync_interval_minutes`, `device_poll_interval_seconds` |
+| Models | `lmstudio_chat_model`, `lmstudio_writer_model`, `max_history_tokens` |
+| Other | `mcp_servers` (JSON; seeds a SearXNG server from `SEARXNG_URL`), `planning_template_note_id`, `chime_alert_sound_id` |
+
+Env vars only seed these on first run; once saved, `settings.db` wins.
+
+## Authentication
+
+- `API_TOKEN` is the bearer credential for hardware and scripts (`/voice`, `/device/*`,
+  `/synthesize`) and is also accepted on every dashboard route (`curl -H "auth: $API_TOKEN"`).
+- `DASHBOARD_PASSWORD` and `SESSION_SECRET_KEY` drive the browser login (`POST /login`, a signed
+  session cookie). `SESSION_MAX_AGE_DAYS` is the absolute expiry and `SESSION_IDLE_TIMEOUT_DAYS`
+  (default 7) a sliding idle expiry. Rotating `API_TOKEN` does not log the browser out, and vice
+  versa. `POST /login` is rate-limited (5 attempts per 15 minutes per IP).
+- The app refuses to start if any of these three is still a placeholder.
+- `SESSION_COOKIE_SECURE=true` only behind an HTTPS-terminating proxy; a Secure cookie is never
+  sent over plain HTTP, so login would silently stop working.
+- The check-in magic-link endpoints (`/checkin/{id}/...`) are gated only by possessing that
+  check-in's UUID. `GET /health` is open.
 
 ## Running it
 
-**First-run setup, before any of the commands below**: copy `.env.example` to `.env`
-(local dev) and/or `.env.docker` (Docker), and fill in `API_TOKEN`, `DASHBOARD_PASSWORD`,
-and `SESSION_SECRET_KEY` with real random values — the app refuses to start at all if any
-of these three is left as its placeholder (see Configuration above). Everything else in
-that file is optional/feature-gated (fill in what you need — CalDAV, Gotify, SMTP, etc. —
-and leave the rest unset).
+**First run.** Copy `.env.example` to `.env` (local dev) and/or `.env.docker` (Docker) and fill in
+`API_TOKEN`, `DASHBOARD_PASSWORD` and `SESSION_SECRET_KEY` with real random values. Everything else
+(CalDAV, Gotify, SMTP, ...) is optional or feature-gated.
 
-One gotcha worth knowing up front: editing `.env.docker`'s *contents* doesn't get picked
-up by a plain `docker compose up -d` — Compose only recreates a container when it detects
-a change to the compose file itself, not to an env file's contents. After editing secrets,
-either `docker compose down` then `up` again, or `docker compose up -d --force-recreate
-<service>` for just the one that changed.
+Local dev with hot reload runs two processes:
 
-Another gotcha: `docker-compose.yml` uses `.env.docker` (not Compose's default `.env`) for
-container secrets, via each service's `env_file:` — but that directive only injects vars
-*into* the container, it doesn't feed the `${ASSISTANT_PORT}`/`${CALDAV_PORT}`/
-`${SYNCTHING_GUI_HOST}`/`${SYNCTHING_GUI_PORT}` substitutions used for host port mappings
-in the compose file itself. Every command below needs `--env-file .env.docker` for those
-to resolve — without it they silently fall back to the hardcoded defaults.
-
-Local dev, full hot-reload — two processes, backend and frontend separately:
 ```bash
 uv run uvicorn main:app --reload      # terminal 1
-cd frontend && npm run dev             # terminal 2 — Vite dev server, proxies API calls to :8000
+cd frontend && npm run dev             # terminal 2; Vite proxies API calls to :8000
 ```
-Browse `http://localhost:5173` (not `:8000`) during dev. The production build (`npm run
-build` in `frontend/`, or the Docker image's `frontend-build` stage) is what `main.py`'s
-catch-all route actually serves — a bare `uv run uvicorn main:app --reload` alone only gets
-you the API, not the dashboard, unless `frontend/dist/` already exists from a prior build.
 
-Syncthing and the bundled CalDAV server (Radicale) need to run somewhere stable even during
-dev — they don't need to be the same process as the app:
+Browse `http://localhost:5173`, not `:8000`. A bare uvicorn serves only the API unless
+`frontend/dist/` already exists from `npm run build`. To reach it from other LAN devices, add
+`--host 0.0.0.0`.
+
+Syncthing and Radicale can run on their own during dev:
+
 ```bash
 docker compose --env-file .env.docker up syncthing caldav -d
 VAULT_PATH=./data/vault CALDAV_URL=http://localhost:5232/myuser/personal/ uv run uvicorn main:app --reload
 ```
 
 Full stack:
+
 ```bash
-./setup.sh                # once, before first run — .env files, Piper model, DB bind-mount files, PUID/PGID
+./setup.sh      # once: .env files, Piper model, DB bind-mount files, PUID/PGID
 docker compose --env-file .env.docker up --build
 ```
 
-Bound to all interfaces, so other devices on the LAN (phone, laptop, the ESP32) can reach
-the dashboard/API — the plain `--reload` command above binds to `127.0.0.1` only:
-```bash
-uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
-Then hit `http://<mac-mini-lan-ip>:8000` from another device. Keep `SESSION_COOKIE_SECURE`
-unset/`false` in `.env` for this — a `Secure` session cookie is never sent over plain HTTP,
-so login silently breaks if it's `true` and you're not behind an HTTPS-terminating proxy.
+Two Compose gotchas. `--env-file .env.docker` is required on every command, because `env_file:`
+only injects variables into the container and does not feed the `${ASSISTANT_PORT}`,
+`${CALDAV_PORT}`, `${SYNCTHING_GUI_*}` substitutions in the compose file. And editing
+`.env.docker` contents is not noticed by a plain `up -d`: run `docker compose down` then `up`, or
+`up -d --force-recreate <service>`.
 
-See the Obsidian/Syncthing setup notes (discussed separately) for first-time vault pairing
-across devices — that part isn't fully automatable via `docker-compose.yml` alone, since
-device IDs are generated per-instance.
+Syncthing's device IDs are generated per instance, so pairing with your other devices is a one-time
+manual step in its web GUI (`127.0.0.1:8384` by default).
+
+`./reset_knowledge.sh [--vault] [--dry-run]` clears thread checkpoints and raw recordings. It never
+touches settings, check-in state, device errors, the calendar or the event log, and only wipes the
+vault when you pass `--vault`.
 
 ### First-run calendar setup
 
-No manual setup step — the bundled Radicale service is fully self-provisioning. Just fill
-in three env vars in `.env.docker` like any other secret in that file (`.env.example` has
-the full explanation):
+No manual step: Radicale provisions itself. Set three variables like any other secret:
 
 ```bash
 CALDAV_URL=http://caldav:5232/myuser/personal/
@@ -697,68 +284,39 @@ CALDAV_USERNAME=myuser
 CALDAV_PASSWORD=some-password-you-pick
 ```
 
-The username must match the first path segment of the URL (Radicale scopes each user to
-their own `/<user>/...` path) — `personal` can be any collection name you like. Then:
+The username must match the first path segment of the URL; `personal` can be any collection name.
+On startup the `caldav` container rewrites its config and htpasswd file from these values
+(idempotent, never touching calendar data) and the app creates the collection with a CalDAV
+`MKCALENDAR` call (best effort, so an external server that handles this differently is fine).
+To use an external CalDAV server, point `CALDAV_URL` at it.
+
+### Configuration reference
+
+See `.env.example` for the full list with explanations. In short: `LMSTUDIO_OPENAI_URL`,
+`LMSTUDIO_CHAT_MODEL`, `LMSTUDIO_WRITER_MODEL` and optionally `LMSTUDIO_MANAGEMENT_URL` (lets the app
+read the model's real context length and list downloaded models); `CALDAV_*`; `SEARXNG_URL`;
+`GOTIFY_URL`, `GOTIFY_TOKEN`, `PUBLIC_BASE_URL`; `SMTP_*` and `EMAIL_TO`; `VAULT_PATH`;
+`EVENT_LOG_DIR`; the auth variables above; `LOG_LEVEL`.
+
+## Tests
 
 ```bash
-docker compose --env-file .env.docker up -d
+uv run pytest -q
+cd frontend && npx tsc --noEmit -p tsconfig.app.json && npm run build
 ```
 
-That's it. Two things happen automatically on startup:
-- The `caldav` service's entrypoint writes Radicale's config and htpasswd users file from
-  `CALDAV_USERNAME`/`CALDAV_PASSWORD` every time it starts (idempotent — never touches the
-  actual calendar data, just the auth config).
-- The `assistant` service creates the calendar collection itself at startup, via a CalDAV
-  `MKCALENDAR` call (`utils/caldav_client.py`'s `ensure_collection_exists`) — best-effort and
-  non-fatal, so it also doesn't get in the way if you've pointed `CALDAV_URL` at an external
-  server that handles this differently.
-
-Browse to `http://<host>:8000/calendar/` to reach Radicale's own web UI, proxied through
-the assistant's single port — no separate Radicale login, just your existing dashboard
-session. Worth knowing up front: that UI is for managing *collections* (create/rename/
-delete a calendar, see what exists) — it doesn't render a day/week/month view of your
-events. Radicale doesn't have one built in.
-
-To actually see and edit events in a browser you'd need a separate calendar-viewing
-frontend, and the realistic options there aren't good enough to bundle by default (checked
-during development: the classic pairing, CalDAVZAP, hasn't been released since 2015; a
-newer option, Bloben, needs its own Postgres+Redis+Node stack and its original repo is
-gone). So for actually viewing/editing your calendar day-to-day, use a native CalDAV
-client instead — a phone app via DAVx5, Thunderbird, or macOS/Google Calendar's "add CalDAV
-account" — pointed at Radicale directly. By default Radicale's own port (5232) isn't
-published to the host; uncomment the `caldav` service's `ports: - "5232:5232"` line in
-`docker-compose.yml` and use `http://<host>:5232/myuser/personal/` with the same
-credentials — a separate trust boundary from the dashboard's session/API_TOKEN auth, same
-as Syncthing's GUI port note above.
+After any route or model change, regenerate the typed client with `npm run gen:types` while the
+backend is running.
 
 ## Known limitations
 
-Things that are true about the current code, not proposals:
+- `routes/synth.py` raises at import time if the Piper model files are missing, which takes down
+  the whole app. `setup.sh` downloads the model first, but the code is not hardened.
+- Threads and their keywords are swept nightly regardless of origin, so a dashboard conversation
+  has the same one-day lifespan as a voice keyword. Deliberate.
+- In-memory thread and keyword state is not covered by `reset_knowledge.sh`; it clears on restart.
+- Calendar reminder sync skips events with floating or TZID-local start times.
+- The unit and route tests are broad, but the full voice-to-device path has been verified by hand,
+  not in the suite.
 
-- **`routes/synth.py` raises at import time if the Piper model files are missing**, which
-  takes down the whole app, not just TTS, since it's imported at module load. Mitigated
-  operationally by `setup.sh` downloading the model first, but not fixed at the code
-  level.
-- **Threads (and their keyword addressability) are swept nightly regardless of origin** —
-  a conversation started from the dashboard has the same one-day lifespan as a voice
-  command's keyword. This was a deliberate, explicit choice ("threads are threads") rather
-  than an oversight, but worth knowing if the dashboard becomes a daily-driver interface
-  rather than mostly a testing tool.
-- **In-memory thread/keyword state isn't covered by `reset_knowledge.sh`** — it was never
-  written to disk in the first place, so it only clears on app restart.
-- **Reconciliation and the Inbox pipeline can create duplicate work under real Syncthing
-  conditions** (genuine multi-device edit conflicts) that haven't been exercised yet beyond
-  the mitigations already built in — sync-conflict file filtering, atomic writes, the
-  reconciliation sweep as a catch-all. Worth a real multi-device stress test at some point.
-
-## Things we've talked about adding
-
-Discussed-but-not-yet-built ideas, and Claude's own follow-up suggestions, live in
-[`UPCOMING.md`](UPCOMING.md) rather than being duplicated here — check there for the
-current list rather than this file, which only records decisions, not a backlog.
-
-One thing was seriously considered and explicitly decided against, worth recording here so
-it doesn't get re-litigated from scratch:
-- **A React/Vue frontend in its own container** — decided against in favor of the current
-  modular-vanilla-JS approach, given the added build/networking complexity for a
-  single-user tool. Not off the table forever if the dashboard's needs outgrow this.
+Open ideas are in [`UPCOMING.md`](UPCOMING.md).

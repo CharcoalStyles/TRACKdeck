@@ -38,22 +38,10 @@ def init_db() -> None:
                 status TEXT NOT NULL DEFAULT 'pending',
                 resolved_at INTEGER,
                 retry_of TEXT REFERENCES checkins(id),
-                personalization_level TEXT NOT NULL DEFAULT 'none',
-                helpfulness TEXT,
                 created_at INTEGER NOT NULL
             )
             """
         )
-        # Migration guard for a checkins.db created before these existed —
-        # CREATE TABLE IF NOT EXISTS above doesn't add columns to an
-        # already-existing table.
-        columns = {row[1] for row in conn.execute("PRAGMA table_info(checkins)")}
-        if "personalization_level" not in columns:
-            conn.execute(
-                "ALTER TABLE checkins ADD COLUMN personalization_level TEXT NOT NULL DEFAULT 'none'"
-            )
-        if "helpfulness" not in columns:
-            conn.execute("ALTER TABLE checkins ADD COLUMN helpfulness TEXT")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS day_plans (
@@ -71,15 +59,13 @@ def create_checkin(
     prompt_text: str,
     scheduled_at: int,
     retry_of: Optional[str] = None,
-    personalization_level: str = "none",
 ) -> None:
     with _connect() as conn:
         conn.execute(
             "INSERT INTO checkins (id, category, prompt_text, scheduled_at, "
-            "status, retry_of, personalization_level, created_at) "
-            "VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)",
-            (checkin_id, category, prompt_text, scheduled_at, retry_of,
-             personalization_level, int(time.time())),
+            "status, retry_of, created_at) "
+            "VALUES (?, ?, ?, ?, 'pending', ?, ?)",
+            (checkin_id, category, prompt_text, scheduled_at, retry_of, int(time.time())),
         )
 
 
@@ -135,25 +121,10 @@ def list_next_24h(now_epoch: int) -> list[dict]:
         return [dict(row) for row in rows]
 
 
-def list_answered_between(start_ts: int, end_ts: int) -> list[dict]:
-    """Answered check-ins resolved within [start_ts, end_ts] (UTC epoch
-    seconds, inclusive), oldest first. Used by jobs/digest.py to surface
-    today's gratitude/mood/wins reflections as their own section instead of
-    letting them blend anonymously into the generic conversation log."""
-    with _connect() as conn:
-        rows = conn.execute(
-            "SELECT * FROM checkins WHERE status = 'answered' "
-            "AND resolved_at BETWEEN ? AND ? ORDER BY resolved_at ASC",
-            (start_ts, end_ts),
-        ).fetchall()
-        return [dict(row) for row in rows]
-
-
 def list_resolved_between(start_ts: int, end_ts: int) -> list[dict]:
     """Every check-in resolved within [start_ts, end_ts] (UTC epoch
-    seconds, inclusive), oldest first — answered, skipped, or expired
-    (the superset of list_answered_between). resolved_at is NULL for
-    still-pending check-ins, so the range comparison already excludes
+    seconds, inclusive), oldest first — answered, skipped, or expired.
+    resolved_at is NULL for still-pending check-ins, so the range comparison already excludes
     them without an explicit status filter. Used by main.py's
     GET /checkins/today for the dashboard's check-in history page."""
     with _connect() as conn:

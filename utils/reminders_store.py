@@ -10,7 +10,7 @@ these are synchronous (same convention as agent/tools/calendar.py's
 blocking `requests` calls), and a single-user personal assistant doesn't
 have enough write volume to need connection pooling. Async call sites
 (main.py's lifespan, jobs/reminders.py) wrap these in asyncio.to_thread,
-same as jobs/digest.py already does for its own blocking calls.
+same as the scheduled jobs do for their own blocking calls.
 """
 from __future__ import annotations
 

@@ -428,8 +428,6 @@ class CheckinRecord(BaseModel):
     fired_at: int | None
     resolved_at: int | None
     answer: str | None
-    personalization_level: str
-    helpfulness: str | None
 
 
 class CheckinsTodayResponse(BaseModel):

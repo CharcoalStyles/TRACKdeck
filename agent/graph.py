@@ -37,10 +37,8 @@ SYSTEM_PROMPT = """You are a personal assistant agent with access to tools inclu
 ## Date and Time Grounding
 The current date and time is given below (see "CURRENT DATE AND TIME"), refreshed every turn —
 use it directly for any relative time reference (today, tomorrow, next week, in an hour, this
-weekend, etc.) instead of guessing from training data, which has a cutoff and no built-in
-clock. get_current_datetime still exists for when the user explicitly asks what time/date it
-is right now, but you don't need to call it just to reason about relative dates — the value is
-already here.
+weekend, etc.) and when the user asks what time or date it is, instead of guessing from training
+data, which has a cutoff and no built-in clock.
 
 If the user gives a bare 12-hour time with no AM/PM (e.g. "9 o'clock", "at 9"), default to AM
 unless context implies otherwise ("9 o'clock tonight" → PM; "lunch at 12" → PM). State the
@@ -278,9 +276,8 @@ def build_graph(checkpointer, mcp_tools: list | None = None):
     # so instead it guarantees there's never more than one: every call_llm
     # invocation, across every concurrent thread/turn/background job, waits
     # its turn here before actually hitting the chat model. Scoped to just
-    # the completion call below — recall/embedding lookups and parallel
-    # tool execution aren't gated by this, since those don't touch the
-    # chat model's shared cache.
+    # the completion call below — parallel tool execution isn't gated by
+    # this, since tools don't touch the chat model's shared cache.
     llm_semaphore = asyncio.Semaphore(1)
 
     async def call_llm(state: MessagesState, config: RunnableConfig):
@@ -298,10 +295,9 @@ def build_graph(checkpointer, mcp_tools: list | None = None):
         if mode == "day_planning":
             addendum += DAY_PLANNING_ADDENDUM
 
-        # Computed fresh every turn — local models were unreliable calling get_current_datetime
-        # themselves for relative-date grounding (see SYSTEM_PROMPT's "Date
-        # and Time Grounding" section), so the real value is just always
-        # present instead of depending on a tool call actually happening.
+        # Computed fresh every turn: the small tool model can't be trusted to
+        # ask for the date, so the real value is always in the prompt (see
+        # SYSTEM_PROMPT's "Date and Time Grounding" section).
         datetime_block = f"\n\nCURRENT DATE AND TIME: {format_now_human(settings.zoneinfo())}"
 
         system = SystemMessage(content=SYSTEM_PROMPT + addendum + datetime_block)

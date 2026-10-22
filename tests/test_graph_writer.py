@@ -189,10 +189,10 @@ def test_write_in_same_batch_as_a_lookup_is_held_back_until_the_next_step(env, m
 
 def test_defer_writes_after_lookup_only_when_both_are_present():
     calls = lambda *names: [{"name": n, "id": n, "args": {}} for n in names]
-    run, held = graph_mod.defer_writes_after_lookup(calls("search_web", "get_calendar_event", "update_calendar_event", "add_planning_task"))
-    assert [c["name"] for c in run] == ["search_web", "get_calendar_event"]
+    run, held = graph_mod.defer_writes_after_lookup(calls("search_web", "get_calendar_events", "update_calendar_event", "add_planning_task"))
+    assert [c["name"] for c in run] == ["search_web", "get_calendar_events"]
     assert [c["name"] for c in held] == ["update_calendar_event", "add_planning_task"]
     run, held = graph_mod.defer_writes_after_lookup(calls("add_calendar_event", "set_reminder"))
     assert len(run) == 2 and held == []
-    run, held = graph_mod.defer_writes_after_lookup(calls("fetch_webpage", "get_current_datetime"))
+    run, held = graph_mod.defer_writes_after_lookup(calls("fetch_webpage", "get_todays_events"))
     assert len(run) == 2 and held == []

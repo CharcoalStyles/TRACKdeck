@@ -1,11 +1,9 @@
 """
-agent/tools.py
---------------
-Stub tools for the personal assistant.
-
-Each tool is a plain Python function decorated with @tool.
-LangGraph's ToolNode will call whichever one the LLM picks.
-
+agent/tools/all_tools.py
+------------------------
+The v2 tool registry: 18 local tools (6 calendar, 4 reminder/timer, 2 planning,
+3 weather, get_reflection_prompt, jot_note, fetch_webpage) plus search_web from
+the MCP server (get_mcp_tools) = 19. tests/test_tool_registry.py pins the names.
 """
 import logging
 
@@ -19,11 +17,7 @@ from agent.tools.alerts import cancel_reminder, list_reminders, set_reminder, se
 from agent.tools.calendar import get_tools as get_calendar_tools
 from agent.tools.checkin import get_reflection_prompt
 from agent.tools.jot import jot_note
-from agent.tools.general import (
-    fetch_webpage,
-    get_current_datetime,
-    set_home_location,
-)
+from agent.tools.general import fetch_webpage
 from agent.tools.planning import get_tools as get_planning_tools
 from agent.tools.weather import get_tools as get_weather_tools
 
@@ -62,7 +56,6 @@ def get_tools():
     tools.extend(get_weather_tools())
     tools.extend(get_planning_tools())
     tools.extend([
-        get_current_datetime,
         set_reminder,
         set_timer,
         list_reminders,
@@ -70,7 +63,6 @@ def get_tools():
         get_reflection_prompt,
         jot_note,
         fetch_webpage,
-        set_home_location,
     ])
 
     return tools

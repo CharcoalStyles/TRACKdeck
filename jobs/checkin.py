@@ -139,19 +139,11 @@ async def answer_checkin(checkin_id: str, text: str) -> bool:
     return True
 
 
-async def _personalize_prompt(category: str) -> tuple[str, str]:
-    """Picks a random prompt from the category's bank. No personalization —
-    About Me (its only context source) is gone, so there's nothing left to
-    personalize against. Keeps the (prompt_text, level) shape callers
-    expect; level is always "none"."""
-    return random.choice(PROMPTS[category]), "none"
-
-
 async def _create_and_schedule(
     scheduled_at_local: datetime, category: str, retry_of: str | None
 ) -> None:
     checkin_id = str(uuid.uuid4())
-    prompt_text, personalization_level = await _personalize_prompt(category)
+    prompt_text = random.choice(PROMPTS[category])
     scheduled_at_utc = scheduled_at_local.astimezone(timezone.utc)
     await asyncio.to_thread(
         checkins_store.create_checkin,
@@ -160,7 +152,6 @@ async def _create_and_schedule(
         prompt_text,
         int(scheduled_at_utc.timestamp()),
         retry_of,
-        personalization_level,
     )
     if scheduled_at_utc <= datetime.now(timezone.utc):
         await fire_checkin(checkin_id)
@@ -339,8 +330,6 @@ async def reflections_between(start_ts: int, end_ts: int) -> list[dict]:
                 "fired_at": checkin["fired_at"],
                 "resolved_at": checkin["resolved_at"],
                 "answer": answers_by_day[day].get(checkin["id"]),
-                "personalization_level": checkin["personalization_level"],
-                "helpfulness": checkin["helpfulness"],
             }
         )
     return results

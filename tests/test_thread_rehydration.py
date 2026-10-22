@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from agent.runtime import (
-    _last_digest_boundary,
+    _last_sweep_boundary,
     app_state,
     rehydrate_threads_from_checkpoints,
 )
@@ -30,15 +30,15 @@ def _utc_ts(y, m, d, hh, mm):
     return datetime(y, m, d, hh, mm, tzinfo=timezone.utc).timestamp()
 
 
-def test_last_digest_boundary_uses_yesterday_before_todays_evening_time():
+def test_last_sweep_boundary_uses_yesterday_before_todays_evening_time():
     now = _utc_ts(2026, 8, 6, 10, 0)  # before 20:45 today
-    boundary = _last_digest_boundary(now)
+    boundary = _last_sweep_boundary(now)
     assert boundary == _utc_ts(2026, 8, 5, 20, 45)
 
 
-def test_last_digest_boundary_uses_today_after_todays_evening_time():
+def test_last_sweep_boundary_uses_today_after_todays_evening_time():
     now = _utc_ts(2026, 8, 6, 21, 0)  # after 20:45 today
-    boundary = _last_digest_boundary(now)
+    boundary = _last_sweep_boundary(now)
     assert boundary == _utc_ts(2026, 8, 6, 20, 45)
 
 
@@ -46,7 +46,7 @@ def test_rehydrate_keeps_only_threads_created_after_the_last_sweep(monkeypatch):
     now = _utc_ts(2026, 8, 6, 21, 0)
     monkeypatch.setattr("agent.runtime.time.time", lambda: now)
 
-    boundary = _last_digest_boundary(now)
+    boundary = _last_sweep_boundary(now)
     old_thread = f"session_{int(boundary - 3600)}_aaaaaa"
     new_thread = f"session_{int(boundary + 3600)}_bbbbbb"
 

@@ -12,7 +12,7 @@ Thread resolution has two layers:
   1. Keyword addressing — a spoken prefix ("Copper Wolf, ...") always
      reopens that specific thread, regardless of how long ago it was
      last used. Keywords are generated (not chosen) when a new thread
-     starts, and stay addressable until the daily digest sweeps them at
+     starts, and stay addressable until the evening message job sweeps them at
      end of day (see jobs/evening.py).
   2. Recency — with no keyword prefix, falls back to the original
      inactivity rule: continue the most recent thread if used within
@@ -142,7 +142,7 @@ def list_threads() -> list[ThreadInfo]:
     return sorted(app_state.threads.values(), key=lambda t: t.last_activity, reverse=True)
 
 
-def _last_digest_boundary(now: float) -> float:
+def _last_sweep_boundary(now: float) -> float:
     """The most recent moment jobs/evening.py's nightly sweep would have
     fired (today's settings.evening_time, or yesterday's if that hasn't
     happened yet today) — mirrors CronTrigger's own daily-firing logic."""
@@ -162,7 +162,7 @@ async def rehydrate_threads_from_checkpoints() -> int:
     in-process dicts) shows no conversations after every restart even
     though memory.db itself is untouched (see CLAUDE.md's known
     limitations note). Only restores threads created after the most recent
-    digest sweep boundary, since that sweep unconditionally clears
+    evening sweep boundary, since that sweep unconditionally clears
     app_state.threads/keywords once a day (jobs/evening.py) and memory.db's
     checkpoint rows are never deleted — this reproduces exactly what the
     in-memory dict would still hold had the process never restarted,
@@ -172,7 +172,7 @@ async def rehydrate_threads_from_checkpoints() -> int:
     restored thread gets a freshly generated one via the same
     generate_keyword() normal thread creation uses.
     """
-    boundary = _last_digest_boundary(time.time())
+    boundary = _last_sweep_boundary(time.time())
     checkpoints = await list_checkpoint_thread_ids()
 
     restored = []
@@ -201,8 +201,8 @@ async def rehydrate_threads_from_checkpoints() -> int:
 async def get_thread_messages(thread_id: str) -> list[dict]:
     """
     Reads a thread's conversation history directly from the checkpointer
-    (not from the memory.py conversation-summary log, which is a
-    separate, lossier long-term-recall mechanism). Filtered down to just
+    (there is no separate long-term memory store
+    in v2). Filtered down to just
     human/assistant turns with real content — internal tool-call and
     tool-result messages are left out, since they wouldn't make sense
     rendered as chat bubbles.

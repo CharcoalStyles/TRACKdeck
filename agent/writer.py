@@ -52,8 +52,7 @@ ALWAYS_WRITER_MODES = {"day_planning"}
 CONFIRMATION_TOOLS = {
     "set_reminder", "set_timer", "cancel_reminder",
     "add_calendar_event", "delete_calendar_event", "update_calendar_event",
-    "set_home_location", "add_planning_task",
-    "get_current_datetime",
+    "add_planning_task",
 }
 # Writes whose confirmation is built in code from the tool result, so the
 # reply can only say what was actually saved.

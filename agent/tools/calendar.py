@@ -36,22 +36,6 @@ def get_todays_events() -> str:
         return f"Failed to retrieve today's events. {response.get('error') or response.get('message') or 'Unknown error'}"
 
 @tool
-def get_calendar_event(uid: str) -> str:
-    """Retrieves a specific event from the calendar.
-
-    Args:
-        uid: The event's unique ID.
-    """
-    logger.info("Retrieving event with UID: %s", uid)
-    
-    response = get_event(uid)
-    
-    if response.get("success"):
-        return json.dumps(response.get("event"))
-    else:
-        return f"Failed to retrieve event. {response.get('error') or response.get('message') or 'Unknown error'}"
-
-@tool
 def add_calendar_event(title: str, start: str, end: Optional[str] = None, description: Optional[str] = None, location: Optional[str] = None, recurrence: Optional[str] = None) -> str:
     """Add an event to the calendar.
 
@@ -288,7 +272,6 @@ def move_calendar_event(event: str, new_start: str) -> str:
 def get_tools():
     return [
         get_todays_events,
-        get_calendar_event,
         add_calendar_event,
         delete_calendar_event,
         get_calendar_events,

@@ -1,77 +1,10 @@
 import logging
-from typing import Optional
-
 from langchain_core.tools import tool
 import requests
 import trafilatura
 
-from agent.scheduler import reschedule_time_jobs
-from agent.settings import is_valid_timezone, settings
-from agent.tools.weather import call_open_meteo_search
-from utils.datetime import format_now_human
-
 logger = logging.getLogger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Time & Date
-# ---------------------------------------------------------------------------
-
-@tool
-def get_current_datetime() -> str:
-    """Returns the current date and time. Use this whenever you need to know the current time or date. It can help with finding the nearest specific day"""
-
-    now_string = format_now_human()
-    logger.info("Current date and time: %s", now_string)
-    return f"The current date and time is: {now_string}"
-
-def resolve_location(location: str) -> tuple[str, str] | None:
-    """Geocode a free-text place name to a canonical name + IANA timezone via
-    Open-Meteo. Returns None if it couldn't be resolved."""
-    try:
-        data = call_open_meteo_search(location)
-    except requests.exceptions.RequestException as e:
-        logger.error("Error connecting to Open-Meteo geocoding: %s", e)
-        return None
-
-    results = data.get("results") or []
-    if not results:
-        return None
-
-    match = results[0]
-    resolved_name = ", ".join(
-        part for part in [match.get("name"), match.get("admin1"), match.get("country")] if part
-    )
-    tz_name = match.get("timezone")
-    if not tz_name or not is_valid_timezone(tz_name):
-        return None
-
-    return resolved_name, tz_name
-
-
-@tool
-def set_home_location(location: str) -> str:
-    """Call this as soon as the user says where they live. Resolves the free-text
-    place name to a canonical location + IANA timezone via geocoding (don't guess the
-    timezone yourself) and saves both as the app's standing location/timezone settings.
-
-    Args:
-        location: The place the user said they live, as close to their own words as
-            possible (e.g. "Melbourne, Australia").
-    """
-    resolved = resolve_location(location)
-    if resolved is None:
-        return f"Couldn't resolve '{location}' to a place — ask them to be more specific, or it can be set directly from the Settings page."
-    resolved_name, tz_name = resolved
-
-    settings.default_location = resolved_name
-    settings.timezone = tz_name
-    # Same rescheduling main.py's POST /settings does on a timezone change —
-    # the fixed-time jobs are registered as cron triggers, not read fresh.
-    reschedule_time_jobs()
-
-    logger.info("Onboarding set default_location=%s timezone=%s", resolved_name, tz_name)
-    return f"Set default location to '{resolved_name}' and timezone to '{tz_name}'."
 
 # ---------------------------------------------------------------------------
 # Web Page Fetching

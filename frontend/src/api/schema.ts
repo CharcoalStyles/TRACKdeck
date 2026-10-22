@@ -1447,10 +1447,6 @@ export interface components {
             resolved_at: number | null;
             /** Answer */
             answer: string | null;
-            /** Personalization Level */
-            personalization_level: string;
-            /** Helpfulness */
-            helpfulness: string | null;
         };
         /** CheckinReplyRequest */
         CheckinReplyRequest: {

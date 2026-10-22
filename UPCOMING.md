@@ -1,86 +1,27 @@
 # Upcoming
 
-Ideas and follow-ups that came up during other work, not yet scheduled.
+Ideas and follow-ups that came up during other work, not yet scheduled. The v1 backlog (profile
+system, vault watcher, digest-era items) was retired with v2; what remains is what still applies.
 
-## Discussed, intentionally not built yet
-
-- **Manually check whether the model ever calls `fetch_url`.** Web search now runs over
-  MCP via the third-party `searxng-mcp-server` (`agent/settings.py`'s
-  `_default_mcp_servers()`), which bundles `search_web`, `search_images`, `search_videos`,
-  `search_news`, and `fetch_url` as one package. `fetch_url` (Microsoft's `MarkItDown`
-  under the hood) turned out to just convert a page's whole DOM to markdown with no
-  boilerplate removal — verified on `https://en.wikipedia.org/wiki/Elizabeth_II`: actual
-  article content didn't start until char 41,839 of 467,982 (8.9% in), everything before
-  that was nav/sidebar/donate-link chrome. `agent/tools/general.py`'s new `fetch_webpage`
-  (trafilatura-based, real content extraction — same page: real content from char 0, in
-  116,251 chars total before truncation) replaced it for that purpose, and
-  `agent/graph.py`'s system prompt (~lines 60-69) now points at `fetch_webpage`, not
-  `fetch_url`. But there's no way to exclude a single tool from an MCP server in the
-  current `get_mcp_tools()`/`mcp_server_configs()` plumbing, so `fetch_url` is still
-  present in the bound tool list — the model could still pick it on its own even though
-  the prompt no longer names it. Once the agent-stack visibility/tool-call-tracing work
-  from the other chat lands, check whether it actually ever does; if so, decide between
-  tightening the prompt further, building tool-level filtering for MCP servers, or dropping
-  `searxng-mcp-server` in favor of a search-only MCP server plus keeping `fetch_webpage`
-  as the sole fetch path.
-
-- **Extending linked-note splitting to accumulate real content beyond People** —
-  `agent/graph.py`'s addendums now already tell the model to use
-  `get_or_create_linked_note` for a specific ongoing project or health matter, not just
-  people, so the prompting side is done. What's still open is whether those categories
-  have actually accumulated enough content in practice to be worth their own notes, versus
-  still living in About Me's shared sections.
-
-- **Per-alert-type sound control, plus a new wake-up alert.** Today's alert-sound system
-  (`routes/alert_sounds.py`, `utils/alert_sounds_store.py`, `static/alert-sounds.html`) is a
-  single flat, undifferentiated WAV library — every `POST /device/sync`
-  (`jobs/device_sync.py`) folds the *entire* library into the payload, and per
-  `routes/alert_sounds.py`'s own docstring, the ESP32-S3 firmware just picks a random file
-  from that whole library for any nudge. No per-alert-type distinction or enable/disable
-  exists anywhere. Wanted: for reminders/timers (`jobs/reminders.py`, Gotify priority 7),
-  bedtime (`jobs/bedtime.py`, priority 7), and check-in prompts (`jobs/checkin.py`, priority
-  3), an on/off toggle controlling *audio only* (not the underlying Gotify push), plus a
-  curated subset ("playlist") of the shared library per alert type — when enabled, the
-  device should randomly pick from just that alert's assigned subset, not the whole library.
-  Also wanted: a **new** wake-up alert, mirroring bedtime — `jobs/day_start.py` already runs
-  on a cron rescheduled via `settings.wake_time`, but today only sets up the day's check-in
-  window and sends no push at all, so the natural home for this is a Gotify push added
-  inside that existing job, gated by its own new enabled toggle, rather than a whole new
-  cron job. Backend work this implies: new `Settings`/`settings_store` boolean fields per
-  alert (following the `learning_mode` pattern); a new mapping table (likely extending
-  `utils/alert_sounds_store.py`) for `alert_type -> [sound_id, ...]`, since a playlist isn't
-  a scalar setting; new `/settings` fields and `static/settings.html` controls referencing
-  the sound catalog for the playlist picker; and extending `jobs/device_sync.py`'s payload
-  to carry each alert type's `{enabled, sound_ids}`. The actual "only play from the assigned
-  subset, respect the enabled flag" logic is a **firmware change**, out of scope for this
-  backend repo.
-
-## Additional suggestions (Claude's own ideas, not discussed)
-
-- **A privacy pass on what's now flowing through the vault.** The profile system is working
-  as intended, which means it now holds real, sensitive information — health/diagnosis
-  details about you and your family. Worth a deliberate think about at-rest protection
-  (vault encryption, or at least confirming Syncthing's transport security settings) given
-  that data now syncs across every paired device by default.
-- **A backup strategy distinct from Syncthing sync.** Syncthing keeps devices in sync, and
-  file versioning gives you an undo button — neither is a backup in the sense of surviving
-  a lost/corrupted primary copy propagating everywhere. A periodic off-site copy of the
-  vault would close that gap.
-- **Graceful degradation when LM Studio is unreachable.** Several paths (digest generation,
-  Inbox title/tag generation, ordinary chat) will currently just throw if the local model
-  is down or restarting. Some of this is already caught (the `/voice` background path
-  reports via Gotify), but not uniformly — a shared retry/backoff or a consistent
-  "LM Studio unreachable" user-facing message would make failures easier to diagnose.
-- **A read-only "browse the vault" dashboard page.** Chat/Voice/Onboarding/Profile/Settings
-  cover creating and updating; there's no page for just looking through what's accumulated
-  without opening Obsidian.
-- **Rate limiting.** The real login system (`auth.py`, `POST /login`, session cookies) has
-  now closed the plain-unauthenticated-GET case — `/`, `GET /settings`, `/threads`,
-  `/threads/{id}/messages` all require a session or `API_TOKEN` now, and `GET /health`
-  stays open on purpose (standard liveness-check convention, no sensitive data). What's
-  left is `POST /checkin/{id}/skip`, `POST /checkin/{id}/reply`, and
-  `POST /checkin/{id}/voice` (the magic-link check-in feature) — these are *deliberately*
-  scoped by UUID possession rather than login/`API_TOKEN`, by design, so they sit outside
-  the new system entirely. Rate limiting there is still a standalone concern, against UUID
-  brute-forcing/abuse. `POST /login` itself already has a small in-memory rate limiter
-  (`auth.py`'s `check_login_rate_limit`, 5 attempts / 15 min per IP) — that one's covered.
+- **Check whether the model ever calls `fetch_url`.** The MCP SearXNG server exposes
+  `search_web`, `search_images`, `search_videos`, `search_news` and `fetch_url`. The v2 tool set is
+  `search_web` plus the local `fetch_webpage` (trafilatura, real content extraction), but
+  `get_mcp_tools()` has no way to exclude a single MCP tool, so `fetch_url` and the others may still
+  be bound. Use the event log to see whether any turn calls them; if so, add tool-level filtering
+  or switch to a search-only MCP server.
+- **Per-alert-type sound control and a wake-up alert.** The alert-sound library is flat: the device
+  picks any sound for any nudge. Wanted: an audio on/off toggle and a curated subset per alert type
+  (reminders, bedtime, check-ins), carried in the `/device/sync` payload, plus a wake-up alert on
+  `jobs/day_start.py`. The play-from-subset logic is a firmware change, out of scope here.
+- **Graceful degradation when LM Studio is unreachable.** Several paths (scheduled messages,
+  ordinary chat) throw if the local model is down. The `/voice` background path reports through
+  Gotify, but not uniformly; a shared retry and a consistent "LM Studio unreachable" message would
+  make failures easier to diagnose.
+- **Rate limiting the check-in magic links.** `POST /checkin/{id}/skip`, `/reply` and `/voice` are
+  gated only by UUID possession; rate limiting would guard against brute-forcing. `POST /login`
+  already has a limiter (`auth.py`'s `check_login_rate_limit`).
+- **A backup strategy distinct from Syncthing.** Syncthing keeps devices in sync, which is not a
+  backup: a corrupted copy propagates everywhere. A periodic off-site copy of the vault, the event
+  log and the Radicale data would close that gap.
+- **A privacy pass on what flows through the vault.** Check-in answers are personal; consider
+  at-rest protection and confirm Syncthing's transport settings.

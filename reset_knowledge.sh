@@ -13,15 +13,16 @@
 # Docker (`docker compose up`) both always land on the same ./data/
 # location — nothing candidate/deployment-mode-specific to search for.
 #
-# The Obsidian vault (your actual notes, About Me) is NOT touched
+# The Obsidian vault (captures, check-ins, reviews, planning notes) is NOT touched
 # by default. It's synced live to every device you've paired via
 # Syncthing — deleting it here would delete it everywhere once sync
 # runs. Pass --vault if you genuinely want that too.
 #
-# checkins.db (mental-health check-in history, see utils/checkins_store.py)
+# checkins.db (check-in scheduling state; the answers live in the vault under
+# Check-ins/, see utils/checkins_store.py + utils/checkin_log.py)
 # and device_errors.db (device error history, see utils/device_errors_store.py)
 # are also NOT touched, deliberately and unconditionally — they're
-# structured logs meant to persist for future trend/digest use, not
+# structured logs meant to persist for future review use, not
 # disposable state like memory.db is.
 #
 # settings.db (standing app-level toggles, see utils/settings_store.py) is
