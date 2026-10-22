@@ -234,3 +234,20 @@ def test_add_calendar_event_notes_its_artifact(env, monkeypatch):
     uid = out.split("UID: ")[1].split(".")[0]
     assert ix.artifacts[0]["type"] == "calendar_event" and ix.artifacts[0]["id"] == uid
     assert event_log.origin_of("calendar_event", uid) == ix.id
+
+
+def test_prompt_version_file_written_once(env, monkeypatch):
+    import json
+    from agent import graph
+    tools = get_tools()
+    monkeypatch.setenv("GIT_SHA", "abc1234def")
+    version = graph._record_prompt_version(tools)
+    assert version.startswith("abc1234def+")
+    path = event_log.log_dir() / "prompt_versions" / f"{version}.json"
+    data = json.loads(path.read_text())
+    assert data["system_prompt"] == graph.SYSTEM_PROMPT and "day_planning" in data["addenda"]
+    assert any(t["function"]["name"] == "jot_note" for t in data["tools"])
+    path.write_text("{}")
+    assert graph._record_prompt_version(tools) == version and path.read_text() == "{}"
+    monkeypatch.delenv("GIT_SHA")
+    assert graph._record_prompt_version(tools) == version.split("+")[1]

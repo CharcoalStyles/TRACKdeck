@@ -24,7 +24,10 @@
 services:
 
   assistant:
-    build: .
+    build:
+      context: .
+      args:
+        GIT_SHA: ${GIT_SHA:-}
     container_name: pa-assistant
     # Run as this host user instead of root, so everything it writes to the
     # bind-mounted ./data/... paths below (memory.db, chroma_db, ...) comes

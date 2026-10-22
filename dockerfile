@@ -96,4 +96,9 @@ COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 # and — lacking --no-dev this time — tries to add dev deps (pytest etc)
 # into .venv, which is root-owned from the build step and unwritable by
 # the non-root runtime UID (docker-compose.yml's `user:`).
+# Recorded in the event log's prompt_version (agent/graph.py); pass it at build
+# time: GIT_SHA=$(git rev-parse --short HEAD) docker compose ... up --build
+ARG GIT_SHA=
+ENV GIT_SHA=$GIT_SHA
+
 CMD ["uv", "run", "--no-sync", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

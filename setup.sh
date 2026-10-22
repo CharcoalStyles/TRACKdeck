@@ -221,7 +221,8 @@ fi
 echo
 echo "All set. Next steps:"
 echo "  - Fill in CalDAV/Gotify/SMTP values in .env / .env.docker if you want those features."
-echo "  - Full stack (primary):  docker compose --env-file .env.docker up --build"
+echo "  - Full stack (primary):  GIT_SHA=\$(git rev-parse --short HEAD) docker compose --env-file .env.docker up --build"
+echo "    (GIT_SHA is optional; it labels the event log's prompt_version with the code revision)"
 echo "  - Local dev (needs uv):  uv run uvicorn main:app --reload"
 echo "See README.md's \"Running it\" section for the rest."
 echo

@@ -25,6 +25,7 @@ from agent import writer
 from agent.date_guard import clean_search_queries, fix_relative_dates
 from agent.settings import settings
 from agent.tools.all_tools import get_tools
+from utils import event_log
 from utils.datetime import format_now_human
 from utils.llm_client import get_chat_llm
 from utils.lmstudio_client import get_history_budget_tokens
@@ -193,6 +194,34 @@ def _held_back_message(call: dict) -> ToolMessage:
 _prompt_version = ""
 
 
+def _record_prompt_version(tools: list) -> str:
+    """Version id of everything the tool model can be shown (base prompt,
+    mode addenda, tool schemas), with the git sha in front when the build
+    provides one (GIT_SHA env). The full text is written once per version to
+    <event log dir>/prompt_versions/<version>.json so a logged turn's exact
+    prompt can be rebuilt after the code changes."""
+    payload = {
+        "system_prompt": SYSTEM_PROMPT,
+        "addenda": {"one_shot": ONE_SHOT_ADDENDUM, "day_planning": DAY_PLANNING_ADDENDUM},
+        "mode_tool_names": {k: sorted(v) for k, v in MODE_TOOL_NAMES.items()},
+        "tools": [convert_to_openai_tool(t) for t in tools],
+    }
+    digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
+    sha = os.environ.get("GIT_SHA", "").strip()
+    version = f"{sha[:10]}+{digest}" if sha else digest
+    try:
+        path = event_log.log_dir() / "prompt_versions" / f"{version}.json"
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps({"prompt_version": version, "git_sha": sha or None, **payload}, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+    except OSError as e:
+        logger.warning("Could not write prompt version file: %s", e)
+    return version
+
+
 def get_prompt_version() -> str:
     """Identifies what the tool model was shown: a hash of the system prompt
     and the tool schemas, plus the git sha when the build provides one
@@ -220,10 +249,7 @@ def build_graph(checkpointer, mcp_tools: list | None = None):
     # reply, and lower temperature favours consistent selection over warmth.
     # Building the client is pure object construction, so it is cached once.
     llm_with_tools = get_chat_llm(temperature=0.2).bind_tools(tools)
-    schemas = json.dumps([convert_to_openai_tool(t) for t in tools], sort_keys=True)
-    digest = hashlib.sha256((SYSTEM_PROMPT + schemas).encode()).hexdigest()[:12]
-    sha = os.environ.get("GIT_SHA", "").strip()
-    _prompt_version = f"{sha[:10]}+{digest}" if sha else digest
+    _prompt_version = _record_prompt_version(tools)
 
     mode_tools = {}
     for mode_key, names in MODE_TOOL_NAMES.items():
