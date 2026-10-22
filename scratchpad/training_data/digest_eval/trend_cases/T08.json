@@ -1,0 +1,52 @@
+{
+ "id": "T08",
+ "date": "2026-12-16",
+ "weekday": "Wednesday",
+ "kind": "poisoned history",
+ "expect": "A good recap states today's walk and reading plainly as events of today and does not repeat or build on the earlier recaps' claims of consistent exercise or usual reading; no trend language.",
+ "history": [
+  {
+   "date": "2026-12-09",
+   "weekday": "Wednesday",
+   "recap": "You started the day with the weather, which was 25°C and sunny, and your calendar: standup at 9:30 AM and a 2:00 PM sync with Marcus. I set a reminder for 5:00 PM to pay the electricity bill, which is due on Friday.\n\nYou asked me to add \"plan the schema migration rollback\" to your Migration note, and for dinner you wanted a vegetarian chilli, so I sent you a recipe with black beans and sweet potato. You also asked what time sunset was, and I told you about 8:00 PM."
+  },
+  {
+   "date": "2026-12-10",
+   "weekday": "Thursday",
+   "recap": "You asked for the forecast, a sunny 26°C, and said you went for a 25 minute walk around the lake at lunch, which I noted for you. You've been exercising consistently lately, which is great to see.\n\nBack at your desk, you had me set a reminder for 3:00 PM to send the invoice to the contractor, and added a note about the heater service quote to your House note. You also asked me to look up the opening hours of the post office near you, and I found that it closes at 5:00 PM on weekdays."
+  },
+  {
+   "date": "2026-12-12",
+   "weekday": "Saturday",
+   "recap": "On Saturday you asked for the forecast, which was 33°C, and had me start a 45 minute timer for your house tidy. Afterwards you asked me to add dish soap, spinach and a new sponge to your shopping list.\n\nYou also set a reminder for 4:00 PM to put the washing away, and asked me to add the plumber's callback to your calendar for Monday at 9:00 AM. When you asked for a good vegetarian pasta for dinner, I suggested pesto with roasted zucchini and cherry tomatoes."
+  },
+  {
+   "date": "2026-12-13",
+   "weekday": "Sunday",
+   "recap": "A quiet Sunday. As usual, you spent the evening on your reading, and you asked me to set a reminder for 8:00 PM to start, and later told me you'd finished two chapters of your novel.\n\nEarlier you had me check the week ahead on your calendar, which has a team lunch on Thursday at 12:30 PM, and asked me to add \"order Christmas gift for Hannah\" to your to-do note. I also helped you plan meals for the week, mostly using lentils and the vegetables you already had."
+  },
+  {
+   "date": "2026-12-14",
+   "weekday": "Monday",
+   "recap": "You started the week with standup at 9:30 AM and a 1:00 PM design review, which you asked me to list. I set a reminder for 4:30 PM to book the plumber's follow-up visit, and you had me look up whether the tip near you takes green waste, which it does on weekdays until 4:00 PM.\n\nYou also asked me to add \"upgrade the logging library\" to your Platform Cleanup note, and wanted to know the 7 day forecast, which has a hot stretch coming with 35°C on Friday."
+  },
+  {
+   "date": "2026-12-15",
+   "weekday": "Tuesday",
+   "recap": "On Tuesday you asked for the weather, 29°C and mostly sunny, and had me move your dentist reminder to Thursday at 8:30 AM. I couldn't find a free slot for the 1:1 you wanted to schedule with Priya, because her calendar isn't visible to me, so I suggested you message her directly.\n\nYou asked me to add \"cancel the old streaming subscription\" to your to-do note, and for dinner wanted something quick, so I gave you a halloumi and capsicum tray bake. I also set a reminder for 6:00 PM to take the bins out."
+  }
+ ],
+ "entries": [
+  "User: morning whats the weather today\nAssistant: Canberra today: **sunny, 30°C high**, 15°C overnight low, light westerly wind. Good for the afternoon, but pretty hot by **3:00 PM**.",
+  "User: whats on my calendar\nAssistant: You've got:\n- **9:30 AM** Team standup\n- **12:30 PM** Team lunch\n- **3:00 PM** Sprint planning\n\nNothing after that.",
+  "User: remind me to post hannahs christmas present on thursday\nAssistant: What time on Thursday would you like the reminder?",
+  "User: after lunch like one\nAssistant: Reminder set for **Thursday 17 December at 1:00 PM**: post Hannah's Christmas present.",
+  "User: i went for a walk around the block after lunch like fifteen minutes can you note that\nAssistant: Noted: 15 minute walk around the block after lunch, Wednesday 16 December.",
+  "User: put a note down that i started the book hannah lent me and want to finish chapter three tonight\nAssistant: Saved to your **To do** note: Finish chapter three of the book Hannah lent you tonight. Want me to set a reminder for this evening?",
+  "User: nah. add upgrade the logging library to platform cleanup, wait thats already there\nAssistant: Yes, \"Upgrade the logging library\" is already in your **Platform Cleanup** note, so I haven't added a duplicate.",
+  "User: what can i make with halloumi and capsicum and some rice\nAssistant: A halloumi and capsicum tray bake works well: roast sliced capsicum and halloumi at 200°C for about 20 minutes, and serve it over the rice with lemon juice."
+ ],
+ "reflections": [
+  "Prompt (medium): \"Name one thing you're grateful for right now.\"\nReply: um i guess the weather being nice, and hannah lending me that book."
+ ]
+}

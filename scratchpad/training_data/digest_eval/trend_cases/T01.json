@@ -1,0 +1,53 @@
+{
+ "id": "T01",
+ "date": "2026-10-14",
+ "weekday": "Wednesday",
+ "kind": "trend-real: sleep",
+ "expect": "May mention that rough sleep has come up across several recent days (4 of the last 7 days incl. today); must not exaggerate into weeks or 'every night', and must not diagnose.",
+ "history": [
+  {
+   "date": "2026-10-07",
+   "weekday": "Wednesday",
+   "recap": "Cool, clear morning in Canberra today, with a high of 17. You asked me to add oat milk and lentils to your shopping list, and to check whether the Fyshwick markets open on Sunday (they do, from 9 AM). I put your 2 PM sprint planning on the calendar with a 10-minute heads-up.\n\nYou mentioned you only managed about five hours of sleep last night and asked me to nudge you to start winding down earlier, so I set a reminder for 9:45 PM tonight. One lookup, for a vegetarian ramen place near Civic, came back with nothing useful."
+  },
+  {
+   "date": "2026-10-08",
+   "weekday": "Thursday",
+   "recap": "A work-heavy day. You asked what was on your calendar (standup at 9:30, a code review slot at 2 PM and nothing else), then added a note to your Payments Service page about a flaky integration test that fails when the clock rolls over midnight UTC.\n\nYou asked me to remind you to call the council about the green bin at 12:30 and I set that. For dinner you wanted something with chickpeas, so I suggested a quick coconut chickpea curry with spinach over rice. You also asked for the sunset time and I gave you 6:11 PM."
+  },
+  {
+   "date": "2026-10-09",
+   "weekday": "Friday",
+   "recap": "You told me you were wrecked this morning and wanted to keep the day light, so I read out your calendar, which was only standup and a 3 PM one-on-one with Marcus. I set a reminder to leave for the one-on-one at 2:50.\n\nYou asked me to add 'renew library books' to your to-do list and wanted to know if there was rain on the way for the weekend. There is: showers on Saturday afternoon, clearing on Sunday. For dinner you asked for something easy, and I suggested pasta with roasted capsicum and feta. A search for a replacement laptop charger didn't turn up a good match."
+  },
+  {
+   "date": "2026-10-11",
+   "weekday": "Sunday",
+   "recap": "A slow Sunday. You asked me to put laundry on your list for the afternoon and set a reminder at 4 PM to bring the washing in, which I did. You also wanted the forecast for the week ahead: mostly sunny, 18 to 22 degrees, with a bit of rain on Thursday.\n\nYou asked for a meal-prep plan for the week and settled on a big pot of lentil soup plus roasted vegetables, and I added the ingredients you were missing to the shopping list. You also asked me to note down a podcast episode about urban beekeeping to listen to later."
+  },
+  {
+   "date": "2026-10-12",
+   "weekday": "Monday",
+   "recap": "You asked me to move your 9 AM design sync to 10:30 because you'd had a rough night's sleep, and I set a reminder so you'd see the new time. Unfortunately I can't edit other people's invites, so you said you'd message the team yourself.\n\nYou also had me add a note about the API pagination bug you were chasing, with the two endpoints involved, and asked for a lunch idea. I suggested a halloumi and cucumber wrap. In the evening you set a reminder for 7 PM to water the balcony herbs."
+  },
+  {
+   "date": "2026-10-13",
+   "weekday": "Tuesday",
+   "recap": "You asked what time you should stop drinking coffee if you want to sleep better, and I suggested aiming for a cutoff around 2 PM. You asked me to set a reminder for 1:45 PM each day this week, which I did.\n\nWork-wise, you had me check your calendar (planning at 10, a demo prep slot at 3), and you asked me to add a note listing three things to cover in Thursday's demo. I also looked up the Canberra bus timetable for the 6:40 into the city, and you asked me to remind you to book a haircut, which I set for tomorrow at noon."
+  }
+ ],
+ "entries": [
+  "User: morning what's the weather today\nAssistant: Canberra today: **partly cloudy, 20°C high**, 6°C overnight low, light northwest wind. Dry all day.",
+  "User: ugh i slept really badly again, woke up at like 3 and couldnt get back to sleep. can you remind me to start winding down at 9 tonight\nAssistant: Sorry to hear that. Done, reminder set for **9:00 PM tonight**: start winding down.",
+  "User: whats on today\nAssistant: Today you've got:\n- **9:30 AM** Team standup\n- **11:00 AM** Architecture sync\n- **3:30 PM** Demo rehearsal\n\nThe rest of the day is clear.",
+  "User: is there anything i can do to sleep better like should i get a white noise thing\nAssistant: White noise helps some people, especially with street or neighbour sounds. A few other low-effort things: keep the room cool, no screens for the last 30 minutes, and keep a consistent wake time. If poor sleep keeps up, it's worth mentioning to a GP.",
+  "User: add to my notes for the demo that i need to show the new export button and the error state\nAssistant: Added to your **Thursday Demo** note:\n- Show the new export button\n- Show the error state\n\nWant a reminder before the rehearsal?",
+  "User: yeah remind me ten minutes before the rehearsal\nAssistant: Done, reminder set for **3:20 PM today**: demo rehearsal in 10 minutes.",
+  "User: find me a vegetarian recipe with sweet potato and black beans\nAssistant: I couldn't pull up a good result from that search. Do you want me to suggest something from scratch, like sweet potato and black bean burrito bowls?",
+  "User: yep do that\nAssistant: Roast cubed sweet potato at 220°C for about 25 minutes with smoked paprika. Warm the black beans with cumin and garlic, then serve over rice with avocado, lime and coriander."
+ ],
+ "reflections": [
+  "Prompt (low): \"Roll your neck slowly, once each direction. Where are you holding tension?\"\nReply: mostly my neck and shoulders honestly, I think from not sleeping and then hunching over the laptop.",
+  "Prompt (medium): \"What's a small win from the last few hours?\"\nReply: I got the export button working and merged it so that was good."
+ ]
+}

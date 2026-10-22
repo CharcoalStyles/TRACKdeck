@@ -221,12 +221,13 @@ class Settings:
     # Cosine distance cutoff for agent/graph.py's cross-thread conversation
     # recall (agent/memory.py's search_conversations) — a match farther
     # than this from the current query is dropped rather than injected
-    # into the system prompt as "RELEVANT PAST CONTEXT". 0.8 is a rough
-    # starting point, not a measured value — tune it from real distances
+    # into the system prompt as "RELEVANT PAST CONTEXT". 0.5 is a rough
+    # starting point (0.8 let loosely related turns leak dates into calendar
+    # writes), not a measured value — tune it from real distances
     # via the thread-debug dashboard page (which logs every turn's
     # recalled matches, see utils/recall_log_store.py) rather than
     # guessing blind. No env var, same reasoning as default_location above.
-    recall_max_distance: float = 0.8
+    recall_max_distance: float = 0.5
 
     # How many days back agent/graph.py's cross-thread conversation recall
     # is allowed to reach — a summary older than this is excluded from
@@ -332,6 +333,17 @@ class Settings:
     # restart: agent/graph.py's call_llm re-binds it fresh every turn.
     lmstudio_chat_model: str = os.environ.get("LMSTUDIO_CHAT_MODEL", "")
 
+    # LM Studio model that writes anything the user reads as prose (the daily
+    # digest first; see README "Planned: split-model architecture"). Empty =
+    # no split, get_writer_llm() falls back to lmstudio_chat_model. Only
+    # applies on the lmstudio provider. Live-editable, no restart.
+    lmstudio_writer_model: str = os.environ.get("LMSTUDIO_WRITER_MODEL", "")
+
+    # Per-mode model overrides, JSON: {"onboarding": {"tool": "<id>", "writer": "<id>"}, ...}.
+    # Blank/missing = lmstudio_chat_model for tools, lmstudio_writer_model for
+    # replies. See agent/model_assignments.py. Live-editable, read per turn.
+    model_assignments: str = "{}"
+
     # Which chat-completion backend utils/llm_client.py's get_chat_llm()
     # builds: "lmstudio" (default, always configured — see .env.example) or
     # "openrouter" (needs OPENROUTER_API_KEY). Seeded from LLM_PROVIDER so an
@@ -349,6 +361,28 @@ class Settings:
     # those two, since gemini's setup story (a whole separate hosted API key)
     # isn't worth a live UI toggle.
     llm_provider: str = os.environ.get("LLM_PROVIDER", "lmstudio")
+
+    # Off by default. When on, agent/tool_router.py narrows which tool
+    # schemas are bound per turn (via a Laya Choice call over ~9 tool
+    # categories) instead of always offering the full tool list — see
+    # agent/tool_router.py's module docstring for why it never suppresses
+    # tool-calling outright, only narrows which tools are offered. A
+    # testing toggle for an A/B comparison against the unmodified
+    # baseline, not a deployment knob — no env var, same reasoning as
+    # default_location above. Fully live, no restart: agent/graph.py's
+    # call_llm reads it fresh every turn, same pattern as llm_provider.
+    tool_router_enabled: bool = False
+
+    # Off by default. When on, agent/tool_suggestion.py appends an "I think
+    # these tools will help..." hint built from Laya (a per-tool Choice) to
+    # the system prompt, WITHOUT changing which tool schemas are bound —
+    # unlike tool_router_enabled's narrowing above, a wrong suggestion here
+    # can only be ignored, never make a tool unavailable. A separate
+    # testing toggle from tool_router_enabled so the two can be A/B tested
+    # independently — no env var, same reasoning as default_location above.
+    # Fully live, no restart: agent/graph.py's call_llm reads it fresh
+    # every turn, same pattern as tool_router_enabled.
+    tool_suggestion_enabled: bool = False
 
     def zoneinfo(self) -> ZoneInfo:
         return ZoneInfo(self.timezone)
@@ -414,6 +448,10 @@ def apply_persisted(values: dict[str, str]) -> None:
         settings.openrouter_chat_model = values["openrouter_chat_model"]
     if "lmstudio_chat_model" in values:
         settings.lmstudio_chat_model = values["lmstudio_chat_model"]
+    if "lmstudio_writer_model" in values:
+        settings.lmstudio_writer_model = values["lmstudio_writer_model"]
+    if "model_assignments" in values:
+        settings.model_assignments = values["model_assignments"]
     if "llm_provider" in values:
         settings.llm_provider = values["llm_provider"]
     if "gotify_url" in values:
@@ -422,3 +460,7 @@ def apply_persisted(values: dict[str, str]) -> None:
         settings.gotify_token = values["gotify_token"]
     if "mcp_servers" in values:
         settings.mcp_servers = values["mcp_servers"]
+    if "tool_router_enabled" in values:
+        settings.tool_router_enabled = values["tool_router_enabled"] == "true"
+    if "tool_suggestion_enabled" in values:
+        settings.tool_suggestion_enabled = values["tool_suggestion_enabled"] == "true"

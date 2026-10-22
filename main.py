@@ -4,6 +4,7 @@ Personal Assistant — FastAPI + LangGraph
 """
 import os
 import asyncio
+import json
 import logging
 import mimetypes
 import time
@@ -67,9 +68,11 @@ if os.environ.get("SESSION_SECRET_KEY") in (None, _PLACEHOLDER_SESSION_SECRET_KE
     )
 
 import auth
+from agent import model_assignments
 from agent.checkin_prompts import PROMPTS
 from agent.graph import build_graph
 from agent.memory import MemoryStore, make_chroma_client, make_embedding_function
+from agent.profile_import import import_basics
 from agent.runtime import (
     app_state,
     clear_thread,
@@ -130,7 +133,10 @@ from utils import (
     reminders_store,
     settings_store,
     task_library_store,
+    tool_router_log,
+    tool_suggestion_log,
     vault,
+    writer_log,
 )
 from utils.caldav_client import ensure_collection_exists
 from utils.datetime import parse_local_datetime
@@ -147,6 +153,7 @@ from routes.calendar_proxy import router as calendar_proxy_router
 from routes.alert_sounds import router as alert_sounds_router
 from routes.reflection import router as reflection_router
 from routes.day_plans import router as day_plans_router
+from routes.laya_playground import router as laya_playground_router
 from routes.task_library import router as task_library_router
 
 # ---------------------------------------------------------------------------
@@ -247,6 +254,9 @@ async def lifespan(app: FastAPI):
         await asyncio.to_thread(device_errors_store.init_db)
         await asyncio.to_thread(activity_log_store.init_db)
         await asyncio.to_thread(recall_log_store.init_db)
+        await asyncio.to_thread(tool_router_log.init_db)
+        await asyncio.to_thread(tool_suggestion_log.init_db)
+        await asyncio.to_thread(writer_log.init_db)
         await asyncio.to_thread(day_plans_store.init_db)
         await asyncio.to_thread(task_library_store.init_db)
         for reminder in await asyncio.to_thread(reminders_store.list_pending):
@@ -385,6 +395,7 @@ app.include_router(alert_sounds_router)  # /alert-sounds, /device/alert-sounds/{
 app.include_router(reflection_router)  # /reflection
 app.include_router(day_plans_router)  # /day-plans
 app.include_router(task_library_router)  # /task-library
+app.include_router(laya_playground_router)  # /laya-playground — see its own docstring; not deployed/wired to real tool-calling yet
 
 
 # ---------------------------------------------------------------------------
@@ -950,10 +961,23 @@ class SettingsUpdate(BaseModel):
     # Which LM Studio model get_chat_llm()/call_llm build when llm_provider
     # is "lmstudio" (utils/lmstudio_client.py, GET /debug/lmstudio-models).
     lmstudio_chat_model: str | None = None
+    # LM Studio model for user-read prose (digest first); blank = same as chat model.
+    lmstudio_writer_model: str | None = None
+    # Per-mode model overrides (agent/model_assignments.py); the whole dict replaces the stored one.
+    model_assignments: dict[str, dict[str, str]] | None = None
     # Which OpenRouter model get_chat_llm()/call_llm build when
     # llm_provider is "openrouter" (utils/openrouter_client.py, GET
     # /debug/openrouter-models).
     openrouter_chat_model: str | None = None
+    # Off by default (agent/settings.py's tool_router_enabled) — narrows
+    # which tools are bound per turn via agent/tool_router.py. A testing
+    # toggle for an A/B comparison, live no restart.
+    tool_router_enabled: bool | None = None
+    # Off by default (agent/settings.py's tool_suggestion_enabled) — appends
+    # an "I think these tools will help..." hint to the system prompt via
+    # agent/tool_suggestion.py, without changing which tools are bound. A
+    # separate testing toggle from tool_router_enabled, live no restart.
+    tool_suggestion_enabled: bool | None = None
 
     @model_validator(mode="after")
     def _check_values(self):
@@ -991,6 +1015,8 @@ class SettingsUpdate(BaseModel):
             self.max_history_tokens
         ):
             raise ValueError("max_history_tokens must be between 500 and 200000")
+        if self.model_assignments is not None:
+            model_assignments.validate(self.model_assignments)
         if self.llm_provider is not None:
             if not is_valid_llm_provider(self.llm_provider):
                 raise ValueError("llm_provider must be 'lmstudio' or 'openrouter'")
@@ -1025,6 +1051,9 @@ class SettingsResponse(BaseModel):
     # card disables switching to "openrouter" when this is false, matching
     # POST /settings' own validation (SettingsUpdate._check_values).
     openrouter_configured: bool
+    lmstudio_writer_model: str
+    tool_router_enabled: bool
+    tool_suggestion_enabled: bool
     onboarding_complete: bool
     basics_complete: bool
 
@@ -1053,7 +1082,10 @@ def _current_settings() -> dict:
         "planning_template_note_id": settings.planning_template_note_id,
         "chime_alert_sound_id": settings.chime_alert_sound_id,
         "llm_provider": settings.llm_provider,
+        "lmstudio_writer_model": settings.lmstudio_writer_model,
         "openrouter_configured": openrouter_configured(),
+        "tool_router_enabled": settings.tool_router_enabled,
+        "tool_suggestion_enabled": settings.tool_suggestion_enabled,
         # Read-only here — deliberately not part of SettingsUpdate below, so
         # it can only be set via agent/tools/general.py's
         # mark_onboarding_complete tool, not a direct POST /settings call.
@@ -1080,6 +1112,12 @@ async def _apply_settings_update(update: SettingsUpdate) -> None:
     if update.learning_mode is not None:
         settings.learning_mode = update.learning_mode
         changed["learning_mode"] = "true" if update.learning_mode else "false"
+    if update.tool_router_enabled is not None:
+        settings.tool_router_enabled = update.tool_router_enabled
+        changed["tool_router_enabled"] = "true" if update.tool_router_enabled else "false"
+    if update.tool_suggestion_enabled is not None:
+        settings.tool_suggestion_enabled = update.tool_suggestion_enabled
+        changed["tool_suggestion_enabled"] = "true" if update.tool_suggestion_enabled else "false"
     if update.default_location is not None:
         settings.default_location = update.default_location.strip()
         changed["default_location"] = settings.default_location
@@ -1145,6 +1183,12 @@ async def _apply_settings_update(update: SettingsUpdate) -> None:
     if update.lmstudio_chat_model is not None:
         settings.lmstudio_chat_model = update.lmstudio_chat_model.strip()
         changed["lmstudio_chat_model"] = settings.lmstudio_chat_model
+    if update.lmstudio_writer_model is not None:
+        settings.lmstudio_writer_model = update.lmstudio_writer_model.strip()
+        changed["lmstudio_writer_model"] = settings.lmstudio_writer_model
+    if update.model_assignments is not None:
+        settings.model_assignments = json.dumps(model_assignments.validate(update.model_assignments))
+        changed["model_assignments"] = settings.model_assignments
     if update.openrouter_chat_model is not None:
         settings.openrouter_chat_model = update.openrouter_chat_model.strip()
         changed["openrouter_chat_model"] = settings.openrouter_chat_model
@@ -1268,106 +1312,23 @@ class OnboardingBasicsResponse(SettingsResponse):
     location_resolved: bool
 
 
-# Field groups for the onboarding recap, kept small enough per turn to fit a local
-# model's context (a single message with every field, plus the system prompt and ~30
-# bound tool schemas, was overflowing LM Studio's loaded context length — see
-# _process_onboarding_recap below).
-_ONBOARDING_RECAP_GROUPS: list[list[str]] = [
-    ["name", "birthday", "occupation", "current_job", "important_dates"],
-    ["people"],
-    ["preferences", "routine"],
-    ["interests", "values", "health_goals"],
-]
+_ONBOARDING_KICKOFF = (
+    "I've just filled out the basics form. Everything on it is already recorded in my "
+    "About Me note, so don't re-record it. Read it, then start the interview with one question "
+    "about something it leaves thin."
+)
 
 
-def _onboarding_recap_groups() -> list[list[str]]:
-    """One group per _process_onboarding_recap turn. Chunked only for
-    lmstudio — the small local model's limited context is what made one
-    combined message overflow in the first place (see comment above).
-    Hosted providers have far more context, and chunking there is
-    actively counterproductive: every chunk re-pays the full system
-    prompt + tool schemas + onboarding addendum fixed cost, so 4 small
-    chunks cost more total input tokens than 1 combined one — exactly
-    the kind of thing that blows through Groq's per-minute rate limit."""
-    if settings.llm_provider == "lmstudio":
-        return _ONBOARDING_RECAP_GROUPS
-    return [[key for group in _ONBOARDING_RECAP_GROUPS for key in group]]
-
-
-def _build_onboarding_recap_chunks(request: "OnboardingBasicsRequest") -> list[str]:
-    field_lines = {
-        "name": f"Name: {request.name}" if request.name else None,
-        "birthday": f"Birthday: {request.birthday}" if request.birthday else None,
-        "occupation": f"Occupation: {request.occupation}" if request.occupation else None,
-        "current_job": f"Current job: {request.current_job}" if request.current_job else None,
-        "important_dates": (
-            f"Important Dates: {request.important_dates}" if request.important_dates else None
-        ),
-        "people": (
-            "People: " + ", ".join(
-                f"{p.name} ({p.relation})" if p.relation else p.name for p in request.people
-            )
-            if request.people
-            else None
-        ),
-        "preferences": f"Preferences: {request.preferences}" if request.preferences else None,
-        "routine": f"Routine: {request.routine}" if request.routine else None,
-        "interests": f"Interests: {request.interests}" if request.interests else None,
-        "values": f"Values: {request.values}" if request.values else None,
-        "health_goals": (
-            f"Health & Goals: {request.health_goals}" if request.health_goals else None
-        ),
-    }
-
-    groups = [
-        [field_lines[key] for key in group if field_lines[key]]
-        for group in _onboarding_recap_groups()
-    ]
-    groups = [g for g in groups if g]
-
-    chunks = []
-    for i, lines in enumerate(groups):
-        header = (
-            "I just filled out the basics form:"
-            if len(groups) == 1
-            else f"I'm continuing to fill out my basics form (part {i + 1} of {len(groups)}):"
-        )
-        chunk = header + "\n" + "\n".join(lines)
-        if i == len(groups) - 1:
-            chunk += (
-                "\n\nPlease record this properly (a separate note for each person listed), "
-                "and ask me about anything here you'd like more detail on."
-            )
-        chunks.append(chunk)
-    return chunks
-
-
-async def _process_onboarding_recap(chunks: list[str]) -> None:
-    """Runs each recap chunk as its own turn in the "onboarding" thread,
-    sequentially (they share one LangGraph-checkpointed thread, so concurrent
-    calls would race the checkpoint). Fire-and-forget background task, same
-    pattern as voice.py's _process_voice_note — failures/success surface via
-    Gotify, never over HTTP, since the request has already returned."""
-    failures = 0
-    last_error: Exception | None = None
-    for chunk in chunks:
-        try:
-            await run_agent(chunk, thread_id="onboarding", mode="onboarding")
-        except Exception as e:
-            logger.exception("Onboarding recap chunk failed")
-            failures += 1
-            last_error = e
-
-    if failures:
-        await asyncio.to_thread(
-            notify_error,
-            f"Onboarding basics: {failures}/{len(chunks)} parts failed to record",
-            last_error,
-        )
-    else:
-        await asyncio.to_thread(
-            send_gotify, "Onboarding", "All basics form details recorded.", priority=3
-        )
+async def _start_onboarding_interview() -> None:
+    """One short turn in the "onboarding" thread that opens the interview.
+    Fire-and-forget background task, same pattern as voice.py's
+    _process_voice_note — failures surface via Gotify, never over HTTP,
+    since the request has already returned."""
+    try:
+        await run_agent(_ONBOARDING_KICKOFF, thread_id="onboarding", mode="onboarding")
+    except Exception as e:
+        logger.exception("Onboarding kickoff turn failed")
+        await asyncio.to_thread(notify_error, "Onboarding: couldn't start the interview", e)
 
 
 @app.post("/onboarding/basics", response_model=OnboardingBasicsResponse)
@@ -1381,14 +1342,10 @@ async def submit_onboarding_basics(
     is optional. Location/wake_time/bedtime go through the same settings
     write path as POST /settings (not About Me — that separation is
     deliberate, see agent/tools/general.py's set_home_location). Everything
-    else is handed to the agent as a handful of real turns in the
-    "onboarding" thread, run in the background after this responds (see
-    _process_onboarding_recap) — its own tools (remember_about_me,
-    get_or_create_linked_note) do the actual About Me writing, so the
-    content gets written up properly (with a dedicated note per person)
-    instead of dumped in verbatim, and its replies — likely follow-up
-    questions — land in the thread for the chat view to pick up on next
-    load."""
+    else is written into About Me directly by agent/profile_import.py — no
+    LLM involved, so nothing can be dropped or invented — with a dedicated
+    note per person. A short background turn then has the assistant open
+    the follow-up interview in the "onboarding" thread."""
     location_resolved = False
     try:
         if request.location:
@@ -1406,10 +1363,13 @@ async def submit_onboarding_basics(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    chunks = _build_onboarding_recap_chunks(request)
+    try:
+        await import_basics(app_state.memory, request)
+    except Exception:
+        logger.exception("Onboarding basics import failed")
+        raise HTTPException(status_code=500, detail="Couldn't save the basics form; please try again.")
     onboarding_state.mark_basics_complete()
-    if chunks:
-        background_tasks.add_task(_process_onboarding_recap, chunks)
+    background_tasks.add_task(_start_onboarding_interview)
 
     return {**_current_settings(), "location_resolved": location_resolved}
 
@@ -1417,9 +1377,8 @@ async def submit_onboarding_basics(
 @app.post("/onboarding/complete", response_model=SettingsResponse)
 async def complete_onboarding(_: Annotated[None, Depends(auth.require_session_or_token)]):
     """Explicit "Finished" action from the onboarding chat step's UI — the
-    manual, user-triggered counterpart to the mark_onboarding_complete
-    agent tool (agent/tools/general.py), which sets the same flag when the
-    model itself decides the interview has covered enough."""
+    the only way onboarding is marked complete from the dashboard (the
+    onboarding model doesn't have mark_onboarding_complete)."""
     onboarding_state.mark_onboarding_complete()
     return _current_settings()
 
@@ -1714,6 +1673,48 @@ async def debug_thread(
     isn't satisfiable without a reasoning-capable model swap.
     """
     return await get_thread_debug(thread_id)
+
+
+class ModelAssignmentRow(BaseModel):
+    key: str
+    label: str
+    tool_calls: bool
+    reply_rule: str
+    tool_model: str | None
+    tool_override: str
+    writer_model: str | None
+    writer_override: str
+    reply_model: str
+
+
+class ModelAssignmentsResponse(BaseModel):
+    provider: str
+    split_applies: bool
+    default_tool_model: str
+    default_writer_model: str
+    no_writer_value: str
+    rows: list[ModelAssignmentRow]
+
+
+@app.get("/settings/model-assignments", response_model=ModelAssignmentsResponse)
+async def get_model_assignments(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """Which model does tool calling and which writes replies, for every mode
+    (agent/model_assignments.py) — effective values plus the stored overrides."""
+    return model_assignments.matrix()
+
+
+@app.get("/debug/writer-log")
+async def debug_writer_log(
+    _: Annotated[None, Depends(auth.require_session_or_token)],
+    thread_id: str | None = None,
+    limit: int = 100,
+):
+    """
+    Newest-first log of every split-model decision (agent/writer.py): per
+    final reply or long note argument, whether the tool model's draft was
+    kept or the writer model's text used, why, both texts, and latency.
+    """
+    return {"entries": await asyncio.to_thread(writer_log.get_writer_log, thread_id, max(1, min(limit, 500)))}
 
 
 @app.get("/agent-activity/{thread_id}", response_model=AgentActivityResponse)

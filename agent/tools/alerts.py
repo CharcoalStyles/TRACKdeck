@@ -1,6 +1,6 @@
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from apscheduler.jobstores.base import JobLookupError
@@ -11,7 +11,7 @@ from agent.scheduler import scheduler
 from agent.settings import settings
 from jobs.reminders import fire_reminder
 from utils import reminders_store
-from utils.datetime import parse_local_datetime
+from utils.datetime import parse_local_datetime, past_start_message
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,10 @@ def _create_reminder(message: str, when: str) -> str:
         due_local = parse_local_datetime(when)
     except (ValueError, AttributeError):
         return f"I couldn't understand the time '{when}'. Try an absolute date and time."
+
+    past = past_start_message(due_local, "set the reminder", "set_reminder", grace=timedelta(minutes=2))
+    if past:
+        return past
 
     reminder_id = str(uuid.uuid4())
     due_epoch = int(due_local.astimezone(timezone.utc).timestamp())

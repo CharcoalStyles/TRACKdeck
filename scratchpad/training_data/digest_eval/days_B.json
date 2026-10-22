@@ -1,0 +1,154 @@
+[
+  {
+    "id": "D09",
+    "date": "2026-10-08",
+    "weekday": "Thursday",
+    "kind": "busy",
+    "entries": [
+      "User: whats the weather doing today\nAssistant: Canberra today (Thursday): sunny, **3°C** this morning warming to a top of **19°C**. No rain expected. A jacket for the morning is plenty.",
+      "User: whats on my calendar today\nAssistant: Today you have:\n- **10:00** Sprint planning\n- **13:30** Design review\n- **15:00** Focus block\n\nNothing booked after work.",
+      "User: remind me to take the bins out tonight\nAssistant: Done, I'll remind you at **7:00 pm** tonight to take the bins out.",
+      "User: add oat milk and tofu and spinach to my shopping note\nAssistant: Added oat milk, tofu and spinach to your Shopping List note. Anything else for it?",
+      "User: can you find the opening hours for the fyshwick markets on sunday\nAssistant: I searched but couldn't find reliable opening hours for this Sunday. The pages I found looked out of date or contradicted each other. It might be worth checking their own page directly.",
+      "User: remind me at 2:30 to ping dan about the staging deploy\nAssistant: Sorry, I couldn't set that reminder, the scheduler returned an error. Want me to try again?",
+      "User: yeah try again\nAssistant: Got it this time. I'll remind you at **2:30 pm** to ping Dan about the staging deploy.",
+      "User: make a note project idea a little cli that diffs two env files and warns about missing keys\nAssistant: Saved a new note called **Env diff CLI idea** with that description. Want me to add any details like language or features?",
+      "User: whats a good vegetarian dinner with chickpeas and spinach i have like 20 minutes\nAssistant: Try a quick chana saag:\n- Fry onion, garlic and a spoon of curry paste for 3 minutes\n- Add a tin of chickpeas and a tin of tomatoes, simmer 8 minutes\n- Stir through the spinach until wilted\n\nServe with rice or naan. Want me to add anything you're missing to the shopping list?",
+      "User: what time is sunset tonight\nAssistant: I can't pull sunset times from the weather source I have. Would you like me to search the web for it?",
+      "User: yeah\nAssistant: Sunset in Canberra tonight is around **6:07 pm**.",
+      "User: what do i have tomorrow\nAssistant: Tomorrow (Friday):\n- **09:30** Standup\n- **12:00** Lunch with Mel\n\nThe afternoon is clear.",
+      "User: set a timer for 25 minutes\nAssistant: Timer set for **25 minutes**."
+    ],
+    "reflections": [
+      "Prompt (low): \"Find the furthest object you can see and focus on it for a few seconds. How do your eyes feel now?\"\nReply: yeah that was nice, my eyes are a bit tired from the screen honestly. looked out at the trees for a bit.",
+      "Prompt (medium): \"What's a small win from the last few hours?\"\nReply: got the deploy script fixed this morning so we're unblocked for tomorrow."
+    ]
+  },
+  {
+    "id": "D10",
+    "date": "2026-10-13",
+    "weekday": "Tuesday",
+    "kind": "moderate",
+    "entries": [
+      "User: do i need an umbrella today\nAssistant: No umbrella needed. Today in Canberra is mostly cloudy with a max of **17°C** and only a 10% chance of showers.",
+      "User: add a calendar event gp appointment this thursday the 15th at 9:15\nAssistant: Added **GP appointment** to your calendar for **Thursday 15 October at 9:15 am**.",
+      "User: also remind me to take my iron tablet tonight at 8\nAssistant: Reminder set for **8:00 pm** tonight to take your iron tablet.",
+      "User: can you make that repeat every day\nAssistant: Reminders here are one-off only. For something recurring, a daily calendar event with an alert works better. Want me to create one at 8 pm?",
+      "User: yeah do that\nAssistant: Created a daily **Iron tablet** event at **8:00 pm** with an alert, starting today.",
+      "User: note look into tailscale for the raspberry pi project so i can ssh in from anywhere\nAssistant: Appended that to your **Raspberry Pi project** note under Ideas.",
+      "User: whats the cheapest way to get from civic to the airport\nAssistant: A bus is usually the cheapest option, and a rideshare is quicker but costs noticeably more. I couldn't confirm current fares or the exact route number, so check the Transport Canberra site before you go."
+    ],
+    "reflections": [
+      "Prompt (medium): \"What's one thing you're looking forward to, even something small?\"\nReply: um the weekend, i want to get out for a longer walk if the weather holds."
+    ]
+  },
+  {
+    "id": "D11",
+    "date": "2026-10-18",
+    "weekday": "Sunday",
+    "kind": "quiet",
+    "entries": [
+      "User: is it good weather for a walk this arvo\nAssistant: Yes, this afternoon looks good: sunny and about **21°C** with a light breeze. Best window is between 2 and 5 pm.",
+      "User: remind me to start the laundry at 4\nAssistant: Done. I'll remind you at **4:00 pm** to start the laundry."
+    ],
+    "reflections": [
+      "Prompt (low): \"If you can, stand up and take a few steps or shift your weight from foot to foot. How does your body feel after moving?\"\nReply: yeah i got up and just walked to the kitchen and back, feels a bit better, legs were stiff from sitting."
+    ]
+  },
+  {
+    "id": "D12",
+    "date": "2026-10-22",
+    "weekday": "Thursday",
+    "kind": "check-ins only",
+    "entries": [],
+    "reflections": [
+      "Prompt (low): \"Name one sound, one texture, and one temperature you can notice right now — what did you pick?\"\nReply: the fridge humming, the desk is kind of cool and smooth, and the room feels a bit warm.",
+      "Prompt (medium): \"What's something today that went better than you expected?\"\nReply: the meeting that i thought would drag on ended like twenty minutes early so that was good.",
+      "Prompt (high): \"What's one small action in the next hour your evening self will thank you for?\"\nReply: probably just going for a walk after work instead of scrolling on the couch."
+    ]
+  },
+  {
+    "id": "D13",
+    "date": "2026-10-28",
+    "weekday": "Wednesday",
+    "kind": "busy",
+    "entries": [
+      "User: weather today\nAssistant: Canberra today (Wednesday): partly cloudy, **8°C** to **20°C**. Dry all day.",
+      "User: whats on today\nAssistant: Today:\n- **09:30** Standup\n- **11:00** Architecture sync\n- **14:00** Interview debrief\n\nEverything else is free.",
+      "User: i want to go to sydney on the 14th of november for the weekend what are my options\nAssistant: From Canberra you've got three main options:\n- **Drive**, about 3 hours 15 minutes via the Federal Highway\n- **Coach**, a few services a day, roughly 3.5 to 4 hours\n- **Train**, slower again\n\nWant me to note these down?",
+      "User: whats the train time\nAssistant: I couldn't find a current timetable for a Saturday 14 November train. The results I got didn't list that date. It's worth checking the NSW TrainLink site directly.",
+      "User: ok how long is the drive\nAssistant: About **3 hours 15 minutes** without stops, around 290 km, mostly on the Federal Highway and Hume Highway.",
+      "User: add a note trip to sydney 14 to 15 nov options coach train drive\nAssistant: Created a note **Sydney trip, 14-15 Nov** listing the coach, train and drive options. Train timetable still unconfirmed.",
+      "User: remind me at 11:45 to submit the timesheet\nAssistant: Reminder set for **11:45 am** to submit your timesheet.",
+      "User: whats the weather in sydney that weekend\nAssistant: That's a bit beyond the forecast range I can see, so I can't give you a reliable answer yet. Check again in a few days.",
+      "User: vegetarian lunch places near braddon\nAssistant: I found a couple of well-reviewed spots in Braddon with vegetarian menus, though the results were thin on current menus. Want me to search for a specific cuisine?",
+      "User: add dinner with sam friday 30th october at 7 to my calendar\nAssistant: Added **Dinner with Sam** for **Friday 30 October at 7:00 pm**.",
+      "User: do i have anything on the 14th\nAssistant: Nothing on your calendar for **Saturday 14 November**. That whole weekend is clear.",
+      "User: remind me to book the bus tickets tonight at 9\nAssistant: Reminder set for **9:00 pm** tonight to book the bus tickets.",
+      "User: whats a good name for a hobby project that tracks when i water my plants\nAssistant: A few ideas: **Leafy**, **Sip**, **Waterlog**, **Fernwatch**. Want me to save a favourite to your project ideas note?"
+    ],
+    "reflections": [
+      "Prompt (medium): \"What's one thing you're looking forward to, even something small?\"\nReply: the sydney weekend honestly, haven't seen sam in ages and it'll be good to get out of canberra.",
+      "Prompt (low): \"Roll your neck slowly, once each direction. Where are you holding tension?\"\nReply: yeah mostly in my shoulders and a bit in the back of my neck, been hunched at the laptop."
+    ]
+  },
+  {
+    "id": "D14",
+    "date": "2026-11-03",
+    "weekday": "Tuesday",
+    "kind": "rough-mood",
+    "entries": [
+      "User: ugh i slept terribly whats my day look like\nAssistant: Sorry about the rough night. Today (Tuesday) you have:\n- **09:30** Standup\n- **11:00** Incident review\n- **14:00** Planning\n\nNothing else booked.",
+      "User: remind me to eat lunch at 12:30 i keep forgetting\nAssistant: Reminder set for **12:30 pm** to eat lunch.",
+      "User: can you move my 2pm to tomorrow\nAssistant: I can't edit that one, the 14:00 Planning meeting is an invite from someone else's calendar. Want me to set a reminder to ask the organiser about rescheduling?",
+      "User: yeah\nAssistant: Reminder set for **1:30 pm** to ask about rescheduling the 2 pm Planning meeting.",
+      "User: note need to write up the incident timeline before thursday feel behind on everything\nAssistant: Added to your notes: **Write up incident timeline, due Thursday**. Want me to set a reminder for tomorrow morning too?",
+      "User: set a timer 10 minutes i need to walk around\nAssistant: Timer set for **10 minutes**."
+    ],
+    "reflections": [
+      "Prompt (medium): \"On a scale of 1 to 10, how would you rate your stress level right now? What's driving that number?\"\nReply: probably a seven. it's the incident stuff and i'm running on no sleep.",
+      "Prompt (low): \"Drop your shoulders away from your ears and unclench your jaw. Take one slow breath — what shifted, even slightly?\"\nReply: honestly my shoulders were basically up around my ears. dropped them and it eased a bit but i'm still tense.",
+      "Prompt (high): \"Think of something you're worried about right now. What's the realistic worst case, and how would you handle it if it happened?\"\nReply: worst case is i miss thursday and have to explain why the writeup is late, which would be annoying but survivable. i'd just tell my manager early."
+    ]
+  },
+  {
+    "id": "D15",
+    "date": "2026-11-07",
+    "weekday": "Saturday",
+    "kind": "moderate",
+    "entries": [
+      "User: whats the weather like for a walk this morning\nAssistant: It's a good morning for it: sunny, **12°C** now rising to **23°C** this afternoon. No rain expected.",
+      "User: remind me to start tidying at 10\nAssistant: Reminder set for **10:00 am** to start tidying.",
+      "User: make a list of tidy tasks bathroom kitchen cupboards desk drawer and the balcony\nAssistant: Created a note **Tidy list** with:\n- Bathroom\n- Kitchen cupboards\n- Desk drawer\n- Balcony\n\nWant me to add anything else?",
+      "User: did i put the wardrobe on that list\nAssistant: No, the wardrobe isn't on your Tidy list yet. Want me to add it?",
+      "User: yes add it and the hallway cupboard\nAssistant: Added **Wardrobe** and **Hallway cupboard** to your Tidy list.",
+      "User: where can i donate old clothes in canberra thats open on saturday\nAssistant: I didn't find anything reliable. The results I found were a mix of old listings with unclear opening hours. I'd check a local charity shop's own page before heading out.",
+      "User: ok remind me to ring about that on monday at 9\nAssistant: Reminder set for **Monday 9 November at 9:00 am** to ring about donating clothes."
+    ],
+    "reflections": [
+      "Prompt (medium): \"What's a small win from the last few hours?\"\nReply: finished the kitchen cupboards which felt pretty satisfying. still a lot left though."
+    ]
+  },
+  {
+    "id": "D16",
+    "date": "2026-11-12",
+    "weekday": "Thursday",
+    "kind": "good-mood",
+    "entries": [
+      "User: morning whats the weather\nAssistant: Canberra today (Thursday): sunny, **9°C** to **24°C**. Light winds. A great day.",
+      "User: whats on my calendar\nAssistant: Today you have:\n- **09:30** Standup\n- **13:00** Retro\n\nThe rest of the day is free.",
+      "User: just shipped the auth refactor, add a note about it with what went well\nAssistant: Created a note **Auth refactor shipped**. I've recorded that it's shipped today. You didn't give me the details of what went well, so that section is blank. Want to dictate some?",
+      "User: it went out with zero rollbacks and the tests all passed first try\nAssistant: Added that under What went well: zero rollbacks and tests passed first try.",
+      "User: remind me at 10 to send priya the pr link\nAssistant: Reminder set for **10:00 am** to send Priya the PR link.",
+      "User: add a lunch walk to my calendar at 12:30 for 30 minutes\nAssistant: Added **Lunch walk** today from **12:30 to 1:00 pm**.",
+      "User: whats a good vegetarian recipe for a nice dinner for two to celebrate\nAssistant: How about a mushroom and spinach risotto with a squeeze of lemon, and a simple rocket salad on the side? About 40 minutes. Want a shopping list for it?",
+      "User: yeah add the ingredients to my shopping list\nAssistant: Added arborio rice, mushrooms, spinach, parmesan alternative, lemon and rocket to your Shopping List.",
+      "User: what was that thing i said about the plant names yesterday\nAssistant: I don't have anything about plant names from yesterday in this conversation. Want me to search your notes for it?"
+    ],
+    "reflections": [
+      "Prompt (medium): \"Name one thing you're grateful for right now.\"\nReply: the auth thing shipping without any drama, and the sunshine today.",
+      "Prompt (medium): \"Who's someone you interacted with recently, even briefly, that you appreciate?\"\nReply: priya, she reviewed my pr really fast and left helpful comments.",
+      "Prompt (high): \"What's a skill or trait you used today that you're proud of?\"\nReply: i think breaking the refactor into small steps and sticking to the plan. i stayed patient with it."
+    ]
+  }
+]

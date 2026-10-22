@@ -1,0 +1,836 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "get_todays_events",
+      "description": "Retrieves today's calendar events. Use this when the user asks what's\n    on their schedule, agenda, or calendar today.",
+      "parameters": {
+        "properties": {},
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_calendar_event",
+      "description": "Retrieves a specific event from the calendar.\n\n    Args:\n        uid: The event's unique ID.",
+      "parameters": {
+        "properties": {
+          "uid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "uid"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "add_calendar_event",
+      "description": "Add an event to the calendar.\n\n    Args:\n        title: The event's title.\n        start: The event's start date/time.\n        end: The event's end date/time. Defaults to one hour after start.\n        description: Optional event description.\n        location: Optional event location.\n        recurrence: An RFC 5545 RRULE value if this event repeats \u2014 e.g.\n            \"FREQ=DAILY\", \"FREQ=WEEKLY;BYDAY=MO,WE,FR\",\n            \"FREQ=WEEKLY;INTERVAL=2\" (every two weeks), \"FREQ=MONTHLY;BYMONTHDAY=15\",\n            \"FREQ=DAILY;COUNT=10\" (stop after 10 occurrences), or\n            \"FREQ=WEEKLY;UNTIL=20261231T000000Z\" (stop by a date, always UTC/\"Z\").\n            Leave unset for a one-off event. A single reminder that happens once \u2014\n            even a relative one like \"30 minutes before my appointment\" \u2014 should\n            use set_reminder instead, not a recurring event.",
+      "parameters": {
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "recurrence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "title",
+          "start"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "delete_calendar_event",
+      "description": "Delete an event from the calendar.\n\n    Args:\n        uid: The event's unique ID.",
+      "parameters": {
+        "properties": {
+          "uid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "uid"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_calendar_events",
+      "description": "Retrieves calendar events within a specific time range.\n\n    Args:\n        start: Start of the range.\n        end: End of the range.",
+      "parameters": {
+        "properties": {
+          "start": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "update_calendar_event",
+      "description": "Update an event in the calendar.\n\n    Args:\n        uid: The event's unique ID.\n        title: The event's title.\n        start: The event's start date/time.\n        end: The event's end date/time.\n        description: Optional event description.\n        location: Optional event location.\n        recurrence: An RFC 5545 RRULE value, same format as add_calendar_event.\n            Replaces the event's recurrence outright \u2014 pass the existing value\n            again to keep it, or omit to turn a repeating event into a one-off.",
+      "parameters": {
+        "properties": {
+          "uid": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "recurrence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "uid",
+          "title",
+          "start",
+          "end"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_current_weather",
+      "description": "Get the current weather.\n\n    Args:\n        location: City or suburb. Defaults to the user's configured location.",
+      "parameters": {
+        "properties": {
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_weather_forecast",
+      "description": "Get the forecast weather for the next 7 days.\n\n    Args:\n        location: City or suburb. Defaults to the user's configured location.",
+      "parameters": {
+        "properties": {
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_range_forecast",
+      "description": "Get the forecast weather for a range of days.\n\n    Args:\n        start: Start date in ISO format (e.g., \"2023-01-01\")\n        end: End date in ISO format (e.g., \"2023-01-05\")\n        location: City or suburb. Defaults to the user's configured location.",
+      "parameters": {
+        "properties": {
+          "start": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "save_note",
+      "description": "Create a brand new note in the vault. If it might relate to an\n        existing note, search_notes first \u2014 prefer append_to_note/\n        update_note_section over a near-duplicate note.\n\n        Args:\n            content: The note's body.\n            title: A short, specific title. Optional \u2014 derived from content if omitted.\n            tags: Optional lowercase category tags (spaces are fine, normalized to hyphens).\n            project: If part of an ongoing project, its name (from\n                get_or_create_project) \u2014 files the note in that project's folder.\n                Keep [[wikilinks]] within the same project, don't link out to the\n                rest of the vault.",
+      "parameters": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "project": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "search_notes",
+      "description": "Search saved notes. Returns short excerpts with each note's id \u2014\n        use read_note with that id for the full note before editing.\n\n        Args:\n            query: What to search for.\n            project: If actively discussing a specific project, its name\n                (from get_or_create_project) to scope the search to it.\n                Leave unset for a vault-wide search.",
+      "parameters": {
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "project": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "read_note",
+      "description": "Read the full content of a note, including its tags. Use this\n        before append_to_note or update_note_section so you know what\n        sections already exist. Get note_id from search_notes.\n\n        Args:\n            note_id: The note's id, as returned by search_notes.",
+      "parameters": {
+        "properties": {
+          "note_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "note_id"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "append_to_note",
+      "description": "Add an entry to a note under a heading, without touching what's\n        already there \u2014 for log-style additions (a new service record, a\n        dated observation). Creates the heading if it doesn't exist.\n\n        Args:\n            note_id: The note's id, from search_notes.\n            section: The heading to append under (e.g. \"Service Log\").\n            content: The text to add.",
+      "parameters": {
+        "properties": {
+          "note_id": {
+            "type": "string"
+          },
+          "section": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "note_id",
+          "section",
+          "content"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "update_note_section",
+      "description": "Replace the content under one heading in a note, leaving the rest\n        untouched. Use when a value is superseded (a status, a due date) \u2014\n        not for adding new history (use append_to_note). Creates the\n        heading if it doesn't exist.\n\n        Args:\n            note_id: The note's id, from search_notes.\n            section: The heading to replace (e.g. \"Current Status\").\n            new_content: The new content for that section.",
+      "parameters": {
+        "properties": {
+          "note_id": {
+            "type": "string"
+          },
+          "section": {
+            "type": "string"
+          },
+          "new_content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "note_id",
+          "section",
+          "new_content"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "remember_about_me",
+      "description": "Record/update a fact in the user's About Me note \u2014 the only tool\n        for this; it always resolves the right note automatically, no need\n        to search or track an id.\n\n        Never use mode=\"replace\" on a section holding multiple distinct\n        entries (e.g. \"People\") \u2014 it wipes everything under that heading,\n        not just one entry. Use get_or_create_linked_note for a specific\n        person/topic instead.\n\n        Args:\n            section: Profile section (e.g. \"Preferences\", \"Routine\") \u2014\n                single-topic only. Created automatically if missing.\n            content: The fact or update to record.\n            mode: \"append\" (default) adds without touching existing content\n                \u2014 use for new facts. \"replace\" overwrites the section\n                entirely \u2014 only for superseding an old value, never on a\n                multi-entry section.",
+      "parameters": {
+        "properties": {
+          "section": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "mode": {
+            "default": "append",
+            "enum": [
+              "append",
+              "replace"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "section",
+          "content"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_or_create_linked_note",
+      "description": "Get (or create) a dedicated note for one specific person/project/\n        topic, linked from About Me. Returns its id \u2014 use read_note/\n        append_to_note/update_note_section with that id afterward.\n\n        Use instead of writing into a shared About Me section when: the\n        section holds multiple distinct entries (e.g. \"People\") and you're\n        updating ONE of them, or a single topic is accumulating enough\n        detail to outgrow a short line in About Me.\n\n        Always resolves to the same note for the same topic \u2014 never search\n        for it or guess an id from earlier in the conversation. Safe to\n        call even when one already exists.\n\n        Args:\n            topic: The specific name (e.g. \"Alex\", not \"People\"). Use the\n                same name consistently \u2014 it's the key used to find this\n                note again.\n            category: Which About Me section this is indexed under (e.g.\n                \"People\", \"Career\", \"Health\").",
+      "parameters": {
+        "properties": {
+          "topic": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic",
+          "category"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_or_create_project",
+      "description": "Get (or create) a dedicated vault folder for one ongoing project,\n        so its notes live together and can be searched as a unit. Returns\n        the project's canonical name \u2014 use that exact string with\n        save_note's/search_notes's `project` argument afterward.\n\n        For a recurring body of work the user returns to across sessions \u2014\n        not a one-off note, and not a person/topic (use\n        get_or_create_linked_note for that). Fuzzy-matches close variations\n        of a name already used, so it always resolves to the same folder.\n        Safe to call even if it already exists.\n\n        Args:\n            name: The project's name (e.g. \"Track Deck\"). Use the same name\n                consistently once created.",
+      "parameters": {
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "list_projects",
+      "description": "List all existing project folders in the vault. Check this before\n        calling get_or_create_project if you're unsure whether a project the\n        user mentions already exists.",
+      "parameters": {
+        "properties": {},
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "read_about_me",
+      "description": "Read everything currently known about the user from their About\n        Me note. Use this to check what's already recorded before deciding\n        whether something new is actually worth adding.",
+      "parameters": {
+        "properties": {},
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "add_planning_task",
+      "description": "Add one task with a time estimate to a day's planning note, for\n    generate_schedule_blocks to arrange later. If the user lists several\n    tasks at once, call this once per task, not a combined call.\n\n    Args:\n        task: A short description (e.g. \"Kitchen dishes\").\n        duration_minutes: Estimated time to complete it, in minutes.\n        date: The day this task is for, e.g. \"2026-09-13\". Defaults to\n            today. Resolve relative language (\"this Saturday\") first,\n            same as set_reminder.",
+      "parameters": {
+        "properties": {
+          "task": {
+            "type": "string"
+          },
+          "duration_minutes": {
+            "type": "integer"
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "task",
+          "duration_minutes"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "generate_schedule_blocks",
+      "description": "Build a day's schedule: reads the planning note's tasks, merges\n    them around that day's calendar events with breaks between sprints,\n    writes the timeline into the note, creates a calendar event per\n    block, and schedules an end-of-block reminder for each. Also returns\n    a digest of the past week's filled-in \"End of Day Reflection\"\n    entries, if any \u2014 factor that feedback into how you talk about the\n    new schedule.\n\n    Args:\n        date: The day to schedule, e.g. \"2026-09-13\". Defaults to today.\n        start_time: \"HH:MM\" (24-hour) to start scheduling from \u2014 use this\n            instead of guessing when planning only part of the day (e.g. an\n            evening after work). Defaults to the wake_time setting.\n        end_time: \"HH:MM\" (24-hour) to stop scheduling at. Defaults to the\n            bedtime setting.",
+      "parameters": {
+        "properties": {
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "end_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_current_datetime",
+      "description": "Returns the current date and time. Use this whenever you need to know the current time or date. It can help with finding the nearest specific day",
+      "parameters": {
+        "properties": {},
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "set_reminder",
+      "description": "Set a one-off reminder for the user.\n\n    Args:\n        message: What to remind the user about.\n        when: An absolute local date/time to fire the reminder (resolve\n              relative language like \"in 10 minutes\" or \"tomorrow at 9am\"\n              into an absolute date/time yourself first, per the date/time\n              grounding rule).",
+      "parameters": {
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "when": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "when"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "set_timer",
+      "description": "Set a timer for the user \u2014 equivalent to a reminder with a default message.\n\n    Args:\n        when: An absolute local date/time the timer should go off (resolve\n              relative language like \"in 10 minutes\" into an absolute\n              date/time yourself first, per the date/time grounding rule).\n        message: What to remind the user about. Defaults to a generic\n                 \"Timer's up!\" message.",
+      "parameters": {
+        "properties": {
+          "when": {
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "when"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "list_reminders",
+      "description": "List the user's currently pending reminders.",
+      "parameters": {
+        "properties": {},
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "cancel_reminder",
+      "description": "Cancel a pending reminder by matching text from its message.\n\n    Args:\n        message: Text to match against pending reminders' messages (a\n                 substring is enough, e.g. \"oven\" matches \"check the oven\").",
+      "parameters": {
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_reflection_prompt",
+      "description": "Give the user a short grounding/reflection exercise when they ask\n    for one directly (e.g. \"give me a grounding exercise\", \"I need to\n    check in with myself\"). Relay the returned prompt conversationally \u2014\n    it already ends in a question. Separate from the app's randomized\n    check-in schedule: doesn't create a scheduled check-in or affect\n    today's count/cooldowns.\n\n    Args:\n        category: Optional effort level \u2014 \"low\" (quick grounding/somatic),\n            \"medium\" (brief reflection), \"high\" (deeper values/self-efficacy\n            reflection). Omit for a random one from any category.",
+      "parameters": {
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "fetch_webpage",
+      "description": "Fetch a specific webpage and extract its actual main content (not\n    navigation, ads, or sidebar chrome) as clean text via boilerplate\n    removal, not just an HTML-to-markdown dump. Use this after search_web\n    when a result's snippet is only a pointer to what you need \u2014 a blurb\n    saying a page has a full timeline/list/figures \u2014 rather than the detail\n    itself, so you can read the real content instead of just relaying a\n    link back to the user.\n\n    Args:\n        url: The exact URL to fetch, usually taken from a search_web result.",
+      "parameters": {
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "mark_onboarding_complete",
+      "description": "Call this once the guided onboarding interview's main areas (preferences, people,\n    routine, interests) feel reasonably covered \u2014 only in onboarding mode, not during\n    ordinary chat or profile Q&A. Switches the dashboard to the profile Q&A view instead\n    of the interview. Safe to call more than once.",
+      "parameters": {
+        "properties": {},
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "set_home_location",
+      "description": "Call this during guided onboarding as soon as the user answers where they live \u2014\n    only in onboarding mode, never ordinary chat or profile Q&A. Resolves the free-text\n    place name to a canonical location + IANA timezone via geocoding (don't guess the\n    timezone yourself) and saves both as the app's standing location/timezone settings.\n    Separate from the About Me profile \u2014 do not also record it with remember_about_me.\n\n    Args:\n        location: The place the user said they live, as close to their own words as\n            possible (e.g. \"Melbourne, Australia\").",
+      "parameters": {
+        "properties": {
+          "location": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "location"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "log_activity",
+      "description": "Log one entry in the user's structured activity log (meals,\n    exercise, project work, socializing, rest) \u2014 charted later on the\n    dashboard.\n\n    Call when the user narrates something they did/are doing (\"I just had\n    a tofu scramble\", \"went for a 5k run\") \u2014 not for general chat.\n    Distinct from remember_about_me (durable facts) and save_note\n    (freeform notes); use only for a loggable occurrence with a\n    type/time/duration shape.\n\n    Args:\n        activity_type: Closest fit among the allowed values.\n        subject: Brief description, e.g. \"Tofu scramble with roasted veg\".\n        when: Absolute local date/time (resolve relative language like\n            \"this morning\" yourself first). Omit for \"happening now\".\n        duration: However the user phrased it (e.g. \"45 min\", \"a couple\n            hours\"). Omit if unmentioned.\n        mood_energy: 1-10 if the user gave one \u2014 never invent a number.\n        reflection: Any free-text notes the user gave. Omit if none.",
+      "parameters": {
+        "properties": {
+          "activity_type": {
+            "enum": [
+              "Meal",
+              "Exercise",
+              "Project Work",
+              "Socializing",
+              "Rest"
+            ],
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "when": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "duration": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "mood_energy": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "reflection": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "activity_type",
+          "subject"
+        ],
+        "type": "object"
+      }
+    }
+  }
+]

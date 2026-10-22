@@ -1,0 +1,148 @@
+[
+  {
+    "id": "D01",
+    "date": "2026-09-08",
+    "weekday": "Tuesday",
+    "kind": "busy",
+    "entries": [
+      "User: morning what's the weather looking like today\nAssistant: Canberra today: **sunny, 19°C high**, 4°C overnight low, light westerly wind. No rain expected, so a lunchtime walk would be a good call.",
+      "User: whats on my calendar today\nAssistant: You've got:\n- **9:30 AM** Team standup\n- **1:00 PM** Design review with Priya\n- **4:00 PM** 1:1 with Marcus\n\nOtherwise clear.",
+      "User: remind me to take the bins out tonight after dinner\nAssistant: Done, reminder set for **7:30 PM tonight**: take the bins out.",
+      "User: um can you add to my notes that for the auth refactor I need to look at token expiry handling and also the refresh flow tests\nAssistant: Added to your **Auth Refactor** note under \"To do\":\n- Review token expiry handling\n- Review refresh flow tests\n\nWant me to set a reminder to come back to it?",
+      "User: no that's fine. what's a good vegetarian thing for dinner I have mushrooms and spinach and some leftover rice\nAssistant: A mushroom and spinach fried rice would be quick: brown the mushrooms first, add garlic and the rice, then toss through the spinach with soy sauce and a splash of sesame oil. An egg on top works well if you want some extra protein.",
+      "User: search for how to fix a git detached head I always forget\nAssistant: Short version: run `git switch -c my-branch` to keep your current commits on a new branch, or `git switch main` to abandon them. If you've already moved off, `git reflog` shows the commit hash so you can recover it.",
+      "User: set a reminder to call the dentist to reschedule my cleaning\nAssistant: What day and time would you like the reminder?",
+      "User: tomorrow at 10\nAssistant: Reminder set for **Wednesday 9 September at 10:00 AM**: call the dentist to reschedule your cleaning.",
+      "User: do I have anything on friday\nAssistant: Friday 11 September:\n- **12:30 PM** Lunch with Hannah\n\nNothing else scheduled.",
+      "User: ok put a note down that hannahs birthday present idea is that ceramics class voucher\nAssistant: Saved to your **Hannah** note: Birthday present idea, ceramics class voucher.",
+      "User: search for ceramics classes in canberra that do gift vouchers\nAssistant: I searched but the results were mostly general ceramics supply shops, and nothing clearly listed gift vouchers for classes. Want me to try a narrower search, like a specific studio name?",
+      "User: nah I'll look later. what time is sunset today\nAssistant: Sunset in Canberra today is at about **5:41 PM**."
+    ],
+    "reflections": [
+      "Prompt (medium): \"What's a small win from the last few hours?\"\nReply: uh I got standup done and I actually finished the migration script I was stuck on so that's a win.",
+      "Prompt (high): \"What's a skill or trait you used today that you're proud of?\"\nReply: probably patience, the design review got kind of heated and I stayed pretty calm."
+    ]
+  },
+  {
+    "id": "D02",
+    "date": "2026-09-17",
+    "weekday": "Thursday",
+    "kind": "busy",
+    "entries": [
+      "User: good morning what's the weather\nAssistant: **Cloudy, 14°C high** today with a **60% chance of showers** from mid-afternoon. Take a jacket if you're out at lunchtime.",
+      "User: remind me to take my meds at 8 tonight\nAssistant: Reminder set for **8:00 PM tonight**: take your meds.",
+      "User: what's on today\nAssistant: Today:\n- **10:00 AM** Sprint planning\n- **3:30 PM** Eye check-up\n\nNothing in the evening.",
+      "User: I need to leave by 3 for the eye appointment can you remind me at quarter to three\nAssistant: Reminder set for **2:45 PM today**: leave for your eye check-up.",
+      "User: search up whether the sprint board tool can export to csv\nAssistant: I couldn't find anything conclusive. The search returned a couple of old forum threads that disagree with each other. It might be worth checking the tool's settings menu directly.",
+      "User: ok. add a note that the retro action item is to write up the deploy checklist\nAssistant: Added to your **Work To-do** note:\n- Write up the deploy checklist (retro action item)",
+      "User: what's a good name for a side project that's like a habit tracker but for plants\nAssistant: A few ideas:\n- **Sprout Log**\n- **Leaf Streak**\n- **Green Habit**\n- **Watercan**\n\nMy pick is Sprout Log, it's short and easy to say. Want me to jot these in your project ideas note?",
+      "User: yeah put them in there\nAssistant: Done, added the four names to your **Project Ideas** note under \"Plant tracker\".",
+      "User: remind me tomorrow morning to order the new monitor stand\nAssistant: I couldn't set that reminder, the reminder service returned an error. Want me to try again, or add it to your notes instead?",
+      "User: try again\nAssistant: Same error again, sorry. I've added \"Order monitor stand\" to your **Work To-do** note so it doesn't get lost.",
+      "User: whats a vegetarian lunch that travels well for tomorrow\nAssistant: A chickpea and roasted veg grain bowl keeps well. Roast capsicum, zucchini and chickpeas tonight, mix with quinoa or rice, and pack the dressing (lemon, tahini, a little garlic) separately so it doesn't go soggy.",
+      "User: when does the rain start again\nAssistant: Showers are most likely from about **3 PM**, clearing overnight."
+    ],
+    "reflections": [
+      "Prompt (low): \"Roll your neck slowly, once each direction. Where are you holding tension?\"\nReply: honestly my shoulders and the right side of my neck, been at the desk all morning.",
+      "Prompt (medium): \"Name one thing you're grateful for right now.\"\nReply: um the coffee machine at work honestly, and that sprint planning was quick.",
+      "Prompt (medium): \"Is there something you've been putting off that would feel good to finally do?\"\nReply: yeah the deploy checklist doc, I keep avoiding it."
+    ]
+  },
+  {
+    "id": "D03",
+    "date": "2026-09-19",
+    "weekday": "Saturday",
+    "kind": "moderate",
+    "entries": [
+      "User: weather for today thinking of doing the tidy and then a walk\nAssistant: Canberra today: **sunny, 21°C high**, 6°C low, light breeze. Good walking weather, and the afternoon is warmest.",
+      "User: can you remind me at 10 to put the washing on\nAssistant: Reminder set for **10:00 AM today**: put the washing on.",
+      "User: what was in my tidy list note\nAssistant: Your **Saturday Tidy** note lists:\n- Vacuum living room and hallway\n- Wipe kitchen benches\n- Clear the desk\n- Sort the pile of mail\n- Bathroom (quick clean)\n\nWant me to tick anything off?",
+      "User: tick off the kitchen benches and the mail\nAssistant: Ticked off: kitchen benches and the mail pile. Remaining: vacuum, desk, and the bathroom.",
+      "User: whats a good walk around here about an hour\nAssistant: The central basin loop around Lake Burley Griffin is roughly 5 km, so about an hour at an easy pace. Mount Ainslie is a good alternative if you want something steeper.",
+      "User: nice ok. also remind me to message mum tomorrow about lunch\nAssistant: What time tomorrow would you like the reminder?"
+    ],
+    "reflections": [
+      "Prompt (medium): \"What's something today that went better than you expected?\"\nReply: the tidy went quick, I thought it'd take all morning but I was done by like eleven."
+    ]
+  },
+  {
+    "id": "D04",
+    "date": "2026-09-23",
+    "weekday": "Wednesday",
+    "kind": "moderate",
+    "entries": [
+      "User: what's on my calendar today\nAssistant: Today:\n- **9:30 AM** Standup\n- **11:00 AM** Architecture sync\n- **3:00 PM** Focus block\n\nNothing after that.",
+      "User: remind me to pick up the parcel from the post office after work\nAssistant: Reminder set for **5:15 PM today**: pick up the parcel from the post office. I picked a time after your focus block ends, so tell me if you'd like it earlier.",
+      "User: search for when the woden post office closes\nAssistant: I couldn't find reliable hours, the results were mostly old listings with conflicting times. Many Australia Post outlets close around 5 PM on weekdays, but it's worth checking before you head over.",
+      "User: ok bump the reminder to 4:30 then\nAssistant: Updated, the reminder is now at **4:30 PM today**.",
+      "User: summarize what I need to do for the quarterly planning doc it's in my notes\nAssistant: From your **Q4 Planning** note:\n- List top 3 goals for the team\n- Estimate effort for the API migration\n- Flag dependencies on the platform team\n\nThe deadline is noted as **Friday 25 September**.",
+      "User: can you start a note called API migration estimate with those headings\nAssistant: Created **API Migration Estimate** with the headings Scope, Effort, Risks and Dependencies. Want me to link it to your Q4 Planning note?",
+      "User: yes\nAssistant: Linked, the two notes now reference each other."
+    ],
+    "reflections": [
+      "Prompt (low): \"Notice if your mind has wandered off somewhere, and let it curve back like a boomerang to right here. Where had it gone?\"\nReply: ha it was on the planning doc, again.",
+      "Prompt (medium): \"What's one thing you're looking forward to, even something small?\"\nReply: getting home and cooking, I've got that eggplant thing planned."
+    ]
+  },
+  {
+    "id": "D05",
+    "date": "2026-09-27",
+    "weekday": "Sunday",
+    "kind": "quiet",
+    "entries": [
+      "User: whats the weather tomorrow\nAssistant: Monday in Canberra: **partly cloudy, 17°C high**, 5°C low, no rain expected.",
+      "User: remind me to pack my gym bag tonight\nAssistant: Reminder set for **8:00 PM tonight**: pack your gym bag."
+    ],
+    "reflections": [
+      "Prompt (low): \"Press your feet flat into the floor and notice the contact for a few seconds. What do you notice in your legs right now?\"\nReply: yeah my legs feel kinda heavy, I think I walked a lot earlier."
+    ]
+  },
+  {
+    "id": "D06",
+    "date": "2026-10-04",
+    "weekday": "Sunday",
+    "kind": "empty",
+    "entries": [],
+    "reflections": []
+  },
+  {
+    "id": "D07",
+    "date": "2026-09-30",
+    "weekday": "Wednesday",
+    "kind": "rough-mood",
+    "entries": [
+      "User: can you tell me whats due today I feel like I'm drowning\nAssistant: Here's what I can see for today:\n- **10:00 AM** Standup\n- **1:00 PM** Release readiness meeting\n\nIn your notes, the **Q4 planning doc is due Friday**. Nothing else is marked as due today. Want me to break the planning doc into smaller steps?",
+      "User: no. ugh. remind me to eat lunch at 12:30 because I keep skipping it\nAssistant: Reminder set for **12:30 PM today**: eat lunch.",
+      "User: add a note that the release meeting is going to be a mess because staging is broken again\nAssistant: Added to your **Work Log** note: Release readiness meeting, staging environment is broken again, expect issues. Anything else you want captured?",
+      "User: search whether theres a known issue with the cert on staging. wait cancel that\nAssistant: No worries, cancelled. I haven't searched. Let me know if you'd like me to later.",
+      "User: what's a quick thing I can eat thats not sandwiches. vegetarian\nAssistant: Quick ideas:\n- Instant noodles with frozen veg and an egg\n- Toast with hummus and cucumber\n- Microwave rice with a tin of beans and some cheese",
+      "User: remind me at 5 to leave on time today\nAssistant: Reminder set for **5:00 PM today**: leave on time.",
+      "User: can you move my 1:1 on friday to next week I can't deal\nAssistant: I tried to move it, but the calendar change didn't go through, it returned an error. You may need to message Marcus to rebook it directly."
+    ],
+    "reflections": [
+      "Prompt (medium): \"On a scale of 1 to 10, how would you rate your stress level right now? What's driving that number?\"\nReply: uh like an 8. the planning doc and staging being broken and I didn't sleep great.",
+      "Prompt (low): \"Unclench your hands and let them go soft, then take one slow breath. Were you holding onto something?\"\nReply: yeah I was clenching my jaw and my hands the whole standup, didn't even notice.",
+      "Prompt (medium): \"You have coping skills you can lean on right now, whether that's slowing your breath or stepping away for a minute. Which one sounds most useful right now?\"\nReply: stepping away I think. might go for a walk after lunch if I can."
+    ]
+  },
+  {
+    "id": "D08",
+    "date": "2026-10-02",
+    "weekday": "Friday",
+    "kind": "repeat-topic",
+    "entries": [
+      "User: what's the weather in melbourne next weekend I'm going down\nAssistant: Forecasts that far out are rough, but for Melbourne it looks like **Saturday 10 October: showery, 16°C** and **Sunday 11 October: partly cloudy, 18°C**. I'd check again closer to the day.",
+      "User: put in my notes I'm going to melbourne next weekend, fly saturday morning back sunday night\nAssistant: Created a **Melbourne Trip** note:\n- Fly down Saturday 10 October (morning)\n- Return Sunday 11 October (night)\n\nWant to add flight details when you have them?",
+      "User: add that I need to book accommodation and figure out what to do saturday\nAssistant: Added to **Melbourne Trip** under \"To do\":\n- Book accommodation\n- Plan Saturday",
+      "User: search for vegetarian restaurants in fitzroy melbourne\nAssistant: A few came up, including **Smith & Daughters** (plant-based) and **Vegie Bar**. Opening hours varied between sources, so it's worth confirming before you book.",
+      "User: add those two to the trip note\nAssistant: Added both to **Melbourne Trip** under \"Food\".",
+      "User: what time should I leave for the airport for an 8am flight\nAssistant: For a domestic flight at 8:00 AM, aim to be at the airport about **an hour before**, so leaving home around **6:15 AM**, depending on how far out you are. Want a reminder?",
+      "User: yes remind me friday night to set the alarm\nAssistant: Reminder set for **Friday 9 October at 9:00 PM**: set your alarm for the Melbourne flight.",
+      "User: when does the melbourne note say my flight is\nAssistant: Your **Melbourne Trip** note says you fly down Saturday morning, but there's no flight time recorded yet. Check your booking confirmation and I can add it.",
+      "User: ok it's 8:15 add that\nAssistant: Added \"Flight departs 8:15 AM\" to **Melbourne Trip**."
+    ],
+    "reflections": [
+      "Prompt (medium): \"What's one thing you're looking forward to, even something small?\"\nReply: the melbourne trip obviously, just getting out of town and eating good food."
+    ]
+  }
+]

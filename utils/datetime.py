@@ -10,6 +10,54 @@ _AM_PM_PATTERN = re.compile(
     r"^(?P<date>\d{4}-\d{2}-\d{2})[ T](?P<time>\d{1,2}:\d{2}(?P<seconds>:\d{2})?)\s*(?P<meridiem>[AaPp][Mm])$"
 )
 
+def format_now_human(tz: ZoneInfo | None = None) -> str:
+    """'3:45 PM on Sunday 27 September 2026' — shared by get_current_datetime
+    and agent/graph.py's per-turn system-prompt injection, so the format
+    string only lives in one place."""
+    tz = tz or settings.zoneinfo()
+    return datetime.now(tz).strftime("%-I:%M %p on %A %-d %B %Y")
+
+
+def _local(dt: datetime, tz: ZoneInfo | None) -> datetime:
+    return dt.astimezone(tz or settings.zoneinfo())
+
+
+def format_when(dt: datetime, tz: ZoneInfo | None = None, now: datetime | None = None) -> str:
+    """'today, Thursday 15 October, 8:15 PM' — a saved date/time as the user
+    would say it, with today/tomorrow called out so a mismatch is obvious."""
+    tz = tz or settings.zoneinfo()
+    local = _local(dt, tz)
+    today = (now or datetime.now(tz)).astimezone(tz).date()
+    prefix = {0: "today, ", 1: "tomorrow, "}.get((local.date() - today).days, "")
+    return f"{prefix}{local:%A} {local.day} {local:%B}, {local:%-I:%M %p}"
+
+
+def format_span(start: datetime, end: datetime, tz: ZoneInfo | None = None, now: datetime | None = None) -> str:
+    tz = tz or settings.zoneinfo()
+    s, e = _local(start, tz), _local(end, tz)
+    if s.date() == e.date():
+        return f"{format_when(start, tz, now)} to {e:%-I:%M %p}"
+    return f"{format_when(start, tz, now)} to {format_when(end, tz, now)}"
+
+
+def past_start_message(
+    start: datetime, action: str, tool: str, grace: timedelta = timedelta(hours=1)
+) -> str | None:
+    """Corrective error text if `start` is already past (beyond `grace`), else
+    None. Starts with "Failed" so it counts as a tool error. A small model
+    that copied a date out of recalled context lands here and gets the real
+    date to retry with, instead of silently saving it."""
+    tz = settings.zoneinfo()
+    now = datetime.now(tz)
+    if start.astimezone(tz) >= now - grace:
+        return None
+    return (
+        f"Failed to {action}. {start.astimezone(tz):%Y-%m-%d %H:%M} is in the past; "
+        f"it is now {format_now_human(tz)}. Call {tool} again with a time that has not passed "
+        f"(today/tonight is {now:%Y-%m-%d}, tomorrow is {(now + timedelta(days=1)):%Y-%m-%d})."
+    )
+
+
 def get_todays_datetime():
     LOCAL_TZ = settings.zoneinfo()
 

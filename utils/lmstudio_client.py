@@ -46,7 +46,7 @@ class LmStudioModel(BaseModel):
     loaded_context_length: int | None
 
 
-async def get_loaded_context_length() -> int | None:
+async def get_loaded_context_length(model: str | None = None) -> int | None:
     """loaded_context_length for LMSTUDIO_CHAT_MODEL from LM Studio's
     /api/v0/models, or None if it can't be determined (management URL
     not configured, model not currently loaded, or the request failed).
@@ -66,7 +66,7 @@ async def get_loaded_context_length() -> int | None:
         logger.warning("Could not reach LM Studio's management API for context length: %s", e)
         return None
 
-    chat_model = settings.lmstudio_chat_model
+    chat_model = model or settings.lmstudio_chat_model
     entries = data.get("data", [])
     for entry in entries:
         if entry.get("id") == chat_model and entry.get("state") == "loaded":
@@ -92,11 +92,11 @@ async def get_loaded_context_length() -> int | None:
     return None
 
 
-async def get_history_budget_tokens() -> int:
+async def get_history_budget_tokens(model: str | None = None) -> int:
     """Token budget for message history sent to the LLM — LM Studio's
     live loaded_context_length when available, else the dashboard-tunable
     settings.max_history_tokens fallback (agent/settings.py)."""
-    live = await get_loaded_context_length()
+    live = await get_loaded_context_length(model)
     return live if live is not None else settings.max_history_tokens
 
 

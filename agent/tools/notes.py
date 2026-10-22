@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from dataclasses import dataclass
 from typing import Literal, Optional
 
 from langchain_core.tools import tool
@@ -66,16 +67,110 @@ def _normalize_tags(tags: Optional[list[str]]) -> list[str]:
     return [vault.slugify(t) for t in (tags or []) if t and t.strip()]
 
 
-def make_note_tools(memory: MemoryStore):
-    # About Me is a single fixed-path note (utils.vault.get_or_create_about_me),
-    # and LangGraph's ToolNode can run multiple tool calls from one LLM turn
-    # concurrently. Both remember_about_me and get_or_create_linked_note do a
-    # read-modify-write on it; without this lock, two concurrent calls can
-    # interleave — reading before either writes — and clobber each other's
-    # changes, or both decide a linked-note topic is new and create duplicates.
-    _about_me_lock = asyncio.Lock()
+# About Me is a single fixed-path note (utils.vault.get_or_create_about_me),
+# and LangGraph's ToolNode can run multiple tool calls from one LLM turn
+# concurrently. Everything that does a read-modify-write on it (the tools
+# below, and agent/profile_import.py) shares this lock; without it, two
+# concurrent calls can read before either writes and clobber each other, or
+# both decide a linked-note topic is new and create duplicates.
+about_me_lock = asyncio.Lock()
 
-    # Same race as _about_me_lock, but for project folders: two concurrent
+# Sections that hold many distinct entries: a "replace" on one wipes them all.
+MULTI_ENTRY_SECTIONS = {"people", "important dates", "events"}
+
+# Section names that are profile topics, not people/things deserving their
+# own linked note, and not to be mistaken for a linked note's name.
+PROFILE_SECTION_NAMES = {
+    "basics", "preferences", "people", "routine", "interests", "health & goals",
+    "important dates", "values", "goals", "occupation", "current job",
+    "current projects", "projects", "events", "health", "career", "location",
+}
+
+
+@dataclass
+class LinkedNoteResult:
+    status: str  # "created" | "adopted" | "exists" | "refused"
+    note_id: str | None = None
+    message: str = ""
+
+
+async def create_linked_note(
+    memory: MemoryStore, topic: str, category: str, content: str = "", link_label: str = ""
+) -> LinkedNoteResult:
+    """Create (or reuse) the dedicated note for `topic`, linked from About
+    Me under `category`. An unlinked note already sitting at the topic's
+    filename with the same title and category tag (left over after an About
+    Me reset) is adopted rather than duplicated."""
+    topic = topic.strip()
+    if not topic:
+        return LinkedNoteResult("refused", message="A topic name is required.")
+    async with about_me_lock:
+        about_me = vault.get_or_create_about_me()
+        if topic.lower() in PROFILE_SECTION_NAMES or topic.lower() in {
+            h.lower() for h in vault.list_headings(about_me.body)
+        }:
+            return LinkedNoteResult(
+                "refused",
+                message=(
+                    f"'{topic}' is a profile section, not a person or thing that needs its own "
+                    f"note. Use remember_about_me(section='{topic}', content=...) instead."
+                ),
+            )
+        existing_id = vault.find_linked_note_id(about_me.linked_notes, topic)
+        if existing_id is not None:
+            return LinkedNoteResult(
+                "exists",
+                existing_id,
+                f"'{topic}' already has a note (id: {existing_id}). "
+                f"Use read_note/append_to_note/update_note_section with this id — "
+                f"do not create a new note for this topic.",
+            )
+
+        now = vault.now_iso()
+        tag = vault.slugify(category)
+        note = None
+        orphan = vault.parse_note(vault.vault_root() / f"{vault.slugify(topic)}.md")
+        if (
+            orphan is not None
+            and orphan.title.strip().lower() == topic.lower()
+            and tag in orphan.tags
+            and orphan.id
+        ):
+            note, status = orphan, "adopted"
+            if content.strip() and content.strip() not in note.body:
+                note.body = f"{note.body.rstrip()}\n{content.strip()}".strip()
+                note.updated = now
+                vault.write_note_atomic(note.path, vault.serialize_note(note))
+        if note is None:
+            note = vault.Note(
+                id=vault.generate_id(), title=topic, created=now, updated=now,
+                tags=[tag], source="agent", body=content.strip(),
+            )
+            note.path = vault.unique_note_path(topic)
+            vault.write_note_atomic(note.path, vault.serialize_note(note))
+            status = "created"
+        await index_note_file(memory, note.path)
+
+        about_me.linked_notes[topic] = note.id
+        link = f"- [[{topic}]]" + (f" ({link_label.strip()})" if link_label.strip() else "")
+        if link not in vault.section_lines(about_me.body, category):
+            about_me.body = vault.append_to_section(about_me.body, category, link)
+        about_me.updated = now
+        vault.write_note_atomic(about_me.path, vault.serialize_note(about_me))
+        await index_note_file(memory, about_me.path)
+
+    wrote = " The details you gave are already saved in it." if content.strip() else (
+        " Use read_note/append_to_note/update_note_section with this id to add details."
+    )
+    verb = "Created a new" if status == "created" else "Reused an existing"
+    return LinkedNoteResult(
+        status, note.id,
+        f"{verb} note for '{topic}' (id: {note.id}), linked from About Me's '{category}' section.{wrote}",
+    )
+
+
+def make_note_tools(memory: MemoryStore):
+    # Same race as about_me_lock, but for project folders: two concurrent
     # get_or_create_project calls fuzzy-matching the same not-yet-created
     # name shouldn't both decide it's new and each write a starter overview
     # note into it.
@@ -218,40 +313,61 @@ def make_note_tools(memory: MemoryStore):
         to search or track an id.
 
         Never use mode="replace" on a section holding multiple distinct
-        entries (e.g. "People") — it wipes everything under that heading,
-        not just one entry. Use get_or_create_linked_note for a specific
-        person/topic instead.
+        entries (People, Important Dates, Events) — it would wipe every
+        entry, so it is refused. Use get_or_create_linked_note for a
+        specific person/topic instead.
 
         Args:
             section: Profile section (e.g. "Preferences", "Routine") —
                 single-topic only. Created automatically if missing.
-            content: The fact or update to record.
+            content: The fact or update to record. Only what the user
+                actually said.
             mode: "append" (default) adds without touching existing content
                 — use for new facts. "replace" overwrites the section
                 entirely — only for superseding an old value, never on a
                 multi-entry section.
         """
-        async with _about_me_lock:
+        async with about_me_lock:
             note = vault.get_or_create_about_me()
+            heading = vault.match_heading(note.body, section) or section.strip()
+            key = heading.lower()
+            linked_id = vault.find_linked_note_id(note.linked_notes, heading)
+            if linked_id is not None and key not in PROFILE_SECTION_NAMES:
+                return (
+                    f"'{heading}' has its own note (id: {linked_id}). Add details with "
+                    f"append_to_note(note_id='{linked_id}', ...), not as an About Me section."
+                )
+            if mode == "replace" and key in MULTI_ENTRY_SECTIONS:
+                return (
+                    f"Refused: '{heading}' holds many entries and replace would wipe them all. "
+                    f"Use mode='append' to add one, or get_or_create_linked_note for one person/topic."
+                )
+            before = len(vault.section_lines(note.body, heading))
             if mode == "replace":
-                note.body = vault.replace_section(note.body, section, content)
+                note.body = vault.replace_section(note.body, heading, content)
+                result = f"Replaced '{heading}' (was {before} lines, now {len(vault.section_lines(note.body, heading))})."
             else:
-                note.body = vault.append_to_section(note.body, section, content)
+                new_text = vault.drop_present_lines(note.body, heading, content)
+                if not new_text:
+                    return f"Already recorded under '{heading}' — nothing added."
+                note.body = vault.append_to_section(note.body, heading, new_text)
+                result = f"Added to '{heading}' (now {len(vault.section_lines(note.body, heading))} lines)."
             note.updated = vault.now_iso()
             vault.write_note_atomic(note.path, vault.serialize_note(note))
             await index_note_file(memory, note.path)
-        return f"Recorded under '{section}' in About Me."
+        return result
 
     @tool
-    async def get_or_create_linked_note(topic: str, category: str) -> str:
+    async def get_or_create_linked_note(topic: str, category: str, content: str = "") -> str:
         """Get (or create) a dedicated note for one specific person/project/
-        topic, linked from About Me. Returns its id — use read_note/
-        append_to_note/update_note_section with that id afterward.
+        topic, linked from About Me. Returns its id.
 
         Use instead of writing into a shared About Me section when: the
         section holds multiple distinct entries (e.g. "People") and you're
         updating ONE of them, or a single topic is accumulating enough
-        detail to outgrow a short line in About Me.
+        detail to outgrow a short line in About Me. Not for profile
+        sections like Interests, Values or Routine — those go through
+        remember_about_me.
 
         Always resolves to the same note for the same topic — never search
         for it or guess an id from earlier in the conversation. Safe to
@@ -263,43 +379,10 @@ def make_note_tools(memory: MemoryStore):
                 note again.
             category: Which About Me section this is indexed under (e.g.
                 "People", "Career", "Health").
+            content: Optional details to save in the new note right away.
+                Only what the user actually said — leave blank if unknown.
         """
-        async with _about_me_lock:
-            about_me = vault.get_or_create_about_me()
-            existing_id = vault.find_linked_note_id(about_me.linked_notes, topic)
-            if existing_id is not None:
-                return (
-                    f"'{topic}' already has a note (id: {existing_id}). "
-                    f"Use read_note/append_to_note/update_note_section with this id — "
-                    f"do not create a new note for this topic."
-                )
-
-            now = vault.now_iso()
-            note = vault.Note(
-                id=vault.generate_id(),
-                title=topic,
-                created=now,
-                updated=now,
-                tags=[vault.slugify(category)],
-                source="agent",
-                body="",
-            )
-            path = vault.unique_note_path(topic)
-            note.path = path
-            vault.write_note_atomic(path, vault.serialize_note(note))
-            await index_note_file(memory, path)
-
-            about_me.linked_notes[topic] = note.id
-            about_me.body = vault.append_to_section(about_me.body, category, f"- [[{topic}]]")
-            about_me.updated = now
-            vault.write_note_atomic(about_me.path, vault.serialize_note(about_me))
-            await index_note_file(memory, about_me.path)
-
-        return (
-            f"Created a new note for '{topic}' (id: {note.id}), linked from About Me's "
-            f"'{category}' section. Use read_note/append_to_note/update_note_section "
-            f"with this id to add details."
-        )
+        return (await create_linked_note(memory, topic, category, content)).message
 
     @tool
     async def get_or_create_project(name: str) -> str:

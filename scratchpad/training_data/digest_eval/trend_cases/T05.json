@@ -1,0 +1,22 @@
+{
+ "id": "T05",
+ "date": "2026-11-25",
+ "weekday": "Wednesday",
+ "kind": "decoy: no history",
+ "expect": "Describes today's desk move and tidying plainly as today's activity; uses no trend, lately, as-usual or over-the-days language at all.",
+ "history": [],
+ "entries": [
+  "User: morning whats the weather doing today\nAssistant: Canberra today: **partly cloudy, 24°C high**, 12°C overnight low, a chance of a late shower after 5 PM. Fine for carrying things in and out of the house this morning.",
+  "User: im moving my desk setup into the spare room today, can you give me a checklist so i dont forget stuff\nAssistant: Here's a rough order:\n- Unplug and photograph the cable layout\n- Take the monitors off their arm\n- Clear out the spare room and vacuum\n- Move the desk (legs off if it won't fit through the door)\n- Reconnect power, then monitors, then peripherals\n- Tidy cables with ties or velcro\n\nWant me to save this as a note?",
+  "User: yeah save it as desk move\nAssistant: Saved as a note called **Desk Move** with the checklist above.",
+  "User: add to that note that the standing desk legs need the allen key from the garage and the box of spare screws is in the hallway cupboard\nAssistant: Added both to your **Desk Move** note under \"Notes\": allen key from the garage, spare screws in the hallway cupboard.",
+  "User: whats the right height for a monitor so my neck doesnt hurt\nAssistant: A common guideline is to have the top edge of the screen at or just below eye level, about an arm's length away, tilted back slightly. If you use a laptop beside it, raise it on a stand so it matches.",
+  "User: whats my afternoon look like i need the desk working by then\nAssistant: Today:\n- **2:00 PM** Sprint planning\n- **4:30 PM** Quick sync with Marcus\n\nNothing before 2:00 PM, so you have the morning to set up.",
+  "User: remind me tonight at 7 to order cable ties or velcro straps\nAssistant: Reminder set for **7:00 PM tonight**: order cable ties or velcro straps.",
+  "User: search for where to recycle old cables and a broken monitor in canberra\nAssistant: I searched but the results were mostly general recycling articles and none clearly listed a drop-off for old monitors or cables. Want me to try a more specific search, like the ACT government e-waste page?",
+  "User: nah ill check it later. remind me tomorrow at 9 to put the old desk chair out for the bulk pickup\nAssistant: Reminder set for **Thursday 26 November at 9:00 AM**: put the old desk chair out for the bulk pickup."
+ ],
+ "reflections": [
+  "Prompt (medium): \"What's something today that went better than you expected?\"\nReply: the desk fit through the door without taking the legs off so that saved me like half an hour."
+ ]
+}

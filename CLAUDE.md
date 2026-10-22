@@ -32,6 +32,18 @@ There is a full architecture/feature writeup in `README.md` — read it before m
 non-trivial changes. This file summarizes what's most load-bearing and adds nothing that
 contradicts it.
 
+**Split-model design (implemented, off by default).** A LoRA-trained LFM2.5 1.2B does tool
+calling, one-shot voice turns and short confirmations; `settings.lmstudio_writer_model` (blank =
+off) names a bigger local model (Gemma 4 E4B so far) that writes what the user reads: the daily
+digest, check-in wording, and final replies in onboarding / profile chat / day planning /
+project chat, after tool errors, and for long or conversational answers. `agent/writer.py`
+holds the routing rules (`decide()`) and the hooks `agent/graph.py` calls; every decision is in
+`utils/writer_log.py` (`GET /debug/writer-log`). Modes also bind a narrowed tool set
+(`MODE_TOOL_NAMES`). Any writer failure falls back to the tool model's own text. Per-mode model overrides (tool and
+writer model per surface) live in `agent/model_assignments.py`, edited on the Settings page's "Models by Mode" card. Details and
+rationale in README.md ("Planned: split-model architecture" -> "As implemented"). Don't try to
+fix LFM's prose by training; tune the handoff.
+
 ## Commands
 
 Package manager is `uv`. A small pytest suite exists (`tests/`, run via `uv run pytest`)
@@ -153,7 +165,10 @@ Learning mode and the two active modes are mutually exclusive per turn.
   people/topics get their own linked note via `get_or_create_linked_note(topic, category)`,
   tracked in About Me's frontmatter `linked_notes` registry (topic → note id), because a
   section-`replace` on a collective section (e.g. "People") would wipe every entry in it,
-  not just the one being corrected.
+  not just the one being corrected. `remember_about_me` enforces this in code: `replace` on People /
+  Important Dates / Events is refused, near-miss headings snap to the real one, and duplicate
+  lines are skipped. The onboarding basics form is written straight into About Me by
+  `agent/profile_import.py` (no LLM); the model only runs the follow-up interview.
 - **Calendar/weather/search** — Calendar is plain CalDAV (`agent/tools/calendar.py`,
   `utils/caldav_client.py`), protocol-generic — `docker-compose.yml` bundles Radicale as the
   default backend, with its collection-management UI (create/rename/delete a calendar —
@@ -163,6 +178,14 @@ Learning mode and the two active modes are mutually exclusive per turn.
   Point `CALDAV_URL` at any external CalDAV server (Nextcloud, Baikal, Fastmail, etc.)
   instead if you'd rather. Weather is Open-Meteo, no key. Web search is SearXNG,
   self-hosted, degrades gracefully if `SEARXNG_URL` unset.
+- **Calendar/reminder write guards** — recalled context used to leak old dates into new events
+  (the 1.2B tool model copies them). So: `agent/graph.py`'s `skip_recall` drops RELEVANT PAST
+  CONTEXT for any turn naming a day/time or calendar/reminder verb; `add_/move_calendar_event` and
+  `set_reminder` refuse a past start with a corrective error holding today's date
+  (`utils/datetime.py`'s `past_start_message`); `agent/date_guard.py` fixes the date of a call when
+  the user said exactly one of tonight/today/tomorrow; successful writes get their reply from
+  `writer.template_reply` (`route=template` in `writer_log`), and a reply claiming a change with no
+  matching tool is replaced by `writer.NO_CHANGE_REPLY`. A calendar/reminder/note write in the same tool batch as a search or fetch is held back one step (`agent/graph.py`'s `defer_writes_after_lookup`) so it can use the results; `update_calendar_event` keeps location/description the model omits; `date_guard.clean_search_queries` strips dates/weekdays the user never wrote from search queries; `writer.unbacked_detail_claim` replaces a reply claiming extra details when no location/description was saved. A write that follows a search/fetch in the same turn still gets its reply from `template_reply`, which appends `writer.event_write_notes` (a new event's start time that neither the user nor a result gave is flagged as a guess; no venue saved after a search is stated). Don't loosen these to "let the model decide".
 - **Reminders** (`agent/tools/alerts.py`) — `set_reminder`/`set_timer` resolve relative
   language ("in 10 minutes") to an absolute local date/time (the system prompt's date/time-
   grounding rule) before persisting to `reminders.db` and scheduling a one-shot APScheduler
@@ -207,7 +230,9 @@ Learning mode and the two active modes are mutually exclusive per turn.
   suppresses repeat alerts, not repeat logging).
 - **Daily digest** — `jobs/digest.py`, APScheduler at 20:45 `Australia/Canberra`. Pulls the
   day's Chroma conversation summaries, has the LLM write a recap, emails it, sweeps the
-  thread/keyword registry. `POST /debug/digest` fires it on demand.
+  thread/keyword registry. `POST /debug/digest` fires it on demand. It also feeds the prompt
+  the previous 7 days' recaps read back from the vault notes it saved (`_load_previous_recaps`),
+  so "trends" can only come from real history — keep that guard if you edit `DIGEST_PROMPT`.
 - **Bedtime reminder** — `jobs/bedtime.py`, its own APScheduler cron job
   (`"bedtime_reminder"`) at `settings.bedtime` (default 21:20) — a fixed, simple Gotify
   push, deliberately separate from the digest (different trigger, different purpose: the

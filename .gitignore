@@ -142,10 +142,12 @@ celerybeat.pid
 # Environments
 .env
 .env.docker
+.env.docker.learning
 .venv
 env/
 venv/
 ENV/
+scratchpad/laya_playground_venv/
 env.bak/
 venv.bak/
 
@@ -218,6 +220,7 @@ received_notes/
 # Every store resolves its path under here ("data/<name>") for both
 # local dev and Docker — see main.py's lifespan and docker-compose.yml.
 data/
+data-learning/
 
 # Python patch's blanket "lib/" rule above also matches frontend/src/lib —
 # carve it back out.

@@ -1,0 +1,91 @@
+# docker-compose.learning.yml
+#
+# Isolated second stack for the tool-router "learning" dataset work — entirely
+# separate containers, ports, and data from the live docker-compose.yml stack
+# (pa-assistant/pa-caldav/pa-syncthing). Never merged with the base file;
+# run standalone so there's no override-merge ambiguity:
+#
+#   docker compose -f docker-compose.learning.yml --env-file .env.docker.learning -p trackdeck-learning up --build -d
+#   docker compose -f docker-compose.learning.yml --env-file .env.docker.learning -p trackdeck-learning down
+#
+# Deliberately no syncthing service (irrelevant to tool-calling correctness).
+# caldav is included (unlike the original plan) since calendar tools matter
+# for this eval — but it's its OWN Radicale instance/collection under
+# ./data-learning/radicale, never the real one, so synthetic calendar prompts
+# can't write into the real calendar.
+
+services:
+
+  assistant:
+    build: .
+    container_name: pa-assistant-learning
+    user: "${PUID:-1000}:${PGID:-1000}"
+    ports:
+      - "${ASSISTANT_PORT:-8010}:8000"
+    volumes:
+      - ./data-learning/memory.db:/app/data/memory.db
+      - ./data-learning/reminders.db:/app/data/reminders.db
+      - ./data-learning/checkins.db:/app/data/checkins.db
+      - ./data-learning/settings.db:/app/data/settings.db
+      - ./data-learning/alert_sounds.db:/app/data/alert_sounds.db
+      - ./data-learning/alert_sounds:/app/data/alert_sounds
+      - ./data-learning/device_errors.db:/app/data/device_errors.db
+      - ./data-learning/recall_log.db:/app/data/recall_log.db
+      - ./data-learning/device_state.db:/app/data/device_state.db
+      - ./data-learning/activity_log.db:/app/data/activity_log.db
+      - ./data-learning/onboarding_complete.flag:/app/data/onboarding_complete.flag
+      - ./data-learning/onboarding_basics.flag:/app/data/onboarding_basics.flag
+      - ./data-learning/chroma_db:/app/data/chroma_db
+      # VAULT_PATH inside .env.docker.learning must stay /app/vault (the
+      # in-container path) — isolation from the real vault comes from THIS
+      # host-side mount, not from changing VAULT_PATH itself.
+      - ./data-learning/vault:/app/vault
+      - ./data-learning/received_notes:/app/received_notes
+      # Shared with the live stack on purpose — just the downloaded
+      # faster-whisper model cache, no per-instance state, no isolation
+      # concern, and re-downloading it (~1.5GB) for a throwaway stack is
+      # pure waste.
+      - ./data/hf_cache:/root/.cache/huggingface
+    env_file:
+      - .env.docker.learning
+    restart: "no"
+    depends_on:
+      - caldav
+
+  caldav:
+    image: tomsquest/docker-radicale:latest
+    container_name: pa-caldav-learning
+    env_file:
+      - .env.docker.learning
+    volumes:
+      - ./data-learning/radicale/config:/config
+      - ./data-learning/radicale/data:/data
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        mkdir -p /config /data/collections
+        printf '%s\n' \
+          '[server]' \
+          'hosts = 0.0.0.0:5232' \
+          '' \
+          '[auth]' \
+          'type = htpasswd' \
+          'htpasswd_filename = /config/users' \
+          'htpasswd_encryption = plain' \
+          '' \
+          '[storage]' \
+          'filesystem_folder = /data/collections' \
+          '' \
+          '[rights]' \
+          'type = owner_only' \
+          '' \
+          '[web]' \
+          'type = internal' \
+          > /config/config
+        printf '%s:%s\n' "$$CALDAV_USERNAME" "$$CALDAV_PASSWORD" > /config/users
+        exec /usr/local/bin/docker-entrypoint.sh /venv/bin/radicale --config /config/config
+    ports:
+      - "${CALDAV_PORT:-5242}:5232"
+    restart: "no"

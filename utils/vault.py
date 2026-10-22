@@ -677,3 +677,39 @@ def get_section(body: str, heading: str) -> str | None:
         return None
     text = body[span[0]:span[1]].strip()
     return text or None
+
+
+def list_headings(body: str) -> list[str]:
+    """Every `##` heading in `body`, in order."""
+    return [m.group(1).strip() for m in re.finditer(r"(?m)^##[ \t]+(.+?)[ \t]*$", body)]
+
+
+def match_heading(body: str, heading: str, cutoff: float = 0.85) -> str | None:
+    """The existing heading `heading` refers to: exact (case-insensitive) first,
+    then the closest near-miss ("Importance Dates" -> "Important Dates").
+    None when nothing in `body` is close enough."""
+    want = heading.strip().lower()
+    candidates = list_headings(body)
+    for h in candidates:
+        if h.lower() == want:
+            return h
+    best, best_ratio = None, cutoff
+    for h in candidates:
+        ratio = SequenceMatcher(None, want, h.lower()).ratio()
+        if ratio >= best_ratio:
+            best, best_ratio = h, ratio
+    return best
+
+
+def section_lines(body: str, heading: str) -> list[str]:
+    """Non-empty stripped lines under `heading` ([] if the section is missing)."""
+    text = get_section(body, heading) or ""
+    return [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+
+def drop_present_lines(body: str, heading: str, addition: str) -> str:
+    """`addition` minus any line already present under `heading` (compared
+    case-insensitively, whitespace-stripped). Empty string if nothing is new."""
+    have = {ln.lower() for ln in section_lines(body, heading)}
+    kept = [ln for ln in addition.splitlines() if ln.strip() and ln.strip().lower() not in have]
+    return "\n".join(kept)

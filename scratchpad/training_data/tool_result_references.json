@@ -1,0 +1,117 @@
+{
+  "get_current_datetime": [
+    "The current date and time is: 3:36 PM on Friday 18 September 2026",
+    "The current date and time is: 3:34 PM on Friday 18 September 2026"
+  ],
+  "get_calendar_events": [
+    "[{\"alarms\": [], \"generated\": false, \"uid\": \"0a712241-c85d-4448-b304-da9544c26c26\", \"start\": \"20261107T070000Z\", \"end\": \"20261107T090000Z\", \"description\": \"\", \"summary\": \"Khaled Khalafalla show\"}, {\"al",
+    "[]"
+  ],
+  "search_news": [
+    "{\"query\":\"Canberra family events Sunday 20 September 2026\",\"total_results\":1,\"results\":[{\"title\":\"STEVE VAI, BILLY SHEEHAN, MICHAEL ANTHONY, GILBY CLARKE Among Artists Set To Appear At 2026 'Vegas Roc",
+    "{\"query\":\"Canberra events September 2026\",\"total_results\":12,\"results\":[{\"title\":\"Floriade 2026: A Feast of Flowers in the Heart of Canberra\",\"url\":\"https://artsreview.com.au/floriade-2026-a-feast-of-"
+  ],
+  "search_web": [
+    "{\"query\":\"Canberra family friendly activities events Sunday 20 September 2026\",\"total_results\":0,\"results\":[],\"error\":null}",
+    "{\"query\":\"family activities Canberra September 2026\",\"total_results\":0,\"results\":[],\"error\":null}"
+  ],
+  "fetch_webpage": [
+    "Spring has arrived in Canberra, and with it the return of Floriade, as Commonwealth Park opens its gates for a month-long celebration of flowers, food and the rituals that bring communities together.\n"
+  ],
+  "get_current_weather": [
+    "Weather for Canberra: 8.8\u00b0C, 2% cloud cover, 0.0mm precipitation."
+  ],
+  "set_reminder": [
+    "I couldn't understand the time '15:40'. Try an absolute date and time.",
+    "Got it \u2014 I'll remind you to 'Pick up meds, clothes, CPAP, ginger beer, keyboard, and laptops.' at Friday, 18 September 2026 03:40 PM."
+  ],
+  "log_activity": [
+    "Logged: Rest \u2014 Morning planning and preparation at Friday, 18 September 2026 03:40 PM.",
+    "Logged: Rest \u2014 Setting up reminders and timers at Friday, 18 September 2026 03:43 PM."
+  ],
+  "set_timer": [
+    "Got it \u2014 I'll remind you to 'Timer's up!' at Friday, 18 September 2026 03:40 PM."
+  ],
+  "save_note": [
+    "Note saved: 'Errands - 19 Sep 26' (id: f33370c9).",
+    "Note saved: 'System Architecture & Hardware Overview' (id: c89a0828)."
+  ],
+  "add_planning_task": [],
+  "generate_schedule_blocks": [
+    "Scheduled 3 task block(s) with breaks for 2026-09-12, added 6 calendar event(s). Couldn't fit: Gather dirty clothes and start washing, Tidy work study, Get ginger beer supplies, Bottle first ginger be"
+  ],
+  "add_calendar_event": [
+    "Event added successfully. UID: ef077659-00e4-4954-b539-0f28c10b7624",
+    "Event added successfully. UID: 3eb6bae2-c808-4257-8430-d62f57090c2e"
+  ],
+  "get_todays_events": [
+    "[{\"alarms\": [], \"generated\": false, \"uid\": \"38512c43-2a37-4ccc-a3d8-c80babcca13c\", \"start\": \"20260912T011000Z\", \"end\": \"20260912T012000Z\", \"description\": \"\", \"summary\": \"Break\"}, {\"alarms\": [], \"gener",
+    "[{\"alarms\": [], \"generated\": false, \"uid\": \"5ed5296c-241f-4820-a386-fbe533713367\", \"start\": \"20260912T004500Z\", \"end\": \"20260912T010000Z\", \"description\": \"\", \"summary\": \"Gather dirty clothes and start"
+  ],
+  "search_notes": [
+    "[id: c001e7d5] Planning \u2014 2026-09-12 \u2014 ## Tasks - [ ] Clean Kitchen \u2014 Est: 20 mins - [ ] Clean + Vaccum lounge \u2014 Est: 15 mins - [ ] Clean ground floor toilet \u2014 Est: 5 mins - [ ] Gather dirty clothes a",
+    "[id: 27e3f26a] About Me \u2014 ## Interests - Interests & Hobbies: Programming, game design, knitting, crochet, 3D printing. - Gaming: Wants to play games more. - Reading: Reads books (mainly audiobooks, p"
+  ],
+  "list_reminders": [
+    "You have no pending reminders.",
+    "- Break's over (due Saturday, 12 September 2026 08:25 AM)\n- Break's over (due Saturday, 12 September 2026 08:45 AM)\n- Break's over (due Saturday, 12 September 2026 08:55 AM)"
+  ],
+  "read_note": [
+    "# Planning \u2014 2026-09-12\ntags: planning-session\n\n## Tasks\n- [ ] Clean Kitchen \u2014 Est: 20 mins\n- [ ] Clean + Vaccum lounge \u2014 Est: 15 mins\n- [ ] Clean ground floor toilet \u2014 Est: 5 mins\n- [ ] Gather dirty ",
+    "# Saturday Zone Sprint & Tidying Template\ntags: routine, saturday, habits, home-organization\n\n# Saturday Zone Sprint & Tidying Template\n\n## Day Framework\n- **05:30 AM \u2013 Morning Grounding & Long Walk**"
+  ],
+  "delete_calendar_event": [
+    "Event deleted successfully."
+  ],
+  "cancel_reminder": [
+    "That matches more than one reminder \u2014 be more specific: Break's over; Break's over; Break's over",
+    "Cancelled reminder: 'Clean Kitchen ended'."
+  ],
+  "read_about_me": [
+    "## Basics\nName: Aaron\nBirthday: December 2, 1983 (1983-12-02)\nOccupation: Fullstack Software Engineer\nCurrent Job: Senior Frontend Engineer at Miroma Project Factory\n\n## Preferences\n- Enjoys trying ne",
+    "## Basics\n\n## Preferences\n\n## People\n\n## Routine\n\n## Interests\n\n## Health & Goals\n\n## Important Dates\n"
+  ],
+  "update_note_section": [
+    "Updated 'Generated Schedule & Sprints' in 'Planning \u2014 2026-09-12'.",
+    "Updated 'Fixed Commitments & Anchors' in 'Saturday Zone Sprint & Tidying Template'."
+  ],
+  "remember_about_me": [
+    "Recorded under 'Preferences' in About Me.",
+    "Recorded under 'Basics' in About Me."
+  ],
+  "get_or_create_linked_note": [
+    "Created a new note for 'Finnian' (id: db7e4ce6), linked from About Me's 'People' section. Use read_note/append_to_note/update_note_section with this id to add details.",
+    "Created a new note for 'Blair' (id: a59b21b5), linked from About Me's 'People' section. Use read_note/append_to_note/update_note_section with this id to add details."
+  ],
+  "append_to_note": [
+    "Added to 'Key Details' in 'Finnian'.",
+    "Added to 'Relationship' in 'Finnian'."
+  ],
+  "list_projects": [
+    "No projects yet."
+  ],
+  "get_or_create_project": [
+    "Created a new project folder 'companion-device-backend' with an overview note. Use save_note(title=..., content=..., project='companion-device-backend') to add notes to it, and search_notes(query=...,"
+  ],
+  "mark_onboarding_complete": [
+    "Onboarding marked complete."
+  ],
+  "get_calendar_event": [
+    "{\"alarms\": [], \"generated\": false, \"uid\": \"0a712241-c85d-4448-b304-da9544c26c26\", \"start\": \"20261107T070000Z\", \"end\": \"20261107T080000Z\", \"summary\": \"Khaled Khalafalla show\", \"location\": \"The Street theatre\", \"description\": null}"
+  ],
+  "update_calendar_event": [
+    "Event updated successfully."
+  ],
+  "get_weather_forecast": [
+    "[{\"time\": \"2026-10-04\", \"temperature_2m_min\": 7.2, \"temperature_2m_max\": 16.8, \"precipitation_probability_min\": 0, \"precipitation_probability_max\": 10}, {\"time\": \"2026-10-05\", \"temperature_2m_min\": 8.0, \"temperature_2m_max\": 18.1, \"precipitation_probability_min\": 0, \"precipitation_probability_max\": 30}]  (7 days total, same shape)"
+  ],
+  "get_range_forecast": [
+    "[{\"time\": \"2026-10-10\", \"temperature_2m_min\": 9.5, \"temperature_2m_max\": 19.0, \"precipitation_probability_min\": 0, \"precipitation_probability_max\": 20}]  (one entry per day in the requested range, same shape as get_weather_forecast)"
+  ],
+  "get_reflection_prompt": [
+    "Drop your shoulders away from your ears and unclench your jaw. Take one slow breath \u2014 what shifted, even slightly?"
+  ],
+  "set_home_location": [
+    "Set default location to 'Queanbeyan, Australia' and timezone to 'Australia/Sydney'."
+  ]
+}

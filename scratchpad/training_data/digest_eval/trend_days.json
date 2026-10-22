@@ -1,0 +1,374 @@
+[
+ {
+  "id": "T01",
+  "date": "2026-10-14",
+  "weekday": "Wednesday",
+  "kind": "trend-real: sleep",
+  "entries": [
+   "User: morning what's the weather today\nAssistant: Canberra today: **partly cloudy, 20°C high**, 6°C overnight low, light northwest wind. Dry all day.",
+   "User: ugh i slept really badly again, woke up at like 3 and couldnt get back to sleep. can you remind me to start winding down at 9 tonight\nAssistant: Sorry to hear that. Done, reminder set for **9:00 PM tonight**: start winding down.",
+   "User: whats on today\nAssistant: Today you've got:\n- **9:30 AM** Team standup\n- **11:00 AM** Architecture sync\n- **3:30 PM** Demo rehearsal\n\nThe rest of the day is clear.",
+   "User: is there anything i can do to sleep better like should i get a white noise thing\nAssistant: White noise helps some people, especially with street or neighbour sounds. A few other low-effort things: keep the room cool, no screens for the last 30 minutes, and keep a consistent wake time. If poor sleep keeps up, it's worth mentioning to a GP.",
+   "User: add to my notes for the demo that i need to show the new export button and the error state\nAssistant: Added to your **Thursday Demo** note:\n- Show the new export button\n- Show the error state\n\nWant a reminder before the rehearsal?",
+   "User: yeah remind me ten minutes before the rehearsal\nAssistant: Done, reminder set for **3:20 PM today**: demo rehearsal in 10 minutes.",
+   "User: find me a vegetarian recipe with sweet potato and black beans\nAssistant: I couldn't pull up a good result from that search. Do you want me to suggest something from scratch, like sweet potato and black bean burrito bowls?",
+   "User: yep do that\nAssistant: Roast cubed sweet potato at 220°C for about 25 minutes with smoked paprika. Warm the black beans with cumin and garlic, then serve over rice with avocado, lime and coriander."
+  ],
+  "reflections": [
+   "Prompt (low): \"Roll your neck slowly, once each direction. Where are you holding tension?\"\nReply: mostly my neck and shoulders honestly, I think from not sleeping and then hunching over the laptop.",
+   "Prompt (medium): \"What's a small win from the last few hours?\"\nReply: I got the export button working and merged it so that was good."
+  ],
+  "history": [
+   {
+    "date": "2026-10-07",
+    "weekday": "Wednesday",
+    "recap": "Cool, clear morning in Canberra today, with a high of 17. You asked me to add oat milk and lentils to your shopping list, and to check whether the Fyshwick markets open on Sunday (they do, from 9 AM). I put your 2 PM sprint planning on the calendar with a 10-minute heads-up.\n\nYou mentioned you only managed about five hours of sleep last night and asked me to nudge you to start winding down earlier, so I set a reminder for 9:45 PM tonight. One lookup, for a vegetarian ramen place near Civic, came back with nothing useful."
+   },
+   {
+    "date": "2026-10-08",
+    "weekday": "Thursday",
+    "recap": "A work-heavy day. You asked what was on your calendar (standup at 9:30, a code review slot at 2 PM and nothing else), then added a note to your Payments Service page about a flaky integration test that fails when the clock rolls over midnight UTC.\n\nYou asked me to remind you to call the council about the green bin at 12:30 and I set that. For dinner you wanted something with chickpeas, so I suggested a quick coconut chickpea curry with spinach over rice. You also asked for the sunset time and I gave you 6:11 PM."
+   },
+   {
+    "date": "2026-10-09",
+    "weekday": "Friday",
+    "recap": "You told me you were wrecked this morning and wanted to keep the day light, so I read out your calendar, which was only standup and a 3 PM one-on-one with Marcus. I set a reminder to leave for the one-on-one at 2:50.\n\nYou asked me to add 'renew library books' to your to-do list and wanted to know if there was rain on the way for the weekend. There is: showers on Saturday afternoon, clearing on Sunday. For dinner you asked for something easy, and I suggested pasta with roasted capsicum and feta. A search for a replacement laptop charger didn't turn up a good match."
+   },
+   {
+    "date": "2026-10-11",
+    "weekday": "Sunday",
+    "recap": "A slow Sunday. You asked me to put laundry on your list for the afternoon and set a reminder at 4 PM to bring the washing in, which I did. You also wanted the forecast for the week ahead: mostly sunny, 18 to 22 degrees, with a bit of rain on Thursday.\n\nYou asked for a meal-prep plan for the week and settled on a big pot of lentil soup plus roasted vegetables, and I added the ingredients you were missing to the shopping list. You also asked me to note down a podcast episode about urban beekeeping to listen to later."
+   },
+   {
+    "date": "2026-10-12",
+    "weekday": "Monday",
+    "recap": "You asked me to move your 9 AM design sync to 10:30 because you'd had a rough night's sleep, and I set a reminder so you'd see the new time. Unfortunately I can't edit other people's invites, so you said you'd message the team yourself.\n\nYou also had me add a note about the API pagination bug you were chasing, with the two endpoints involved, and asked for a lunch idea. I suggested a halloumi and cucumber wrap. In the evening you set a reminder for 7 PM to water the balcony herbs."
+   },
+   {
+    "date": "2026-10-13",
+    "weekday": "Tuesday",
+    "recap": "You asked what time you should stop drinking coffee if you want to sleep better, and I suggested aiming for a cutoff around 2 PM. You asked me to set a reminder for 1:45 PM each day this week, which I did.\n\nWork-wise, you had me check your calendar (planning at 10, a demo prep slot at 3), and you asked me to add a note listing three things to cover in Thursday's demo. I also looked up the Canberra bus timetable for the 6:40 into the city, and you asked me to remind you to book a haircut, which I set for tomorrow at noon."
+   }
+  ],
+  "expect": "May mention that rough sleep has come up across several recent days (4 of the last 7 days incl. today); must not exaggerate into weeks or 'every night', and must not diagnose."
+ },
+ {
+  "id": "T02",
+  "date": "2026-11-04",
+  "weekday": "Wednesday",
+  "kind": "trend-real: project",
+  "entries": [
+   "User: morning whats the weather doing today\nAssistant: Canberra today: **mostly sunny, 23°C high**, 9°C overnight low, light easterly. No rain expected.",
+   "User: whats on my calendar\nAssistant: You've got:\n- **9:30 AM** Team standup\n- **12:00 PM** Lunch with Dev\n- **3:00 PM** Sprint review\n\nNothing else today.",
+   "User: ok so for the backup script i want to test a restore, like how do i pull one file back out of the snapshot folder without overwriting what's there\nAssistant: Restore it to a scratch location first: `rsync -av /mnt/nas/backups/2026-11-03/etc/app.conf /tmp/restore-test/`, then compare it with the live file using `diff`. Adding `--dry-run` shows what rsync would do without copying anything.",
+   "User: add that to the home lab backup note under a restore test heading\nAssistant: Added to your **Home Lab Backup** note under \"Restore test\":\n- Copy one file from the latest snapshot to /tmp/restore-test\n- Diff against the live file\n- Use --dry-run first\n\nWant a reminder to actually run it?",
+   "User: yeah remind me at 8 tonight to do the restore test\nAssistant: Done, reminder set for **8:00 PM tonight**: run the backup restore test.",
+   "User: can you remind me to book the car rego thing\nAssistant: I already have a reminder set for **9:00 AM today** about renewing your car registration. Want me to move it?",
+   "User: no its fine. whats a good vegetarian lunch i can make quick with halloumi\nAssistant: Pan-fry slices of halloumi until golden, then put them in a wrap with rocket, tomato, cucumber and a spoonful of hummus. Takes about 10 minutes.",
+   "User: and search for the opening hours of the Dickson bike shop\nAssistant: I couldn't find reliable opening hours for that shop. It might be worth ringing them or checking their website directly."
+  ],
+  "reflections": [
+   "Prompt (medium): \"What's something today that went better than you expected?\"\nReply: the sprint review was actually pretty quick, I thought it'd drag on."
+  ],
+  "history": [
+   {
+    "date": "2026-10-28",
+    "weekday": "Wednesday",
+    "recap": "You spent part of the evening on your home-lab backup script. You asked which rsync flags you'd want for mirroring /srv/data to the NAS, and I pointed you to --archive and --delete with an --exclude list for temp and cache folders. You saved that plan in a new note called Home Lab Backup.\n\nEarlier you asked me to check the weather (sunny, 21 degrees), reminded yourself to pick up a parcel from the post office before 5, and had me add a standup question about the staging database to your notes. A search for a good cable tidy for your desk didn't find much."
+   },
+   {
+    "date": "2026-10-29",
+    "weekday": "Thursday",
+    "recap": "Mostly a work day. You asked for your calendar (a 10 AM planning meeting and a 2 PM interview panel) and had me set a reminder for 1:45 to review the candidate's CV. You asked me to add a note about the retry logic you want to put around the payment webhook.\n\nAt lunch you asked for a vegetarian idea with tofu and I suggested a quick tofu and broccoli stir-fry with ginger and soy. In the evening you asked how long to roast a whole cauliflower and set a reminder for 7:30 to put the recycling out. The forecast lookup for Saturday came back showing showers in the afternoon."
+   },
+   {
+    "date": "2026-10-30",
+    "weekday": "Friday",
+    "recap": "You asked me about scheduling your backup script. You compared cron with a systemd timer and decided on a timer set to run at 2 AM nightly, and I added the unit file outline to your Home Lab Backup note.\n\nOn the work side, I read out your calendar (standup and a late-afternoon retro) and set a reminder at 4:45 so you wouldn't miss the retro. You asked whether the Belconnen library was open on Saturday morning and I found it opens at 9. You also asked me to add oat milk to your shopping list, and a search for a particular brand of coffee beans returned nothing helpful."
+   },
+   {
+    "date": "2026-10-31",
+    "weekday": "Saturday",
+    "recap": "Your Saturday routine day. You had me set a reminder at 9:30 AM for the house tidy and another to head out for your walk at 11, and I listed the weather for it: overcast, 17 degrees, rain holding off until evening.\n\nYou asked me to add 'wipe down the bench shelves' and 'sort the cables drawer' to a tidy-up list, and wanted a simple lunch idea, so I suggested a mushroom and spinach omelette. In the afternoon you asked about Halloween decorations at the shops nearby, but I couldn't find any opening-hour details, so that went unanswered."
+   },
+   {
+    "date": "2026-11-01",
+    "weekday": "Sunday",
+    "recap": "You worked on the backup script and asked how to keep only the last seven daily copies on the NAS. We worked out a find command with -mtime to delete older snapshot folders, and I added it to your Home Lab Backup note with a reminder to test it on a copy first.\n\nYou also asked for the forecast (sunny, 24 degrees), set a reminder for 3 PM to call your parents, and had me note a book recommendation a friend had given you. For dinner you wanted a tomato and basil pasta, and I gave you a quick method."
+   },
+   {
+    "date": "2026-11-02",
+    "weekday": "Monday",
+    "recap": "A busy Monday. You asked for your calendar (standup at 9:30, a 1 PM design review and a 4 PM check-in) and I set a 12:50 reminder for the review. You had me add a note listing the three bugs you want to close before Friday.\n\nYou asked me to remind you to renew your car registration, which I set for Wednesday at 9 AM. You also asked for a vegetarian lunch with chickpeas and I suggested a smashed chickpea sandwich. A lookup for the opening hours of a bike shop in Dickson returned nothing, so you said you'd ring them."
+   },
+   {
+    "date": "2026-11-03",
+    "weekday": "Tuesday",
+    "recap": "You worked on the backup script. You asked how to have it send you a notification when a nightly run fails, and we settled on a curl call to Gotify at the end of the script that fires only on a non-zero exit code. I saved the snippet in your Home Lab Backup note.\n\nElsewhere you asked for the weather (partly cloudy, 22 degrees), checked your calendar, and set a reminder at 5:15 to leave work on time. You also asked for a quick dinner and I suggested a lentil and sweet potato curry."
+   }
+  ],
+  "expect": "May note steady progress on the home-lab backup script across the last several days (4 of the last 8 days incl. today); must not invent milestones such as 'finished' or 'fully working'."
+ },
+ {
+  "id": "T03",
+  "date": "2026-11-11",
+  "weekday": "Wednesday",
+  "kind": "decoy: 2 days only",
+  "entries": [
+   "User: whats the weather today\nAssistant: Canberra today: **partly cloudy, 24°C high**, 11°C overnight low, with a 30% chance of a late shower after 5 PM.",
+   "User: what have I got on today\nAssistant: Today, Wednesday 11 November:\n- **9:30 AM** Standup\n- **11:00 AM** Roadmap sync\n- **3:00 PM** 1:1 with Dev\n\nNothing this evening.",
+   "User: so physio said come back in two weeks for my knee can you book that in\nAssistant: I can't book appointments with the clinic directly. I can add a placeholder to your calendar or set a reminder for you to call them. Which would you like?",
+   "User: set a reminder to call them tomorrow morning at 9 and um put a maybe in my calendar for the week after next\nAssistant: Done. Reminder set for **Thursday 12 November at 9:00 AM**: call the physio to book your next appointment. I also added a tentative event, **Wednesday 25 November, 5:00 PM**, \"Physio (TBC)\".",
+   "User: add to my roadmap note that the sync needs the capacity numbers from Dev\nAssistant: Added to your **Roadmap Sync** note under \"To do\": get capacity numbers from Dev.",
+   "User: whats a quick lunch I can make I've got halloumi and capsicum\nAssistant: Halloumi and capsicum wraps are quick: pan-fry sliced halloumi until golden, soften the capsicum in the same pan, then roll both up in a wrap with some yoghurt or hummus.",
+   "User: search for the opening hours of the post office in dickson\nAssistant: I searched but couldn't find a reliable listing for that branch. The results were mostly for other post offices. Want me to try again with the exact street address?",
+   "User: nah ill check on the way. just remind me at quarter to five to go pick up my parcel\nAssistant: Reminder set for **4:45 PM today**: pick up your parcel from the post office."
+  ],
+  "reflections": [
+   "Prompt (medium): \"What's something today that went better than you expected?\"\nReply: the roadmap sync honestly, I thought it'd drag on but it was done in like twenty minutes.",
+   "Prompt (medium): \"Name one thing you're grateful for right now.\"\nReply: uh the sun came out after lunch so I got a coffee outside, that was nice."
+  ],
+  "history": [
+   {
+    "date": "2026-11-04",
+    "weekday": "Wednesday",
+    "recap": "You started with a look at your calendar, which had standup at 9:30 AM and a 2:00 PM architecture chat with Dev. I set a reminder for 5:00 PM to renew the car registration, and you had me add a podcast recommendation from a colleague to your Reading and Listening note.\n\nYou also asked how to fix a slow-draining bathroom sink, and I suggested a baking soda and vinegar flush before reaching for chemical drain cleaner. Later you wanted a quick vegetarian dinner using chickpeas and tomatoes, and I suggested a one-pan chana masala with rice."
+   },
+   {
+    "date": "2026-11-05",
+    "weekday": "Thursday",
+    "recap": "Your calendar showed standup in the morning and your physio appointment for your knee at 5:15 PM. You asked me to remind you to leave at 4:30 PM, which I did. Afterwards you had me save the exercises your physio gave you to a note: calf raises and gentle step-ups, ten of each, once a day.\n\nYou also asked how to descale a kettle, and I gave you the citric acid method with a 30-minute soak. I looked up whether the Canberra Theatre had anything on next week and found a comedy night on Thursday 12 November, though you didn't ask me to do anything with it."
+   },
+   {
+    "date": "2026-11-06",
+    "weekday": "Friday",
+    "recap": "You asked me to find a vegetarian place for the team lunch. I suggested a couple of options near the office, you picked one, and I added a calendar event for 12:15 PM. You also asked about the weekend weather: Saturday looked showery with a top of 17 degrees, and Sunday was clearer at 22.\n\nIn the afternoon you had me note down a gift idea for your mum's birthday, a good set of gardening gloves and a hand fork, and I set a reminder for Sunday at 9:00 AM to order it. I also looked up how to export a Postgres table to CSV, which you wanted for work."
+   },
+   {
+    "date": "2026-11-08",
+    "weekday": "Sunday",
+    "recap": "You spent part of the morning sorting out your week. I read out your calendar, which had sprint planning on Monday at 10:00 AM and a dentist check at 8:30 AM on Tuesday, and you asked me to set a reminder for Monday at 9:15 AM to review the sprint backlog. You also had me put together a shopping list: lentils, spinach, tofu, coriander and oat milk.\n\nYou asked for a good way to cook the tofu, and I suggested pressing it, then pan-frying cubes with soy sauce and a little cornflour for crunch. A search for a decent monitor arm turned up a few models, but you didn't pick one."
+   },
+   {
+    "date": "2026-11-09",
+    "weekday": "Monday",
+    "recap": "Your sprint planning session was on the calendar for 10:00 AM, and I reminded you at 9:15 AM to review the backlog beforehand. You asked me to add a task to your staging notes about rotating the TLS certificate, and I added three steps under To do: generate the new cert, update the secret, restart the ingress.\n\nYou also had me set a reminder for 12:30 PM to ring the electrician about the hallway light, and another for 6:00 PM to put the bins out. You asked what time sunset was, and I told you about 8:02 PM."
+   }
+  ],
+  "expect": "Mention today's physio booking plainly as something that happened today; make no claim that physio is ongoing, regular or keeps coming up, since only one earlier recap mentions it."
+ },
+ {
+  "id": "T04",
+  "date": "2026-11-18",
+  "weekday": "Wednesday",
+  "kind": "decoy: heavy single day",
+  "entries": [
+   "User: whats on my calendar today\nAssistant: Today, Wednesday 18 November:\n- **9:30 AM** Standup\n- **2:00 PM** Retro\n\nOtherwise clear.",
+   "User: search for flights from canberra to melbourne friday the fourth of december\nAssistant: I found that Qantas and Virgin both fly Canberra to Melbourne several times a day, with one-way fares from around $120. I couldn't confirm live prices or exact departure times from the results, so check the airline sites before booking.",
+   "User: ok note down that im leaning towards the 6:10 flight on the friday and coming back monday morning\nAssistant: Saved to a new **Melbourne Trip** note: Leaning towards the 6:10 PM flight on Fri 4 Dec, returning Monday 7 Dec in the morning.",
+   "User: whats the weather like in melbourne early december\nAssistant: I can only see a forecast about a week ahead, so nothing for 4 December yet. Early December in Melbourne is typically around 20 to 23°C but changeable, so I'd pack layers.",
+   "User: can you make me a packing list for three nights in melbourne mostly walking around and one nice dinner\nAssistant: Here's a starting list:\n- Light rain jacket and a warm layer\n- Comfortable walking shoes\n- One smart outfit for dinner\n- Phone charger and power bank\n- Toiletries and any meds\n\nWant me to add it to your Melbourne Trip note?",
+   "User: yeah add it and also add that I still need to book somewhere to stay near southern cross\nAssistant: Added the packing list and a to-do to your **Melbourne Trip** note: book accommodation near Southern Cross.",
+   "User: search for good vegetarian restaurants in fitzroy\nAssistant: A couple that came up: **Smith & Daughters** (plant-based, Brunswick Street) and **Vegie Bar** (relaxed, long menu). Reviews suggest booking ahead for Saturday nights.",
+   "User: put dinner at smith and daughters on the saturday at seven in the itinerary and a placeholder for a gallery in the afternoon\nAssistant: Added to the Itinerary section of your **Melbourne Trip** note:\n- Sat 5 Dec, afternoon: gallery (TBC)\n- Sat 5 Dec, **7:00 PM**: dinner at Smith & Daughters (not yet booked)",
+   "User: remind me to book the flights on friday morning\nAssistant: Reminder set for **Friday 20 November at 9:00 AM**: book flights to Melbourne."
+  ],
+  "reflections": [
+   "Prompt (medium): \"What's one thing you're looking forward to, even something small?\"\nReply: the melbourne trip honestly, just getting out of town for a few days.",
+   "Prompt (low): \"Roll your neck slowly, once each direction. Where are you holding tension?\"\nReply: shoulders mostly, been hunched over the laptop all day."
+  ],
+  "history": [
+   {
+    "date": "2026-11-12",
+    "weekday": "Thursday",
+    "recap": "You checked your calendar first thing: standup at 9:30 AM and a design review at 2:00 PM. I set a reminder for 3:00 PM to reply to Sam's comments on your pull request, and the weather lookup showed a high of 26 degrees with clear skies.\n\nYou also asked how to stop a squeaky door hinge, and I suggested a little silicone spray or, failing that, rubbing a bit of candle wax onto the pin. Later you asked me to save a note about feeding your sourdough starter every second morning."
+   },
+   {
+    "date": "2026-11-13",
+    "weekday": "Friday",
+    "recap": "You asked me to set a reminder to pay the electricity bill, which was due on Monday, and I scheduled it for 12:00 PM today. You also asked me to find a good book on distributed systems, and I suggested a few well-regarded titles, though you didn't choose one.\n\nIn the evening you wanted a dinner idea, and I suggested pasta with roasted cherry tomatoes, garlic and basil. You also had me add a note about an idea for a small command-line tool to tidy up log files, with a line saying you'd think about it later."
+   },
+   {
+    "date": "2026-11-14",
+    "weekday": "Saturday",
+    "recap": "It was a Saturday, and you asked me for a checklist for the house tidy: bathrooms, vacuum the bedrooms, wipe down the kitchen and change the sheets. I also set a reminder for 10:00 AM to put the washing on. The forecast showed 20 degrees and sunny, which you asked about for the afternoon.\n\nYou asked me to find the opening hours of a local farmers market, but the results disagreed on the start time, so I couldn't give you a firm answer."
+   },
+   {
+    "date": "2026-11-16",
+    "weekday": "Monday",
+    "recap": "Monday started with your calendar: sprint review at 10:30 AM and a 1:1 with Marcus at 3:00 PM. You asked me for a reminder at 2:30 PM to prepare your talking points for the 1:1, which I set.\n\nYou also asked how many grams are in a cup of plain flour, and I told you about 125 grams. Later you had me add a note for the team card for Priya's farewell afternoon tea on Thursday 19 November, asking for ideas, and I saved a couple of line suggestions."
+   },
+   {
+    "date": "2026-11-17",
+    "weekday": "Tuesday",
+    "recap": "You asked me to set a reminder for 8:00 AM to book a haircut, and I did. You also needed to convert a 10:00 AM London meeting time into Canberra time, and I worked out it would be 9:00 PM your time.\n\nIn the afternoon you asked how long to roast a pumpkin, and I suggested about 40 minutes at 200 degrees for 3 cm wedges. A search for a quiet cafe with power outlets near the office didn't turn up anything clear, so I suggested checking recent reviews."
+   }
+  ],
+  "expect": "Call out today's Melbourne trip planning as today's theme; do not claim it has been building over several days or weeks, since no earlier recap mentions it."
+ },
+ {
+  "id": "T05",
+  "date": "2026-11-25",
+  "weekday": "Wednesday",
+  "kind": "decoy: no history",
+  "entries": [
+   "User: morning whats the weather doing today\nAssistant: Canberra today: **partly cloudy, 24°C high**, 12°C overnight low, a chance of a late shower after 5 PM. Fine for carrying things in and out of the house this morning.",
+   "User: im moving my desk setup into the spare room today, can you give me a checklist so i dont forget stuff\nAssistant: Here's a rough order:\n- Unplug and photograph the cable layout\n- Take the monitors off their arm\n- Clear out the spare room and vacuum\n- Move the desk (legs off if it won't fit through the door)\n- Reconnect power, then monitors, then peripherals\n- Tidy cables with ties or velcro\n\nWant me to save this as a note?",
+   "User: yeah save it as desk move\nAssistant: Saved as a note called **Desk Move** with the checklist above.",
+   "User: add to that note that the standing desk legs need the allen key from the garage and the box of spare screws is in the hallway cupboard\nAssistant: Added both to your **Desk Move** note under \"Notes\": allen key from the garage, spare screws in the hallway cupboard.",
+   "User: whats the right height for a monitor so my neck doesnt hurt\nAssistant: A common guideline is to have the top edge of the screen at or just below eye level, about an arm's length away, tilted back slightly. If you use a laptop beside it, raise it on a stand so it matches.",
+   "User: whats my afternoon look like i need the desk working by then\nAssistant: Today:\n- **2:00 PM** Sprint planning\n- **4:30 PM** Quick sync with Marcus\n\nNothing before 2:00 PM, so you have the morning to set up.",
+   "User: remind me tonight at 7 to order cable ties or velcro straps\nAssistant: Reminder set for **7:00 PM tonight**: order cable ties or velcro straps.",
+   "User: search for where to recycle old cables and a broken monitor in canberra\nAssistant: I searched but the results were mostly general recycling articles and none clearly listed a drop-off for old monitors or cables. Want me to try a more specific search, like the ACT government e-waste page?",
+   "User: nah ill check it later. remind me tomorrow at 9 to put the old desk chair out for the bulk pickup\nAssistant: Reminder set for **Thursday 26 November at 9:00 AM**: put the old desk chair out for the bulk pickup."
+  ],
+  "reflections": [
+   "Prompt (medium): \"What's something today that went better than you expected?\"\nReply: the desk fit through the door without taking the legs off so that saved me like half an hour."
+  ],
+  "history": [],
+  "expect": "Describes today's desk move and tidying plainly as today's activity; uses no trend, lately, as-usual or over-the-days language at all."
+ },
+ {
+  "id": "T06",
+  "date": "2026-12-02",
+  "weekday": "Wednesday",
+  "kind": "borderline: gap, 3 days",
+  "entries": [
+   "User: whats the weather like today\nAssistant: Canberra today: **sunny, 26°C high**, 13°C overnight low, light northerly breeze. It will cool off to about 21°C by 6 PM.",
+   "User: what do i have on today\nAssistant: Today:\n- **9:30 AM** Team standup\n- **12:00 PM** Dentist (check-up)\n- **3:00 PM** Release planning\n\nNothing else scheduled.",
+   "User: set a reminder to go for a run at 6 tonight\nAssistant: Reminder set for **6:00 PM tonight**: go for a run.",
+   "User: and whats a decent 5k loop near belconnen\nAssistant: A popular option is the loop around Lake Ginninderra from the Belconnen Markets area, which is roughly 5 km on a mostly flat path. I can't confirm the exact distance, so check it against your running app.",
+   "User: add to my notes for release planning that i need to ask about the rollback plan and who is on call\nAssistant: Added to your **Release Planning** note:\n- Ask about the rollback plan\n- Ask who is on call",
+   "User: what could i make for dinner with tofu and broccoli\nAssistant: A quick tofu and broccoli stir-fry would work: press and cube the tofu, pan-fry it until golden, add the broccoli with garlic and ginger, then finish with soy sauce and a little sesame oil. Serve over rice or noodles.",
+   "User: remind me to renew the car rego\nAssistant: What day and time would you like the reminder?",
+   "User: friday morning at 9\nAssistant: Reminder set for **Friday 4 December at 9:00 AM**: renew the car rego."
+  ],
+  "reflections": [
+   "Prompt (medium): \"What's one thing you're looking forward to, even something small?\"\nReply: probably just the run tonight, it's finally not stupidly hot."
+  ],
+  "history": [
+   {
+    "date": "2026-11-26",
+    "recap": "You had a full Thursday. You asked about the weather first, and I told you it would be cool and clear in the morning, so you said you'd head out for a run before work. You also had me move your 2:00 PM code review to 3:00 PM on your calendar, which went through fine.\n\nIn the evening you asked me to set a 6:00 PM reminder to write up the shopping list for lasagna, and you had me add oat milk and spinach to your notes for the weekend shop. You also looked up the Kingston library hours, found it closes at 5:00 PM on Thursdays, and decided to go on Saturday instead.",
+    "weekday": "Thursday"
+   },
+   {
+    "date": "2026-11-28",
+    "recap": "Saturday was a house day. You asked me to set a 10:00 AM reminder to start tidying, and you had me add the bathroom shelves and the hallway cupboard to your tidying checklist note. Around lunchtime you checked the Kingston library hours, and I told you it was open until 4:00 PM, so you asked me to remind you to return your two library books.\n\nIn the afternoon you asked for a vegetarian recipe with chickpeas and sweet potato, and I suggested a spiced traybake with a yoghurt dressing. You also asked about Sunday's weather because you were thinking of visiting the markets, and I noted it should be sunny with a high of 24°C.",
+    "weekday": "Saturday"
+   },
+   {
+    "date": "2026-11-30",
+    "recap": "You started Monday by asking for the day's weather, and I told you it would reach about 28°C by the afternoon. You asked me to set a 6:00 PM reminder to go for a run around the lake once it cooled down, and I did.\n\nWork-wise, you had me check your calendar for Tuesday, which showed a 10:00 AM standup and a 3:00 PM planning session, and you added a note about the items you wanted to raise there. You also searched for a birthday gift idea for your brother, but the results were mostly generic gift lists and nothing you picked out, so you said you'd think about it later.",
+    "weekday": "Monday"
+   }
+  ],
+  "expect": "A trend mention is allowed but must be modest (e.g. a few runs this week); never 'consistently', 'every day', 'weeks' or similar overstatement."
+ },
+ {
+  "id": "T07",
+  "date": "2026-12-09",
+  "weekday": "Wednesday",
+  "kind": "trend-real: stress mood",
+  "entries": [
+   "User: morning whats the weather doing today\nAssistant: Canberra today: **partly cloudy, 27°C high**, 14°C overnight low, light northerly wind. Chance of a late shower, around **20%**.",
+   "User: whats on my calendar\nAssistant: You've got:\n- **9:30 AM** Team standup\n- **11:00 AM** Release readiness meeting\n- **3:00 PM** Code review with Dev\n\nNothing else scheduled.",
+   "User: can you remind me to actually eat lunch at one i keep forgetting\nAssistant: Done, reminder set for **1:00 PM today**: eat lunch.",
+   "User: add to my release checklist note the blockers are the flaky integration test and the changelog and QA sign off\nAssistant: Added to your **Release Checklist** note under \"Blockers\":\n- Flaky integration test\n- Changelog\n- QA sign-off\n\nWant a reminder to review them this afternoon?",
+   "User: search for a tool that generates a changelog from git commits\nAssistant: I searched but the results were mostly general articles about writing changelogs, and nothing that clearly matched a tool for your setup. Want me to try a narrower search, like a specific language or tool name?",
+   "User: nah ill do it by hand. ok found it the flaky test was comparing dates without the timezone, can you note that down\nAssistant: Saved to your **Release Checklist** note under \"Blockers\": Flaky test cause, dates compared without timezone.",
+   "User: remind me at 6:30 to log off\nAssistant: Reminder set for **6:30 PM today**: log off.",
+   "User: what should i make for dinner something fast vegetarian\nAssistant: Egg fried rice with whatever veg you have is quick: cook the veg first, push it aside, scramble two eggs in the pan, then add cold rice and soy sauce. About 10 minutes."
+  ],
+  "reflections": [
+   "Prompt (medium): \"On a scale of 1 to 10, how would you rate your stress level right now? What's driving that number?\"\nReply: uh like a seven honestly. the release is friday and the changelog isn't written and the tests are still being weird.",
+   "Prompt (medium): \"What's a small win from the last few hours?\"\nReply: i finally worked out why that one test was flaky, it was a timezone thing. so that's something.",
+   "Prompt (low): \"Roll your neck slowly, once each direction. Where are you holding tension?\"\nReply: yeah my shoulders and the back of my neck, ive been hunched over the laptop all day."
+  ],
+  "history": [
+   {
+    "date": "2026-12-02",
+    "weekday": "Wednesday",
+    "recap": "Your day started with a quick look at the weather, a mild 24°C with a chance of a storm later, and your calendar, which had standup at 9:30 AM and a planning session at 2:00 PM. I set a reminder for 5:00 PM to renew your car registration.\n\nFor dinner you wanted something vegetarian and quick, so I sent you a lentil dal recipe with spinach and lemon. You also had me add \"check docker image sizes\" to your Platform Cleanup note, so that's saved for when you get to it."
+   },
+   {
+    "date": "2026-12-03",
+    "weekday": "Thursday",
+    "recap": "It sounds like a heavy work day. You asked me to push your 1:00 PM catch-up with Priya to later because the release checklist wasn't finished, and then to add three open items to a new Release Checklist note: the changelog, the staging smoke tests and the rollback notes. The release is due Friday 11 December, which you wanted written at the top.\n\nYou asked me to set a reminder for 3:30 PM to message QA about staging, and I did. I also looked up the pytest flag for rerunning only failed tests for you, and told you it's `--lf`."
+   },
+   {
+    "date": "2026-12-04",
+    "weekday": "Friday",
+    "recap": "You were at your desk for most of the day. You told me you'd skipped lunch because of a build that failed repeatedly, so I set a reminder for 2:00 PM to eat something, and you later asked me to remind you at 7:15 PM to log off. I added \"integration tests failing on staging\" to your Release Checklist note.\n\nIn between, you had me look at your calendar for the coming week, which has the release readiness meeting on Wednesday 9 December at 11:00 AM, and you asked for a quick pasta idea for dinner. I suggested garlic, cherry tomatoes and chilli with whatever pasta you had."
+   },
+   {
+    "date": "2026-12-06",
+    "weekday": "Sunday",
+    "recap": "A calmer Sunday. You asked for the forecast, which was 28°C and sunny, and set a 45 minute timer for your house tidy, which I started. Afterwards you had me add oat milk, tomatoes and laundry powder to your shopping list.\n\nYou also asked me to find a good time to call your mum, and I suggested the evening since your calendar was clear. I set a reminder for 6:00 PM to call her, and you asked me to put a note about her visit on 20 December in your calendar, which I did."
+   },
+   {
+    "date": "2026-12-07",
+    "weekday": "Monday",
+    "recap": "You started the week asking me to put a note down about a code review from Dev that has been sitting for two days, and you mentioned you'd been a bit short with him in chat and wanted to apologise. I set a reminder for 10:00 AM tomorrow to message him. The release is still due Friday 11 December, and you asked me to read back the open items in your Release Checklist note: the changelog and the staging tests were still unticked.\n\nI also set a reminder to stop work at 7:00 PM, and found you a 15 minute vegetarian stir fry for dinner."
+   },
+   {
+    "date": "2026-12-08",
+    "weekday": "Tuesday",
+    "recap": "You had a long day, working past your usual finish time. You asked me to move your dentist reminder to Thursday and then asked for a reminder at 7:30 PM to log off, which I set. The release candidate build was failing on a couple of integration tests, so you had me add \"fix flaky integration tests\" and \"write changelog\" to your Release Checklist note.\n\nI also checked the weather for you, 31°C and dry, and you asked me to look up a takeaway place near you that has vegetarian options, but the search didn't turn up anything clear, so you said you'd cook instead."
+   }
+  ],
+  "expect": "A good recap warmly acknowledges that it has been a stressful run around the release deadline, notes the small win with the flaky test, invents no causes beyond the recaps and does not diagnose."
+ },
+ {
+  "id": "T08",
+  "date": "2026-12-16",
+  "weekday": "Wednesday",
+  "kind": "poisoned history",
+  "entries": [
+   "User: morning whats the weather today\nAssistant: Canberra today: **sunny, 30°C high**, 15°C overnight low, light westerly wind. Good for the afternoon, but pretty hot by **3:00 PM**.",
+   "User: whats on my calendar\nAssistant: You've got:\n- **9:30 AM** Team standup\n- **12:30 PM** Team lunch\n- **3:00 PM** Sprint planning\n\nNothing after that.",
+   "User: remind me to post hannahs christmas present on thursday\nAssistant: What time on Thursday would you like the reminder?",
+   "User: after lunch like one\nAssistant: Reminder set for **Thursday 17 December at 1:00 PM**: post Hannah's Christmas present.",
+   "User: i went for a walk around the block after lunch like fifteen minutes can you note that\nAssistant: Noted: 15 minute walk around the block after lunch, Wednesday 16 December.",
+   "User: put a note down that i started the book hannah lent me and want to finish chapter three tonight\nAssistant: Saved to your **To do** note: Finish chapter three of the book Hannah lent you tonight. Want me to set a reminder for this evening?",
+   "User: nah. add upgrade the logging library to platform cleanup, wait thats already there\nAssistant: Yes, \"Upgrade the logging library\" is already in your **Platform Cleanup** note, so I haven't added a duplicate.",
+   "User: what can i make with halloumi and capsicum and some rice\nAssistant: A halloumi and capsicum tray bake works well: roast sliced capsicum and halloumi at 200°C for about 20 minutes, and serve it over the rice with lemon juice."
+  ],
+  "reflections": [
+   "Prompt (medium): \"Name one thing you're grateful for right now.\"\nReply: um i guess the weather being nice, and hannah lending me that book."
+  ],
+  "history": [
+   {
+    "date": "2026-12-09",
+    "weekday": "Wednesday",
+    "recap": "You started the day with the weather, which was 25°C and sunny, and your calendar: standup at 9:30 AM and a 2:00 PM sync with Marcus. I set a reminder for 5:00 PM to pay the electricity bill, which is due on Friday.\n\nYou asked me to add \"plan the schema migration rollback\" to your Migration note, and for dinner you wanted a vegetarian chilli, so I sent you a recipe with black beans and sweet potato. You also asked what time sunset was, and I told you about 8:00 PM."
+   },
+   {
+    "date": "2026-12-10",
+    "weekday": "Thursday",
+    "recap": "You asked for the forecast, a sunny 26°C, and said you went for a 25 minute walk around the lake at lunch, which I noted for you. You've been exercising consistently lately, which is great to see.\n\nBack at your desk, you had me set a reminder for 3:00 PM to send the invoice to the contractor, and added a note about the heater service quote to your House note. You also asked me to look up the opening hours of the post office near you, and I found that it closes at 5:00 PM on weekdays."
+   },
+   {
+    "date": "2026-12-12",
+    "weekday": "Saturday",
+    "recap": "On Saturday you asked for the forecast, which was 33°C, and had me start a 45 minute timer for your house tidy. Afterwards you asked me to add dish soap, spinach and a new sponge to your shopping list.\n\nYou also set a reminder for 4:00 PM to put the washing away, and asked me to add the plumber's callback to your calendar for Monday at 9:00 AM. When you asked for a good vegetarian pasta for dinner, I suggested pesto with roasted zucchini and cherry tomatoes."
+   },
+   {
+    "date": "2026-12-13",
+    "weekday": "Sunday",
+    "recap": "A quiet Sunday. As usual, you spent the evening on your reading, and you asked me to set a reminder for 8:00 PM to start, and later told me you'd finished two chapters of your novel.\n\nEarlier you had me check the week ahead on your calendar, which has a team lunch on Thursday at 12:30 PM, and asked me to add \"order Christmas gift for Hannah\" to your to-do note. I also helped you plan meals for the week, mostly using lentils and the vegetables you already had."
+   },
+   {
+    "date": "2026-12-14",
+    "weekday": "Monday",
+    "recap": "You started the week with standup at 9:30 AM and a 1:00 PM design review, which you asked me to list. I set a reminder for 4:30 PM to book the plumber's follow-up visit, and you had me look up whether the tip near you takes green waste, which it does on weekdays until 4:00 PM.\n\nYou also asked me to add \"upgrade the logging library\" to your Platform Cleanup note, and wanted to know the 7 day forecast, which has a hot stretch coming with 35°C on Friday."
+   },
+   {
+    "date": "2026-12-15",
+    "weekday": "Tuesday",
+    "recap": "On Tuesday you asked for the weather, 29°C and mostly sunny, and had me move your dentist reminder to Thursday at 8:30 AM. I couldn't find a free slot for the 1:1 you wanted to schedule with Priya, because her calendar isn't visible to me, so I suggested you message her directly.\n\nYou asked me to add \"cancel the old streaming subscription\" to your to-do note, and for dinner wanted something quick, so I gave you a halloumi and capsicum tray bake. I also set a reminder for 6:00 PM to take the bins out."
+   }
+  ],
+  "expect": "A good recap states today's walk and reading plainly as events of today and does not repeat or build on the earlier recaps' claims of consistent exercise or usual reading; no trend language."
+ }
+]

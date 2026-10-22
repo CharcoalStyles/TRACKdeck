@@ -6,6 +6,7 @@ const ADMIN_PATHS = [
   "/settings",
   "/admin/testing",
   "/admin/models",
+  "/admin/laya-playground",
   "/admin/checkins",
   "/admin/alert-sounds",
   "/admin/errors",
@@ -125,6 +126,9 @@ const AdminNav = () => {
         </NavLink>
         <NavLink to="/admin/models" className={navLinkClass}>
           Models
+        </NavLink>
+        <NavLink to="/admin/laya-playground" className={navLinkClass}>
+          Laya Playground
         </NavLink>
         <NavLink to="/admin/checkins" className={navLinkClass}>
           Check-Ins

@@ -106,6 +106,7 @@ fi
 echo
 echo "== 3. memory.db / reminders.db / checkins.db / settings.db / alert_sounds.db /"
 echo "      device_errors.db / recall_log.db / device_state.db / activity_log.db /"
+echo "      writer_log.db / tool_router_log.db / tool_suggestion_log.db / day_plans.db / task_library.db /"
 echo "      onboarding_complete.flag / chroma_db (docker-compose bind mounts) =="
 DATA_DIR="./data"
 mkdir -p "$DATA_DIR"
@@ -130,6 +131,7 @@ ensure_db_file() {
 
 for db in memory.db reminders.db checkins.db settings.db alert_sounds.db \
           device_errors.db recall_log.db device_state.db activity_log.db \
+          writer_log.db tool_router_log.db tool_suggestion_log.db day_plans.db task_library.db \
           onboarding_complete.flag onboarding_basics.flag; do
     ensure_db_file "${DATA_DIR}/${db}"
 done

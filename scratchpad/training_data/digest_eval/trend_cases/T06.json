@@ -1,0 +1,37 @@
+{
+ "id": "T06",
+ "date": "2026-12-02",
+ "weekday": "Wednesday",
+ "kind": "borderline: gap, 3 days",
+ "expect": "A trend mention is allowed but must be modest (e.g. a few runs this week); never 'consistently', 'every day', 'weeks' or similar overstatement.",
+ "history": [
+  {
+   "date": "2026-11-26",
+   "recap": "You had a full Thursday. You asked about the weather first, and I told you it would be cool and clear in the morning, so you said you'd head out for a run before work. You also had me move your 2:00 PM code review to 3:00 PM on your calendar, which went through fine.\n\nIn the evening you asked me to set a 6:00 PM reminder to write up the shopping list for lasagna, and you had me add oat milk and spinach to your notes for the weekend shop. You also looked up the Kingston library hours, found it closes at 5:00 PM on Thursdays, and decided to go on Saturday instead.",
+   "weekday": "Thursday"
+  },
+  {
+   "date": "2026-11-28",
+   "recap": "Saturday was a house day. You asked me to set a 10:00 AM reminder to start tidying, and you had me add the bathroom shelves and the hallway cupboard to your tidying checklist note. Around lunchtime you checked the Kingston library hours, and I told you it was open until 4:00 PM, so you asked me to remind you to return your two library books.\n\nIn the afternoon you asked for a vegetarian recipe with chickpeas and sweet potato, and I suggested a spiced traybake with a yoghurt dressing. You also asked about Sunday's weather because you were thinking of visiting the markets, and I noted it should be sunny with a high of 24°C.",
+   "weekday": "Saturday"
+  },
+  {
+   "date": "2026-11-30",
+   "recap": "You started Monday by asking for the day's weather, and I told you it would reach about 28°C by the afternoon. You asked me to set a 6:00 PM reminder to go for a run around the lake once it cooled down, and I did.\n\nWork-wise, you had me check your calendar for Tuesday, which showed a 10:00 AM standup and a 3:00 PM planning session, and you added a note about the items you wanted to raise there. You also searched for a birthday gift idea for your brother, but the results were mostly generic gift lists and nothing you picked out, so you said you'd think about it later.",
+   "weekday": "Monday"
+  }
+ ],
+ "entries": [
+  "User: whats the weather like today\nAssistant: Canberra today: **sunny, 26°C high**, 13°C overnight low, light northerly breeze. It will cool off to about 21°C by 6 PM.",
+  "User: what do i have on today\nAssistant: Today:\n- **9:30 AM** Team standup\n- **12:00 PM** Dentist (check-up)\n- **3:00 PM** Release planning\n\nNothing else scheduled.",
+  "User: set a reminder to go for a run at 6 tonight\nAssistant: Reminder set for **6:00 PM tonight**: go for a run.",
+  "User: and whats a decent 5k loop near belconnen\nAssistant: A popular option is the loop around Lake Ginninderra from the Belconnen Markets area, which is roughly 5 km on a mostly flat path. I can't confirm the exact distance, so check it against your running app.",
+  "User: add to my notes for release planning that i need to ask about the rollback plan and who is on call\nAssistant: Added to your **Release Planning** note:\n- Ask about the rollback plan\n- Ask who is on call",
+  "User: what could i make for dinner with tofu and broccoli\nAssistant: A quick tofu and broccoli stir-fry would work: press and cube the tofu, pan-fry it until golden, add the broccoli with garlic and ginger, then finish with soy sauce and a little sesame oil. Serve over rice or noodles.",
+  "User: remind me to renew the car rego\nAssistant: What day and time would you like the reminder?",
+  "User: friday morning at 9\nAssistant: Reminder set for **Friday 4 December at 9:00 AM**: renew the car rego."
+ ],
+ "reflections": [
+  "Prompt (medium): \"What's one thing you're looking forward to, even something small?\"\nReply: probably just the run tonight, it's finally not stupidly hot."
+ ]
+}

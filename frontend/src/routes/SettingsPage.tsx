@@ -31,6 +31,7 @@ export default function SettingsPage() {
     <div className="flex flex-col gap-4">
       <LearningModeCard data={data} onSaved={invalidate} />
       <LlmProviderCard data={data} onSaved={invalidate} />
+      <ModelAssignmentsCard data={data} onSaved={invalidate} />
       <LocationTimeCard data={data} onSaved={invalidate} />
       <DigestCard data={data} onSaved={invalidate} />
       <CheckinWindowCard data={data} onSaved={invalidate} />
@@ -112,6 +113,7 @@ type Settings = NonNullable<ReturnType<typeof useQuery<{
   max_history_tokens: number
   mcp_servers: string
   llm_provider: string
+  lmstudio_writer_model: string
   openrouter_configured: boolean
 }>>['data']>
 
@@ -204,6 +206,274 @@ function LlmProviderCard({ data, onSaved }: { data?: Settings; onSaved: () => vo
       )}
       <SaveStatus state={status.state} errorMessage={status.errorMessage} />
     </Card>
+  )
+}
+
+type WriterChoice = 'default' | 'tool' | 'custom'
+type RowDraft = { tool: string; writerChoice: WriterChoice; writerCustom: string }
+
+function ModelAssignmentsCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
+  const queryClient = useQueryClient()
+  const status = useSaveStatus()
+  const [defaultWriter, setDefaultWriter] = useState('')
+  const [draft, setDraft] = useState<Record<string, RowDraft>>({})
+
+  const matrixQuery = useQuery({
+    queryKey: ['model-assignments'],
+    queryFn: async () => {
+      const { data } = await api.GET('/settings/model-assignments')
+      return data
+    },
+  })
+  const matrix = matrixQuery.data
+
+  const modelsQuery = useQuery({
+    queryKey: ['lmstudio-models'],
+    queryFn: async () => {
+      const { data } = await api.GET('/debug/lmstudio-models')
+      return data
+    },
+  })
+
+  useEffect(() => {
+    if (data) setDefaultWriter(data.lmstudio_writer_model || '')
+  }, [data])
+
+  useEffect(() => {
+    if (!matrix) return
+    const next: Record<string, RowDraft> = {}
+    for (const r of matrix.rows) {
+      const w = r.writer_override
+      next[r.key] = {
+        tool: r.tool_override,
+        writerChoice: w === '' ? 'default' : w === matrix.no_writer_value ? 'tool' : 'custom',
+        writerCustom: w === '' || w === matrix.no_writer_value ? '' : w,
+      }
+    }
+    setDraft(next)
+  }, [matrix])
+
+  const mutation = useMutation({
+    mutationFn: async (body: {
+      lmstudio_writer_model?: string
+      model_assignments?: Record<string, Record<string, string>>
+    }) => {
+      const { error } = await api.POST('/settings', { body })
+      if (error) throw new Error()
+    },
+    onMutate: () => status.setState('saving'),
+    onSuccess: () => {
+      status.setState('saved')
+      onSaved()
+      queryClient.invalidateQueries({ queryKey: ['model-assignments'] })
+    },
+    onError: () => status.setState('error'),
+  })
+
+  function toOverrides(): Record<string, Record<string, string>> {
+    const out: Record<string, Record<string, string>> = {}
+    if (!matrix) return out
+    for (const r of matrix.rows) {
+      const d = draft[r.key]
+      if (!d) continue
+      const entry: Record<string, string> = {}
+      if (r.tool_calls && d.tool.trim()) entry.tool = d.tool.trim()
+      if (d.writerChoice === 'tool') entry.writer = matrix.no_writer_value
+      else if (d.writerChoice === 'custom' && d.writerCustom.trim()) entry.writer = d.writerCustom.trim()
+      if (Object.keys(entry).length) out[r.key] = entry
+    }
+    return out
+  }
+
+  const saved = matrix
+    ? Object.fromEntries(
+        matrix.rows
+          .filter((r) => r.tool_override || r.writer_override)
+          .map((r) => [
+            r.key,
+            {
+              ...(r.tool_override ? { tool: r.tool_override } : {}),
+              ...(r.writer_override ? { writer: r.writer_override } : {}),
+            },
+          ]),
+      )
+    : {}
+  const dirty = JSON.stringify(toOverrides()) !== JSON.stringify(saved)
+
+  function patch(key: string, change: Partial<RowDraft>) {
+    setDraft((d) => ({ ...d, [key]: { ...d[key], ...change } }))
+  }
+
+  return (
+    <Card>
+      <h2 className="mb-1 text-lg font-semibold">Models by Mode</h2>
+      <p className="mb-3 text-sm text-text-muted">
+        Two jobs per mode: the <strong>tool model</strong> picks and runs tools; the{' '}
+        <strong>reply model</strong> writes what you read. Blank means the default. Every model
+        named here must be loaded in LM Studio. Applies immediately.
+      </p>
+
+      {matrix && !matrix.split_applies && (
+        <p className="mb-3 rounded border border-border bg-card-alt px-3 py-2 text-sm text-text-muted">
+          The provider is <span className="text-text-primary">{matrix.provider}</span>. A separate
+          writer only applies on LM Studio, so the table below is inactive.
+        </p>
+      )}
+
+      <div className="mb-4 grid gap-3 md:grid-cols-2">
+        <FieldRow label="Default tool model">
+          <div className="rounded border border-border bg-card-alt px-3 py-2 font-mono text-sm text-text-primary">
+            {matrix?.default_tool_model || '—'}
+          </div>
+          <span className="text-xs text-text-muted">Set on the Models page.</span>
+        </FieldRow>
+        <FieldRow label="Default writer model">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={defaultWriter}
+              onChange={(e) => setDefaultWriter(e.target.value)}
+              list="lmstudioModelOptions"
+              placeholder="e.g. gemma-4-e4b-it (blank = no writer)"
+              className={inputClass}
+            />
+            <button
+              type="button"
+              onClick={() => mutation.mutate({ lmstudio_writer_model: defaultWriter })}
+              disabled={defaultWriter.trim() === (data?.lmstudio_writer_model ?? '')}
+              className={`${primaryBtnClass} disabled:cursor-not-allowed disabled:opacity-50`}
+            >
+              Save
+            </button>
+          </div>
+        </FieldRow>
+      </div>
+      <datalist id="lmstudioModelOptions">
+        {(modelsQuery.data?.models ?? []).map((m) => (
+          <option key={m.id} value={m.id} />
+        ))}
+      </datalist>
+
+      <div className="hidden gap-3 border-b border-border pb-2 text-xs font-semibold uppercase tracking-wide text-text-muted md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+        <div>Mode</div>
+        <div>Tool calling</div>
+        <div>Writes the reply</div>
+      </div>
+
+      {(matrix?.rows ?? []).map((r) => {
+        const d = draft[r.key]
+        if (!d) return null
+        const writerIsOwn = r.writer_model !== null
+        return (
+          <div
+            key={r.key}
+            className="grid gap-3 border-b border-border py-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)]"
+          >
+            <div>
+              <div className="font-semibold text-text-primary">{r.label}</div>
+              <div className="mt-1 text-xs text-text-muted">{r.reply_rule}</div>
+            </div>
+
+            <div className="min-w-0">
+              <div className="mb-1 text-xs uppercase tracking-wide text-text-muted md:hidden">
+                Tool calling
+              </div>
+              {r.tool_calls ? (
+                <>
+                  <ModelName model={r.tool_model} isOverride={!!r.tool_override} />
+                  <input
+                    type="text"
+                    value={d.tool}
+                    onChange={(e) => patch(r.key, { tool: e.target.value })}
+                    list="lmstudioModelOptions"
+                    placeholder="default"
+                    aria-label={`${r.label}: tool model override`}
+                    className={`${inputClass} mt-2`}
+                  />
+                </>
+              ) : (
+                <span className="text-sm text-text-muted">No tool calling</span>
+              )}
+            </div>
+
+            <div className="min-w-0">
+              <div className="mb-1 text-xs uppercase tracking-wide text-text-muted md:hidden">
+                Writes the reply
+              </div>
+              <ModelName
+                model={r.reply_model}
+                isOverride={!!r.writer_override && r.writer_override !== matrix?.no_writer_value}
+                note={writerIsOwn ? 'writer' : 'tool model'}
+              />
+              <select
+                value={d.writerChoice}
+                onChange={(e) => patch(r.key, { writerChoice: e.target.value as WriterChoice })}
+                aria-label={`${r.label}: reply writer`}
+                className={`${inputClass} mt-2`}
+              >
+                <option value="default">
+                  Default{matrix?.default_writer_model ? ` (${matrix.default_writer_model})` : ' (no writer)'}
+                </option>
+                <option value="tool">Tool model only</option>
+                <option value="custom">Specific model…</option>
+              </select>
+              {d.writerChoice === 'custom' && (
+                <input
+                  type="text"
+                  value={d.writerCustom}
+                  onChange={(e) => patch(r.key, { writerCustom: e.target.value })}
+                  list="lmstudioModelOptions"
+                  placeholder="model id"
+                  aria-label={`${r.label}: writer model id`}
+                  className={`${inputClass} mt-2`}
+                />
+              )}
+            </div>
+          </div>
+        )
+      })}
+
+      <p className="mt-3 text-xs text-text-muted">
+        “Writes the reply” is the model that would write when the mode’s rule hands over to the
+        writer. Note tidying and composing use the same writer as the mode they happen in.
+      </p>
+      <div className="mt-3 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => mutation.mutate({ model_assignments: toOverrides() })}
+          disabled={!dirty}
+          className={`${primaryBtnClass} disabled:cursor-not-allowed disabled:opacity-50`}
+        >
+          Save assignments
+        </button>
+        {dirty && <span className="text-xs text-text-muted">Unsaved changes</span>}
+      </div>
+      <SaveStatus state={status.state} errorMessage={status.errorMessage} />
+    </Card>
+  )
+}
+
+function ModelName({
+  model,
+  isOverride,
+  note,
+}: {
+  model: string | null
+  isOverride: boolean
+  note?: string
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="break-all font-mono text-sm text-text-primary">{model || '—'}</span>
+      {note && <span className="text-xs text-text-muted">({note})</span>}
+      <span
+        className={`rounded px-1.5 py-0.5 text-xs font-semibold ${
+          isOverride ? 'bg-accent/10 text-accent' : 'bg-card-alt text-text-muted'
+        }`}
+      >
+        {isOverride ? 'override' : 'default'}
+      </span>
+    </div>
   )
 }
 

@@ -28,9 +28,39 @@ dependencies = [
     "mcp>=1.24.0,<2.0.0",
     "trafilatura>=2.2.0",
     "langchain-google-genai>=4.4.0",
+    # Listed directly (not just pulled in transitively via pydecide[laya]
+    # below) so the [tool.uv.sources] CPU-index redirect below actually
+    # takes effect — uv didn't honor it for torch two extras-levels deep
+    # (pydecide[laya] -> laya -> torch) until torch became a direct
+    # top-level requirement too. See that block's comment for why the
+    # redirect matters at all.
+    "torch>=2.0.0",
+    "pydecide[laya]>=0.1.0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "freezegun>=1.5.0",
 ]
+
+[tool.pytest.ini_options]
+# Restrict discovery to the real suite. Without this, pytest's default
+# *_test.py/test_*.py collection pattern also matches throwaway scripts
+# under scratchpad/ (e.g. run_single_test.py) and tries to import/execute
+# them as test modules.
+testpaths = ["tests"]
+
+[tool.uv.sources]
+# pydecide[laya] pulls in torch as a transitive dependency. PyPI's own
+# torch wheels for Linux are CUDA-enabled (multi-GB) regardless of
+# whether a GPU is present — every box this app actually runs on is
+# CPU-only (see utils/laya_client.py's docstring / scratchpad/'s Phase B
+# notes), so redirect torch specifically to PyTorch's own CPU-only wheel
+# index instead of PyPI's default.
+torch = { index = "pytorch-cpu", marker = "sys_platform == 'linux'" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

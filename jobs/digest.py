@@ -23,7 +23,7 @@ import asyncio
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from datetime import time as dtime
 from zoneinfo import ZoneInfo
 
@@ -33,7 +33,7 @@ from agent.settings import settings
 from agent.vault_watcher import index_note_file
 from jobs import checkin as checkin_jobs
 from utils import checkins_store, vault
-from utils.llm_client import get_chat_llm, stringify_content
+from utils.llm_client import get_writer_llm, stringify_content
 from utils.mailer import send_email
 from utils.notify import notify_error
 from voice import UPLOAD_DIR
@@ -42,22 +42,39 @@ logger = logging.getLogger(__name__)
 
 RECEIVED_NOTES_MAX_AGE_SECONDS = 24 * 60 * 60
 
-DIGEST_PROMPT = """You are writing a short, warm end-of-day recap for the person these \
-notes belong to, based on a log of things they asked their personal assistant to do today.
+HISTORY_DAYS = 7
+HISTORY_MAX_CHARS_PER_DAY = 1500
 
-Write a few short paragraphs (not a bullet list of raw log lines) that read like a brief, \
-friendly summary of the day's activity — what they did, asked about, or got done. Keep it \
-concise. If the log is sparse or empty, that's fine — just say the day looked quiet.
+DIGEST_PROMPT = """You are the user's personal assistant, writing them a short, warm \
+end-of-day recap. Speak to them directly ("you asked me to...", "I set..."), as their \
+assistant. Do not write it as a journal entry in their voice.
 
-Also, tease out any themes or trends in the lo for today. It would also be helpful to \
-surface any trends or themes that are surfacing over the past few days and weeks.
+Based on the log of what they asked you to do today, write a few short paragraphs (not a \
+bullet list of raw log lines): what they did, asked about, or got done. Keep it concise. \
+If the log is sparse or empty, just say the day looked quiet.
+
+Ground rules:
+- Only state what the log below shows. Do not add details, names, numbers, times or \
+outcomes that are not in it, and do not guess at feelings the log doesn't show.
+- Suggestions and offers you made are not things the user did. Do not say a suggested \
+walk, task or plan was completed unless the log says so.
+- If a request failed or went unanswered in the log, say so plainly rather than glossing it.
+
+Themes and trends: mention a theme from today if there is a real one. A trend across days \
+counts only if the same thing appears in the earlier recaps below on 3 or more separate \
+days (including today). Judge that from what those recaps say happened, not from any \
+"trend" they claim. If the earlier recaps are missing, too few, or show no such pattern, \
+say nothing about trends, weeks, or "lately".
 
 Today's logged activity:
 {entries}
 
+Earlier recaps, oldest first (may be empty):
+{history}
+
 Today's check-in reflections (short gratitude/mood/wins prompts answered over the course \
 of the day, if any): if there are entries below, weave any real mood/gratitude pattern \
-they show into the recap warmly — don't just list them back. If it says none were \
+they show into the recap warmly, without listing them back. If it says none were \
 answered, don't mention check-ins at all.
 {reflections}
 """
@@ -75,12 +92,35 @@ def _todays_utc_bounds(now_local: datetime | None = None) -> tuple[int, int]:
     return start_utc, end_utc
 
 
-def _write_recap(entries: list[str], reflections: list[str]) -> str:
+def _load_previous_recaps(today: date, days: int = HISTORY_DAYS) -> list[str]:
+    """Blocking vault reads — run via asyncio.to_thread. The last `days`
+    daily-digest notes before `today`, oldest first, each headed by its
+    date. Days with no note (app was down, digest failed) are simply
+    absent, never filled in, so the model can't mistake a gap for data."""
+    recaps = []
+    for offset in range(days, 0, -1):
+        day = today - timedelta(days=offset)
+        note = vault.parse_note(vault.daily_note_path(day.isoformat()))
+        if note is None or vault.DAILY_NOTE_TAG not in note.tags:
+            continue
+        body = note.body.strip()
+        if not body:
+            continue
+        if len(body) > HISTORY_MAX_CHARS_PER_DAY:
+            body = body[:HISTORY_MAX_CHARS_PER_DAY].rstrip() + "..."
+        recaps.append(f"[{day.strftime('%A %d %B %Y')}]\n{body}")
+    return recaps
+
+
+def _write_recap(entries: list[str], reflections: list[str], history: list[str] | None = None) -> str:
     """Blocking LLM call — run via asyncio.to_thread from async code."""
-    llm = get_chat_llm(temperature=0.7)
+    llm = get_writer_llm(temperature=0.7, surface="digest")
     joined = "\n---\n".join(entries) if entries else "(nothing logged today)"
     joined_reflections = "\n---\n".join(reflections) if reflections else "(none answered today)"
-    response = llm.invoke(DIGEST_PROMPT.format(entries=joined, reflections=joined_reflections))
+    joined_history = "\n\n".join(history) if history else "(no earlier recaps available)"
+    response = llm.invoke(
+        DIGEST_PROMPT.format(entries=joined, history=joined_history, reflections=joined_reflections)
+    )
     return stringify_content(response.content) or ""
 
 
@@ -214,7 +254,9 @@ async def send_daily_digest(memory: MemoryStore) -> None:
             _todays_checkin_reflections, memory, answered
         )
         entries = memory.get_conversations_between(start_ts, end_ts, exclude_thread_ids=checkin_thread_ids)
-        recap = await asyncio.to_thread(_write_recap, entries, reflections)
+        today_local = datetime.now(settings.zoneinfo()).date()
+        history = await asyncio.to_thread(_load_previous_recaps, today_local)
+        recap = await asyncio.to_thread(_write_recap, entries, reflections, history)
     except Exception as e:
         logger.error("Daily digest failed to generate: %s", e)
         notify_error("Daily digest failed to generate", e)

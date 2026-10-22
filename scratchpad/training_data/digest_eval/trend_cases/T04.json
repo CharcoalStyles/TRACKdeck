@@ -1,0 +1,49 @@
+{
+ "id": "T04",
+ "date": "2026-11-18",
+ "weekday": "Wednesday",
+ "kind": "decoy: heavy single day",
+ "expect": "Call out today's Melbourne trip planning as today's theme; do not claim it has been building over several days or weeks, since no earlier recap mentions it.",
+ "history": [
+  {
+   "date": "2026-11-12",
+   "weekday": "Thursday",
+   "recap": "You checked your calendar first thing: standup at 9:30 AM and a design review at 2:00 PM. I set a reminder for 3:00 PM to reply to Sam's comments on your pull request, and the weather lookup showed a high of 26 degrees with clear skies.\n\nYou also asked how to stop a squeaky door hinge, and I suggested a little silicone spray or, failing that, rubbing a bit of candle wax onto the pin. Later you asked me to save a note about feeding your sourdough starter every second morning."
+  },
+  {
+   "date": "2026-11-13",
+   "weekday": "Friday",
+   "recap": "You asked me to set a reminder to pay the electricity bill, which was due on Monday, and I scheduled it for 12:00 PM today. You also asked me to find a good book on distributed systems, and I suggested a few well-regarded titles, though you didn't choose one.\n\nIn the evening you wanted a dinner idea, and I suggested pasta with roasted cherry tomatoes, garlic and basil. You also had me add a note about an idea for a small command-line tool to tidy up log files, with a line saying you'd think about it later."
+  },
+  {
+   "date": "2026-11-14",
+   "weekday": "Saturday",
+   "recap": "It was a Saturday, and you asked me for a checklist for the house tidy: bathrooms, vacuum the bedrooms, wipe down the kitchen and change the sheets. I also set a reminder for 10:00 AM to put the washing on. The forecast showed 20 degrees and sunny, which you asked about for the afternoon.\n\nYou asked me to find the opening hours of a local farmers market, but the results disagreed on the start time, so I couldn't give you a firm answer."
+  },
+  {
+   "date": "2026-11-16",
+   "weekday": "Monday",
+   "recap": "Monday started with your calendar: sprint review at 10:30 AM and a 1:1 with Marcus at 3:00 PM. You asked me for a reminder at 2:30 PM to prepare your talking points for the 1:1, which I set.\n\nYou also asked how many grams are in a cup of plain flour, and I told you about 125 grams. Later you had me add a note for the team card for Priya's farewell afternoon tea on Thursday 19 November, asking for ideas, and I saved a couple of line suggestions."
+  },
+  {
+   "date": "2026-11-17",
+   "weekday": "Tuesday",
+   "recap": "You asked me to set a reminder for 8:00 AM to book a haircut, and I did. You also needed to convert a 10:00 AM London meeting time into Canberra time, and I worked out it would be 9:00 PM your time.\n\nIn the afternoon you asked how long to roast a pumpkin, and I suggested about 40 minutes at 200 degrees for 3 cm wedges. A search for a quiet cafe with power outlets near the office didn't turn up anything clear, so I suggested checking recent reviews."
+  }
+ ],
+ "entries": [
+  "User: whats on my calendar today\nAssistant: Today, Wednesday 18 November:\n- **9:30 AM** Standup\n- **2:00 PM** Retro\n\nOtherwise clear.",
+  "User: search for flights from canberra to melbourne friday the fourth of december\nAssistant: I found that Qantas and Virgin both fly Canberra to Melbourne several times a day, with one-way fares from around $120. I couldn't confirm live prices or exact departure times from the results, so check the airline sites before booking.",
+  "User: ok note down that im leaning towards the 6:10 flight on the friday and coming back monday morning\nAssistant: Saved to a new **Melbourne Trip** note: Leaning towards the 6:10 PM flight on Fri 4 Dec, returning Monday 7 Dec in the morning.",
+  "User: whats the weather like in melbourne early december\nAssistant: I can only see a forecast about a week ahead, so nothing for 4 December yet. Early December in Melbourne is typically around 20 to 23°C but changeable, so I'd pack layers.",
+  "User: can you make me a packing list for three nights in melbourne mostly walking around and one nice dinner\nAssistant: Here's a starting list:\n- Light rain jacket and a warm layer\n- Comfortable walking shoes\n- One smart outfit for dinner\n- Phone charger and power bank\n- Toiletries and any meds\n\nWant me to add it to your Melbourne Trip note?",
+  "User: yeah add it and also add that I still need to book somewhere to stay near southern cross\nAssistant: Added the packing list and a to-do to your **Melbourne Trip** note: book accommodation near Southern Cross.",
+  "User: search for good vegetarian restaurants in fitzroy\nAssistant: A couple that came up: **Smith & Daughters** (plant-based, Brunswick Street) and **Vegie Bar** (relaxed, long menu). Reviews suggest booking ahead for Saturday nights.",
+  "User: put dinner at smith and daughters on the saturday at seven in the itinerary and a placeholder for a gallery in the afternoon\nAssistant: Added to the Itinerary section of your **Melbourne Trip** note:\n- Sat 5 Dec, afternoon: gallery (TBC)\n- Sat 5 Dec, **7:00 PM**: dinner at Smith & Daughters (not yet booked)",
+  "User: remind me to book the flights on friday morning\nAssistant: Reminder set for **Friday 20 November at 9:00 AM**: book flights to Melbourne."
+ ],
+ "reflections": [
+  "Prompt (medium): \"What's one thing you're looking forward to, even something small?\"\nReply: the melbourne trip honestly, just getting out of town for a few days.",
+  "Prompt (low): \"Roll your neck slowly, once each direction. Where are you holding tension?\"\nReply: shoulders mostly, been hunched over the laptop all day."
+ ]
+}

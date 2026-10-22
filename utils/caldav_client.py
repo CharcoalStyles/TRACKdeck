@@ -72,6 +72,8 @@ def parse_ics(ics_text):
             event_details["end"] = value
         elif key == "DESCRIPTION":
             event_details["description"] = value
+        elif key == "LOCATION":
+            event_details["location"] = value
         elif key == "UID":
             event_details["uid"] = value
         elif key == "RRULE":

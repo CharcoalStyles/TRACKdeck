@@ -76,3 +76,19 @@ def test_stringify_content_flattens_gemini_style_blocks():
 def test_stringify_content_falls_back_to_json_for_non_text_blocks():
     content = [{"type": "other", "data": 1}]
     assert llm_client.stringify_content(content) == '[{"type": "other", "data": 1}]'
+
+
+def test_writer_llm_uses_writer_model_when_set(monkeypatch):
+    monkeypatch.setattr(llm_client.settings, "llm_provider", "lmstudio")
+    monkeypatch.setattr(llm_client.settings, "lmstudio_chat_model", "chat")
+    monkeypatch.setattr(llm_client.settings, "lmstudio_writer_model", "writer")
+    monkeypatch.setenv("LMSTUDIO_OPENAI_URL", "http://x")
+    assert llm_client.get_writer_llm(0.7).model_name == "writer"
+
+
+def test_writer_llm_falls_back_to_chat_model_when_unset(monkeypatch):
+    monkeypatch.setattr(llm_client.settings, "llm_provider", "lmstudio")
+    monkeypatch.setattr(llm_client.settings, "lmstudio_chat_model", "chat")
+    monkeypatch.setattr(llm_client.settings, "lmstudio_writer_model", "")
+    monkeypatch.setenv("LMSTUDIO_OPENAI_URL", "http://x")
+    assert llm_client.get_writer_llm(0.7).model_name == "chat"

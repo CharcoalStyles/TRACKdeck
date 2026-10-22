@@ -50,6 +50,14 @@ services:
       - ./data/recall_log.db:/app/data/recall_log.db
       - ./data/device_state.db:/app/data/device_state.db
       - ./data/activity_log.db:/app/data/activity_log.db
+      # Split-model / routing decision logs and planning stores: without
+      # these a rebuild silently erases the evidence for why a turn went
+      # the way it did.
+      - ./data/writer_log.db:/app/data/writer_log.db
+      - ./data/tool_router_log.db:/app/data/tool_router_log.db
+      - ./data/tool_suggestion_log.db:/app/data/tool_suggestion_log.db
+      - ./data/day_plans.db:/app/data/day_plans.db
+      - ./data/task_library.db:/app/data/task_library.db
       - ./data/onboarding_complete.flag:/app/data/onboarding_complete.flag
       - ./data/onboarding_basics.flag:/app/data/onboarding_basics.flag
       - ./data/chroma_db:/app/data/chroma_db

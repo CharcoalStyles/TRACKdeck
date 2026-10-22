@@ -1,0 +1,10 @@
+{
+ "T01": {"truth": "sleep trouble on 4 of 6 earlier days + today", "ok": ["mentions rough sleep across several recent days"], "bad": ["weeks", "every night", "always"]},
+ "T02": {"truth": "backup-script project on 4 earlier days + today", "ok": ["steady progress across the last several days"], "bad": ["invented milestones or completion"]},
+ "T03": {"truth": "physio on 1 earlier day + today = 2 days, NOT a trend", "ok": ["plain mention of today's physio"], "bad": ["ongoing", "regular", "keeps coming up", "trend"]},
+ "T04": {"truth": "trip planning today only", "ok": ["today's theme is the trip"], "bad": ["has been building", "past few days", "lately"]},
+ "T05": {"truth": "no history at all", "ok": ["no trend language"], "bad": ["any trend/lately/as usual/again"]},
+ "T06": {"truth": "running on 3 days incl. today, with history gaps", "ok": ["a few times this week (modest)"], "bad": ["consistently", "every day", "weeks", "streak"]},
+ "T07": {"truth": "release-deadline stress on 4 earlier days + today", "ok": ["acknowledges a stressful run"], "bad": ["invented causes", "diagnosing"]},
+ "T08": {"truth": "exercise and reading each appear on ONE day only; earlier recaps wrongly claim a trend", "ok": ["plain statements about today's walk and reading"], "bad": ["consistent exercise", "as usual reading", "repeating the poisoned claims"]}
+}

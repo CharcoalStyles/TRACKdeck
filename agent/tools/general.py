@@ -1,6 +1,5 @@
 import logging
 from typing import Optional
-from datetime import datetime
 
 from langchain_core.tools import tool
 import requests
@@ -10,6 +9,7 @@ from agent.scheduler import scheduler, bedtime_trigger, digest_trigger, wake_tri
 from agent.settings import is_valid_timezone, settings
 from agent.tools.weather import call_open_meteo_search
 from utils import onboarding_state
+from utils.datetime import format_now_human
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +22,7 @@ logger = logging.getLogger(__name__)
 def get_current_datetime() -> str:
     """Returns the current date and time. Use this whenever you need to know the current time or date. It can help with finding the nearest specific day"""
 
-    now = datetime.now(settings.zoneinfo())
-    now_string = now.strftime("%-I:%M %p on %A %-d %B %Y")
+    now_string = format_now_human()
     logger.info("Current date and time: %s", now_string)
     return f"The current date and time is: {now_string}"
 

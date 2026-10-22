@@ -1,0 +1,1787 @@
+[
+  {
+    "thread_id": "session_1789976300_1f4e08",
+    "user_message": "Can you tell me what the weather wil be this sunday and things I can do with my 6 year old around Canberra?",
+    "label": "not_called",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "get_weather_forecast",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "session_1789976300_1f4e08",
+    "user_message": "Are you sure you don't have access to a tool to get the weather?",
+    "label": "not_called",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "get_current_weather",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "session_1789976183_f6a1a4",
+    "user_message": "Can you tell me what I have on this week?",
+    "label": "not_called",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "search_news",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "session_1789976183_f6a1a4",
+    "user_message": "Don't you have access to a tool to do that?",
+    "label": "not_called",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "get_or_create_project",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "session_1789976183_f6a1a4",
+    "user_message": "just any events that I have on this weekend",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "get_todays_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "session_1789976183_f6a1a4",
+    "user_message": "Yes, please",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "no_tool_needed",
+    "embedding_agrees": true,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "session_1789709809_55e034",
+    "user_message": "Hey, can you get me the events I have in the calendar until the end of the year?",
+    "label": "correct",
+    "actual": [
+      "get_current_datetime"
+    ],
+    "embedding_choice": "get_calendar_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789709809_55e034",
+    "user_message": "Hey, can you get me the events I have in the calendar until the end of the year?",
+    "label": "correct",
+    "actual": [
+      "get_calendar_events"
+    ],
+    "embedding_choice": "get_calendar_events",
+    "embedding_agrees": true,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789709809_55e034",
+    "user_message": "Hey, can you get me the events I have in the calendar until the end of the year?",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "get_calendar_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "session_1789709659_415e01",
+    "user_message": "Hey, can you get me the events I have in the calendar until the end of the year?",
+    "label": "correct",
+    "actual": [
+      "get_current_datetime"
+    ],
+    "embedding_choice": "get_calendar_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789709659_415e01",
+    "user_message": "Hey, can you get me the events I have in the calendar until the end of the year?",
+    "label": "correct",
+    "actual": [
+      "get_calendar_events"
+    ],
+    "embedding_choice": "get_calendar_events",
+    "embedding_agrees": true,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789708151_6b284c",
+    "user_message": "Hey, can you get me the events I have in the calendar until the end of the year?",
+    "label": "correct",
+    "actual": [
+      "get_current_datetime"
+    ],
+    "embedding_choice": "get_calendar_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789708151_6b284c",
+    "user_message": "Hey, can you get me the events I have in the calendar until the end of the year?",
+    "label": "correct",
+    "actual": [
+      "get_calendar_events"
+    ],
+    "embedding_choice": "get_calendar_events",
+    "embedding_agrees": true,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789707835_a80ad5",
+    "user_message": "Hey, can you get me the events I have in the calender until the end of the year?",
+    "label": "correct",
+    "actual": [
+      "get_current_datetime"
+    ],
+    "embedding_choice": "get_calendar_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789707835_a80ad5",
+    "user_message": "Hey, can you get me the events I have in the calender until the end of the year?",
+    "label": "correct",
+    "actual": [
+      "get_calendar_events"
+    ],
+    "embedding_choice": "get_calendar_events",
+    "embedding_agrees": true,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789610691_45d7c7",
+    "user_message": "Is there anyhtign interesting for my 6yo son and I on sunday in Canberra?",
+    "label": "correct",
+    "actual": [
+      "get_current_datetime"
+    ],
+    "embedding_choice": "get_todays_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789610691_45d7c7",
+    "user_message": "Is there anyhtign interesting for my 6yo son and I on sunday in Canberra?",
+    "label": "correct",
+    "actual": [
+      "search_news",
+      "search_web"
+    ],
+    "embedding_choice": "get_todays_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789610691_45d7c7",
+    "user_message": "Is there anyhtign interesting for my 6yo son and I on sunday in Canberra?",
+    "label": "correct",
+    "actual": [
+      "search_web"
+    ],
+    "embedding_choice": "get_todays_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789610691_45d7c7",
+    "user_message": "Is there anyhtign interesting for my 6yo son and I on sunday in Canberra?",
+    "label": "unneeded",
+    "actual": [
+      "search_news",
+      "search_web"
+    ],
+    "embedding_choice": "get_todays_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789610691_45d7c7",
+    "user_message": "Is there anyhtign interesting for my 6yo son and I on sunday in Canberra?",
+    "label": "unneeded",
+    "actual": [
+      "fetch_webpage",
+      "search_web"
+    ],
+    "embedding_choice": "get_todays_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789610691_45d7c7",
+    "user_message": "Is there anyhtign interesting for my 6yo son and I on sunday in Canberra?",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "get_todays_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "session_1789544674_2988f8",
+    "user_message": "Is there anyhtign interesting for my 6yo son and I on sunday in Canberra?",
+    "label": "correct",
+    "actual": [
+      "get_current_datetime"
+    ],
+    "embedding_choice": "get_todays_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789544674_2988f8",
+    "user_message": "Is there anyhtign interesting for my 6yo son and I on sunday in Canberra?",
+    "label": "correct",
+    "actual": [
+      "search_web"
+    ],
+    "embedding_choice": "get_todays_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789544674_2988f8",
+    "user_message": "Is there anyhtign interesting for my 6yo son and I on sunday in Canberra?",
+    "label": "correct",
+    "actual": [
+      "search_web"
+    ],
+    "embedding_choice": "get_todays_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789544674_2988f8",
+    "user_message": "Is there anyhtign interesting for my 6yo son and I on sunday in Canberra?",
+    "label": "unneeded",
+    "actual": [
+      "search_web"
+    ],
+    "embedding_choice": "get_todays_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789544674_2988f8",
+    "user_message": "Is there anyhtign interesting for my 6yo son and I on sunday in Canberra?",
+    "label": "unneeded",
+    "actual": [
+      "search_web"
+    ],
+    "embedding_choice": "get_todays_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789544622_16826c",
+    "user_message": "Is there anyhtign interesting for my 6yo son and I on sunday in Canberra?",
+    "label": "correct",
+    "actual": [
+      "get_current_datetime"
+    ],
+    "embedding_choice": "get_todays_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789544622_16826c",
+    "user_message": "Is there anyhtign interesting for my 6yo son and I on sunday in Canberra?",
+    "label": "correct",
+    "actual": [
+      "get_calendar_events"
+    ],
+    "embedding_choice": "get_todays_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "day_planning:2026-09-19",
+    "user_message": "Plan my day for 2026-09-19. Tasks:\n1. clean kitchen \u2014 25 mins\n2. clean lounge \u2014 20 mins\n3. clean outside \u2014 60 mins\n4. shop for meal prep \u2014 60 mins\n5. meal prep \u2014 90 mins\n\nAdd each of these tasks to the planning note for 2026-09-19, then generate my schedule for that day.",
+    "label": "correct",
+    "actual": [
+      "add_planning_task",
+      "generate_schedule_blocks"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": true,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789386720_6d31be",
+    "user_message": "Can you generate a blank planning template for tomorrow?",
+    "label": "correct",
+    "actual": [
+      "get_current_datetime"
+    ],
+    "embedding_choice": "set_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "add_planning_task",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789386720_6d31be",
+    "user_message": "Can you generate a blank planning template for tomorrow?",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "set_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "add_planning_task",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789386720_6d31be",
+    "user_message": "Um, I thought that you would use the template in the notes to make a blank new note for me to fill out",
+    "label": "not_called",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "save_note",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "session_1789215233_7f838f",
+    "user_message": "So I'm making my ginger beer. Is there any way that I can, like, test how much sugar is in it after it's done its second ferment?  So when it's carbonated. If there is, and there's like any devices, can you actually do a search for me and find some ones I could buy? That'd be great.",
+    "label": "correct",
+    "actual": [
+      "search_web"
+    ],
+    "embedding_choice": "no_tool_needed",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789215233_7f838f",
+    "user_message": "So I'm making my ginger beer. Is there any way that I can, like, test how much sugar is in it after it's done its second ferment?  So when it's carbonated. If there is, and there's like any devices, can you actually do a search for me and find some ones I could buy? That'd be great.",
+    "label": "correct",
+    "actual": [
+      "search_web"
+    ],
+    "embedding_choice": "no_tool_needed",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789215233_7f838f",
+    "user_message": "So I'm making my ginger beer. Is there any way that I can, like, test how much sugar is in it after it's done its second ferment?  So when it's carbonated. If there is, and there's like any devices, can you actually do a search for me and find some ones I could buy? That'd be great.",
+    "label": "unneeded",
+    "actual": [
+      "search_web"
+    ],
+    "embedding_choice": "no_tool_needed",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789215233_7f838f",
+    "user_message": "So I'm making my ginger beer. Is there any way that I can, like, test how much sugar is in it after it's done its second ferment?  So when it's carbonated. If there is, and there's like any devices, can you actually do a search for me and find some ones I could buy? That'd be great.",
+    "label": "unneeded",
+    "actual": [
+      "search_web"
+    ],
+    "embedding_choice": "no_tool_needed",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789215233_7f838f",
+    "user_message": "So I'm making my ginger beer. Is there any way that I can, like, test how much sugar is in it after it's done its second ferment?  So when it's carbonated. If there is, and there's like any devices, can you actually do a search for me and find some ones I could buy? That'd be great.",
+    "label": "unneeded",
+    "actual": [
+      "search_web"
+    ],
+    "embedding_choice": "no_tool_needed",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789215233_7f838f",
+    "user_message": "So I'm making my ginger beer. Is there any way that I can, like, test how much sugar is in it after it's done its second ferment?  So when it's carbonated. If there is, and there's like any devices, can you actually do a search for me and find some ones I could buy? That'd be great.",
+    "label": "unneeded",
+    "actual": [
+      "search_web"
+    ],
+    "embedding_choice": "no_tool_needed",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789215233_7f838f",
+    "user_message": "It seemed your LLM was down. Can you try again?",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "cancel_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "session_1789215233_7f838f",
+    "user_message": "It seemed your LLM was down. Can you try again?",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "cancel_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "session_1789181080_9d3ff3",
+    "user_message": "Here is the details of an event I'm going to:",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "update_calendar_event",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "session_1789181080_9d3ff3",
+    "user_message": "DFPM presents DUB.SEPT\n\nSaturday 19 September 2026\n21:00\n\nSunday 20 September 2026\n3:00\n\nBlank Cultural Platform, 131 City Walk, Canberra, Australian Capital Territory 2601",
+    "label": "correct",
+    "actual": [
+      "add_calendar_event"
+    ],
+    "embedding_choice": "list_projects",
+    "embedding_agrees": false,
+    "laya_choice": "get_or_create_linked_note",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789181080_9d3ff3",
+    "user_message": "DFPM presents DUB.SEPT\n\nSaturday 19 September 2026\n21:00\n\nSunday 20 September 2026\n3:00\n\nBlank Cultural Platform, 131 City Walk, Canberra, Australian Capital Territory 2601",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "list_projects",
+    "embedding_agrees": false,
+    "laya_choice": "get_or_create_linked_note",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789181080_9d3ff3",
+    "user_message": "Perhaps a reminder in the early afternoon to make sure I don't forget it",
+    "label": "correct",
+    "actual": [
+      "get_current_datetime"
+    ],
+    "embedding_choice": "cancel_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789181080_9d3ff3",
+    "user_message": "Perhaps a reminder in the early afternoon to make sure I don't forget it",
+    "label": "bad_args",
+    "actual": [
+      "set_reminder"
+    ],
+    "embedding_choice": "cancel_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789181080_9d3ff3",
+    "user_message": "Perhaps a reminder in the early afternoon to make sure I don't forget it",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "cancel_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "session_1789181080_9d3ff3",
+    "user_message": "Here's the info for another thing I'm doing: Canberra - Tuff Nutterz with Tuff\nNutterz\n\nSaturday 26 September 2026\n\n11:00 to 12:45\n\nTuff Nutterz, Queen Elizabeth Terrace, Parkes, Australian Capital Territory 2600",
+    "label": "correct",
+    "actual": [
+      "add_calendar_event"
+    ],
+    "embedding_choice": "update_calendar_event",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789181080_9d3ff3",
+    "user_message": "Here's the info for another thing I'm doing: Canberra - Tuff Nutterz with Tuff\nNutterz\n\nSaturday 26 September 2026\n\n11:00 to 12:45\n\nTuff Nutterz, Queen Elizabeth Terrace, Parkes, Australian Capital Territory 2600",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "update_calendar_event",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "session_1789181080_9d3ff3",
+    "user_message": "Yes, I'll need one around 8am. Also just blocking it in so we can adjust the Saturday routine",
+    "label": "correct",
+    "actual": [
+      "get_current_datetime"
+    ],
+    "embedding_choice": "set_timer",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789181080_9d3ff3",
+    "user_message": "Yes, I'll need one around 8am. Also just blocking it in so we can adjust the Saturday routine",
+    "label": "bad_args",
+    "actual": [
+      "set_reminder"
+    ],
+    "embedding_choice": "set_timer",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789181080_9d3ff3",
+    "user_message": "Yes, I'll need one around 8am. Also just blocking it in so we can adjust the Saturday routine",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "set_timer",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "session_1789181080_9d3ff3",
+    "user_message": "And another one: Khaled Khalafalla show\n\nSaturday 7 November 2026\n\n18:00 to 20:00\n\nThe Street theatre",
+    "label": "correct",
+    "actual": [
+      "search_web"
+    ],
+    "embedding_choice": "get_todays_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789181080_9d3ff3",
+    "user_message": "And another one: Khaled Khalafalla show\n\nSaturday 7 November 2026\n\n18:00 to 20:00\n\nThe Street theatre",
+    "label": "correct",
+    "actual": [
+      "search_web"
+    ],
+    "embedding_choice": "get_todays_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789181080_9d3ff3",
+    "user_message": "And another one: Khaled Khalafalla show\n\nSaturday 7 November 2026\n\n18:00 to 20:00\n\nThe Street theatre",
+    "label": "correct",
+    "actual": [
+      "add_calendar_event"
+    ],
+    "embedding_choice": "get_todays_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789181080_9d3ff3",
+    "user_message": "And another one: Khaled Khalafalla show\n\nSaturday 7 November 2026\n\n18:00 to 20:00\n\nThe Street theatre",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "get_todays_events",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "session_1789181080_9d3ff3",
+    "user_message": "Yeah, mid afternoon",
+    "label": "correct",
+    "actual": [
+      "get_current_datetime"
+    ],
+    "embedding_choice": "set_timer",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789181080_9d3ff3",
+    "user_message": "Yeah, mid afternoon",
+    "label": "bad_args",
+    "actual": [
+      "set_reminder"
+    ],
+    "embedding_choice": "set_timer",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789181080_9d3ff3",
+    "user_message": "Yeah, mid afternoon",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "set_timer",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "session_1789180157_731d94",
+    "user_message": "(Replying to check-in prompt: \"To reconnect with your sense of calm, picture your thoughts as water tumbling over a waterfall, falling away instead of pulling you along. What's one thought you can let fall away right now?\") I think some of the thoughts about how hard it is to maintain a clean house are ones that  I can start at least loosening my grip on.",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "no_tool_needed",
+    "embedding_agrees": true,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "session_1789176034_3c0af4",
+    "user_message": "As part of my break I did a bit of rebuild of the back end as I wasn't  getting notifications or alerts on the device for each of the steps throughout  today that you've planned. What I'll need you to do is from the clean up  work study through to the end of the plans for today, delete them and  rebuild them as they were, you should now have an option to actually allow it to  send alerts and that is something that I need for this process to work.",
+    "label": "correct",
+    "actual": [
+      "get_current_datetime"
+    ],
+    "embedding_choice": "cancel_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789176034_3c0af4",
+    "user_message": "As part of my break I did a bit of rebuild of the back end as I wasn't  getting notifications or alerts on the device for each of the steps throughout  today that you've planned. What I'll need you to do is from the clean up  work study through to the end of the plans for today, delete them and  rebuild them as they were, you should now have an option to actually allow it to  send alerts and that is something that I need for this process to work.",
+    "label": "correct",
+    "actual": [
+      "get_todays_events",
+      "list_reminders",
+      "search_notes"
+    ],
+    "embedding_choice": "cancel_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789176034_3c0af4",
+    "user_message": "As part of my break I did a bit of rebuild of the back end as I wasn't  getting notifications or alerts on the device for each of the steps throughout  today that you've planned. What I'll need you to do is from the clean up  work study through to the end of the plans for today, delete them and  rebuild them as they were, you should now have an option to actually allow it to  send alerts and that is something that I need for this process to work.",
+    "label": "correct",
+    "actual": [
+      "read_note"
+    ],
+    "embedding_choice": "cancel_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789176034_3c0af4",
+    "user_message": "As part of my break I did a bit of rebuild of the back end as I wasn't  getting notifications or alerts on the device for each of the steps throughout  today that you've planned. What I'll need you to do is from the clean up  work study through to the end of the plans for today, delete them and  rebuild them as they were, you should now have an option to actually allow it to  send alerts and that is something that I need for this process to work.",
+    "label": "correct",
+    "actual": [
+      "delete_calendar_event"
+    ],
+    "embedding_choice": "cancel_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789176034_3c0af4",
+    "user_message": "As part of my break I did a bit of rebuild of the back end as I wasn't  getting notifications or alerts on the device for each of the steps throughout  today that you've planned. What I'll need you to do is from the clean up  work study through to the end of the plans for today, delete them and  rebuild them as they were, you should now have an option to actually allow it to  send alerts and that is something that I need for this process to work.",
+    "label": "correct",
+    "actual": [
+      "delete_calendar_event"
+    ],
+    "embedding_choice": "cancel_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789176034_3c0af4",
+    "user_message": "As part of my break I did a bit of rebuild of the back end as I wasn't  getting notifications or alerts on the device for each of the steps throughout  today that you've planned. What I'll need you to do is from the clean up  work study through to the end of the plans for today, delete them and  rebuild them as they were, you should now have an option to actually allow it to  send alerts and that is something that I need for this process to work.",
+    "label": "correct",
+    "actual": [
+      "add_calendar_event"
+    ],
+    "embedding_choice": "cancel_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789176034_3c0af4",
+    "user_message": "As part of my break I did a bit of rebuild of the back end as I wasn't  getting notifications or alerts on the device for each of the steps throughout  today that you've planned. What I'll need you to do is from the clean up  work study through to the end of the plans for today, delete them and  rebuild them as they were, you should now have an option to actually allow it to  send alerts and that is something that I need for this process to work.",
+    "label": "correct",
+    "actual": [
+      "add_calendar_event"
+    ],
+    "embedding_choice": "cancel_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789176034_3c0af4",
+    "user_message": "As part of my break I did a bit of rebuild of the back end as I wasn't  getting notifications or alerts on the device for each of the steps throughout  today that you've planned. What I'll need you to do is from the clean up  work study through to the end of the plans for today, delete them and  rebuild them as they were, you should now have an option to actually allow it to  send alerts and that is something that I need for this process to work.",
+    "label": "bad_args",
+    "actual": [
+      "set_reminder"
+    ],
+    "embedding_choice": "cancel_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789176034_3c0af4",
+    "user_message": "As part of my break I did a bit of rebuild of the back end as I wasn't  getting notifications or alerts on the device for each of the steps throughout  today that you've planned. What I'll need you to do is from the clean up  work study through to the end of the plans for today, delete them and  rebuild them as they were, you should now have an option to actually allow it to  send alerts and that is something that I need for this process to work.",
+    "label": "bad_args",
+    "actual": [
+      "log_activity",
+      "set_reminder"
+    ],
+    "embedding_choice": "cancel_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789176034_3c0af4",
+    "user_message": "As part of my break I did a bit of rebuild of the back end as I wasn't  getting notifications or alerts on the device for each of the steps throughout  today that you've planned. What I'll need you to do is from the clean up  work study through to the end of the plans for today, delete them and  rebuild them as they were, you should now have an option to actually allow it to  send alerts and that is something that I need for this process to work.",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "cancel_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "session_1789169716_d38449",
+    "user_message": "Okay, I'm looking at the routine that you've set up for today and I see that there are no breaks in between  The things that you've got me to do  No, I definitely need breaks about every maybe I know 15 20 25 minutes  Can you delete what you've done and try again? Thanks",
+    "label": "correct",
+    "actual": [
+      "get_current_datetime",
+      "get_todays_events",
+      "search_notes"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169716_d38449",
+    "user_message": "Okay, I'm looking at the routine that you've set up for today and I see that there are no breaks in between  The things that you've got me to do  No, I definitely need breaks about every maybe I know 15 20 25 minutes  Can you delete what you've done and try again? Thanks",
+    "label": "correct",
+    "actual": [
+      "read_note"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169716_d38449",
+    "user_message": "Okay, I'm looking at the routine that you've set up for today and I see that there are no breaks in between  The things that you've got me to do  No, I definitely need breaks about every maybe I know 15 20 25 minutes  Can you delete what you've done and try again? Thanks",
+    "label": "correct",
+    "actual": [
+      "delete_calendar_event",
+      "list_reminders"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169716_d38449",
+    "user_message": "Okay, I'm looking at the routine that you've set up for today and I see that there are no breaks in between  The things that you've got me to do  No, I definitely need breaks about every maybe I know 15 20 25 minutes  Can you delete what you've done and try again? Thanks",
+    "label": "correct",
+    "actual": [
+      "cancel_reminder",
+      "delete_calendar_event"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169716_d38449",
+    "user_message": "Okay, I'm looking at the routine that you've set up for today and I see that there are no breaks in between  The things that you've got me to do  No, I definitely need breaks about every maybe I know 15 20 25 minutes  Can you delete what you've done and try again? Thanks",
+    "label": "correct",
+    "actual": [
+      "read_about_me"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169716_d38449",
+    "user_message": "Okay, I'm looking at the routine that you've set up for today and I see that there are no breaks in between  The things that you've got me to do  No, I definitely need breaks about every maybe I know 15 20 25 minutes  Can you delete what you've done and try again? Thanks",
+    "label": "correct",
+    "actual": [
+      "generate_schedule_blocks"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169716_d38449",
+    "user_message": "Okay, I'm looking at the routine that you've set up for today and I see that there are no breaks in between  The things that you've got me to do  No, I definitely need breaks about every maybe I know 15 20 25 minutes  Can you delete what you've done and try again? Thanks",
+    "label": "unneeded",
+    "actual": [
+      "get_todays_events"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169716_d38449",
+    "user_message": "Okay, I'm looking at the routine that you've set up for today and I see that there are no breaks in between  The things that you've got me to do  No, I definitely need breaks about every maybe I know 15 20 25 minutes  Can you delete what you've done and try again? Thanks",
+    "label": "correct",
+    "actual": [
+      "delete_calendar_event"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169716_d38449",
+    "user_message": "Okay, I'm looking at the routine that you've set up for today and I see that there are no breaks in between  The things that you've got me to do  No, I definitely need breaks about every maybe I know 15 20 25 minutes  Can you delete what you've done and try again? Thanks",
+    "label": "correct",
+    "actual": [
+      "update_note_section"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169716_d38449",
+    "user_message": "Okay, I'm looking at the routine that you've set up for today and I see that there are no breaks in between  The things that you've got me to do  No, I definitely need breaks about every maybe I know 15 20 25 minutes  Can you delete what you've done and try again? Thanks",
+    "label": "unneeded",
+    "actual": [
+      "get_todays_events"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169716_d38449",
+    "user_message": "Okay, I'm looking at the routine that you've set up for today and I see that there are no breaks in between  The things that you've got me to do  No, I definitely need breaks about every maybe I know 15 20 25 minutes  Can you delete what you've done and try again? Thanks",
+    "label": "correct",
+    "actual": [
+      "remember_about_me"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169716_d38449",
+    "user_message": "Okay, I'm looking at the routine that you've set up for today and I see that there are no breaks in between  The things that you've got me to do  No, I definitely need breaks about every maybe I know 15 20 25 minutes  Can you delete what you've done and try again? Thanks",
+    "label": "correct",
+    "actual": [
+      "add_calendar_event"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169716_d38449",
+    "user_message": "Okay, I'm looking at the routine that you've set up for today and I see that there are no breaks in between  The things that you've got me to do  No, I definitely need breaks about every maybe I know 15 20 25 minutes  Can you delete what you've done and try again? Thanks",
+    "label": "correct",
+    "actual": [
+      "add_calendar_event"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169716_d38449",
+    "user_message": "Okay, I'm looking at the routine that you've set up for today and I see that there are no breaks in between  The things that you've got me to do  No, I definitely need breaks about every maybe I know 15 20 25 minutes  Can you delete what you've done and try again? Thanks",
+    "label": "correct",
+    "actual": [
+      "add_calendar_event"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169716_d38449",
+    "user_message": "Okay, I'm looking at the routine that you've set up for today and I see that there are no breaks in between  The things that you've got me to do  No, I definitely need breaks about every maybe I know 15 20 25 minutes  Can you delete what you've done and try again? Thanks",
+    "label": "correct",
+    "actual": [
+      "add_calendar_event"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169716_d38449",
+    "user_message": "Okay, I'm looking at the routine that you've set up for today and I see that there are no breaks in between  The things that you've got me to do  No, I definitely need breaks about every maybe I know 15 20 25 minutes  Can you delete what you've done and try again? Thanks",
+    "label": "unneeded",
+    "actual": [
+      "get_todays_events"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169716_d38449",
+    "user_message": "Okay, I'm looking at the routine that you've set up for today and I see that there are no breaks in between  The things that you've got me to do  No, I definitely need breaks about every maybe I know 15 20 25 minutes  Can you delete what you've done and try again? Thanks",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "session_1789169064_1e99d9",
+    "user_message": "Okay I'm up and had a shower just about to get breakfast ready. Can you organize  the Saturday routine and have it start at about 10 in the morning? Would be  great.",
+    "label": "correct",
+    "actual": [
+      "get_current_datetime",
+      "read_about_me",
+      "search_notes"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169064_1e99d9",
+    "user_message": "Okay I'm up and had a shower just about to get breakfast ready. Can you organize  the Saturday routine and have it start at about 10 in the morning? Would be  great.",
+    "label": "correct",
+    "actual": [
+      "get_todays_events",
+      "read_note"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169064_1e99d9",
+    "user_message": "Okay I'm up and had a shower just about to get breakfast ready. Can you organize  the Saturday routine and have it start at about 10 in the morning? Would be  great.",
+    "label": "correct",
+    "actual": [
+      "generate_schedule_blocks"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169064_1e99d9",
+    "user_message": "Okay I'm up and had a shower just about to get breakfast ready. Can you organize  the Saturday routine and have it start at about 10 in the morning? Would be  great.",
+    "label": "unneeded",
+    "actual": [
+      "get_todays_events",
+      "read_note"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169064_1e99d9",
+    "user_message": "Okay I'm up and had a shower just about to get breakfast ready. Can you organize  the Saturday routine and have it start at about 10 in the morning? Would be  great.",
+    "label": "correct",
+    "actual": [
+      "list_reminders"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169064_1e99d9",
+    "user_message": "Okay I'm up and had a shower just about to get breakfast ready. Can you organize  the Saturday routine and have it start at about 10 in the morning? Would be  great.",
+    "label": "unneeded",
+    "actual": [
+      "cancel_reminder"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169064_1e99d9",
+    "user_message": "Okay I'm up and had a shower just about to get breakfast ready. Can you organize  the Saturday routine and have it start at about 10 in the morning? Would be  great.",
+    "label": "unneeded",
+    "actual": [
+      "list_reminders"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169064_1e99d9",
+    "user_message": "Okay I'm up and had a shower just about to get breakfast ready. Can you organize  the Saturday routine and have it start at about 10 in the morning? Would be  great.",
+    "label": "correct",
+    "actual": [
+      "delete_calendar_event"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169064_1e99d9",
+    "user_message": "Okay I'm up and had a shower just about to get breakfast ready. Can you organize  the Saturday routine and have it start at about 10 in the morning? Would be  great.",
+    "label": "correct",
+    "actual": [
+      "update_note_section"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169064_1e99d9",
+    "user_message": "Okay I'm up and had a shower just about to get breakfast ready. Can you organize  the Saturday routine and have it start at about 10 in the morning? Would be  great.",
+    "label": "correct",
+    "actual": [
+      "add_calendar_event"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169064_1e99d9",
+    "user_message": "Okay I'm up and had a shower just about to get breakfast ready. Can you organize  the Saturday routine and have it start at about 10 in the morning? Would be  great.",
+    "label": "correct",
+    "actual": [
+      "add_calendar_event"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "session_1789169064_1e99d9",
+    "user_message": "Okay I'm up and had a shower just about to get breakfast ready. Can you organize  the Saturday routine and have it start at about 10 in the morning? Would be  great.",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "profile_chat",
+    "user_message": "Hey, it seems I might have accidentally set my bedtime reminder to 9 a.m.  I need to set that to 9 p.m.  Can you do that for me?",
+    "label": "correct",
+    "actual": [
+      "get_current_datetime",
+      "list_reminders",
+      "read_about_me"
+    ],
+    "embedding_choice": "cancel_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "profile_chat",
+    "user_message": "Hey, it seems I might have accidentally set my bedtime reminder to 9 a.m.  I need to set that to 9 p.m.  Can you do that for me?",
+    "label": "bad_args",
+    "actual": [
+      "set_reminder"
+    ],
+    "embedding_choice": "cancel_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "profile_chat",
+    "user_message": "Hey, it seems I might have accidentally set my bedtime reminder to 9 a.m.  I need to set that to 9 p.m.  Can you do that for me?",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "cancel_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I'm continuing to fill out my basics form (part 1 of 4):\nName: Aaron\nBirthday: 1983-12-02\nOccupation: Software engineer (fullstack)\nCurrent job: Senior Frontend Engineer, Miroma Project Factory\nImportant Dates: Finnian's was born on20/08/2020",
+    "label": "correct",
+    "actual": [
+      "read_about_me"
+    ],
+    "embedding_choice": "read_about_me",
+    "embedding_agrees": true,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I'm continuing to fill out my basics form (part 1 of 4):\nName: Aaron\nBirthday: 1983-12-02\nOccupation: Software engineer (fullstack)\nCurrent job: Senior Frontend Engineer, Miroma Project Factory\nImportant Dates: Finnian's was born on20/08/2020",
+    "label": "correct",
+    "actual": [
+      "get_or_create_linked_note",
+      "remember_about_me"
+    ],
+    "embedding_choice": "read_about_me",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I'm continuing to fill out my basics form (part 1 of 4):\nName: Aaron\nBirthday: 1983-12-02\nOccupation: Software engineer (fullstack)\nCurrent job: Senior Frontend Engineer, Miroma Project Factory\nImportant Dates: Finnian's was born on20/08/2020",
+    "label": "correct",
+    "actual": [
+      "append_to_note"
+    ],
+    "embedding_choice": "read_about_me",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I'm continuing to fill out my basics form (part 1 of 4):\nName: Aaron\nBirthday: 1983-12-02\nOccupation: Software engineer (fullstack)\nCurrent job: Senior Frontend Engineer, Miroma Project Factory\nImportant Dates: Finnian's was born on20/08/2020",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "read_about_me",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I'm continuing to fill out my basics form (part 2 of 4):\nPeople: Finnian (Son), Blair (Friend), Horacio (Friend), Elizabeth (Friend), Geraldine (Ex-wife), Viki (Neighbour), Laura (Councillor), Linda (Mum), Joel (Friend)",
+    "label": "correct",
+    "actual": [
+      "append_to_note",
+      "get_or_create_linked_note"
+    ],
+    "embedding_choice": "read_about_me",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I'm continuing to fill out my basics form (part 2 of 4):\nPeople: Finnian (Son), Blair (Friend), Horacio (Friend), Elizabeth (Friend), Geraldine (Ex-wife), Viki (Neighbour), Laura (Councillor), Linda (Mum), Joel (Friend)",
+    "label": "correct",
+    "actual": [
+      "get_or_create_linked_note"
+    ],
+    "embedding_choice": "read_about_me",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I'm continuing to fill out my basics form (part 2 of 4):\nPeople: Finnian (Son), Blair (Friend), Horacio (Friend), Elizabeth (Friend), Geraldine (Ex-wife), Viki (Neighbour), Laura (Councillor), Linda (Mum), Joel (Friend)",
+    "label": "correct",
+    "actual": [
+      "append_to_note"
+    ],
+    "embedding_choice": "read_about_me",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I'm continuing to fill out my basics form (part 2 of 4):\nPeople: Finnian (Son), Blair (Friend), Horacio (Friend), Elizabeth (Friend), Geraldine (Ex-wife), Viki (Neighbour), Laura (Councillor), Linda (Mum), Joel (Friend)",
+    "label": "correct",
+    "actual": [
+      "append_to_note"
+    ],
+    "embedding_choice": "read_about_me",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I'm continuing to fill out my basics form (part 2 of 4):\nPeople: Finnian (Son), Blair (Friend), Horacio (Friend), Elizabeth (Friend), Geraldine (Ex-wife), Viki (Neighbour), Laura (Councillor), Linda (Mum), Joel (Friend)",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "read_about_me",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I'm continuing to fill out my basics form (part 3 of 4):\nPreferences: Trying new things: events, food, hobbies. possibly because of un-diagnosed ADHD.\nGetting into a routine with (intentional) habits is hard; it's part of the main reason I'm using this.\nAs of about a month ago, I'm mainly sticking to a vegetarian diet at home.\nRoutine: Trying to build a routine I can stick to.\nWeekdays: wake ~5:30am, start WFH ~8:30, lunch ~12:00, finish work ~5:30pm, try to do something useful/fun before bed (~9pm but usually 10-11pm).\nTuesday: pick Finnian from school at 2:45pm.\nWednesday: take Finnian to school at 8:30 and then start work closer to 9am. Someimtes I have dinners out with friends.\nSaturday: wake ~5:30am, no set routine \u2014 wants to make Saturdays more intentional. Sunday: wake ~5:30am, pick up Finnian at 11am, spend time until taking him back at 7pm.",
+    "label": "correct",
+    "actual": [
+      "append_to_note",
+      "remember_about_me"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I'm continuing to fill out my basics form (part 3 of 4):\nPreferences: Trying new things: events, food, hobbies. possibly because of un-diagnosed ADHD.\nGetting into a routine with (intentional) habits is hard; it's part of the main reason I'm using this.\nAs of about a month ago, I'm mainly sticking to a vegetarian diet at home.\nRoutine: Trying to build a routine I can stick to.\nWeekdays: wake ~5:30am, start WFH ~8:30, lunch ~12:00, finish work ~5:30pm, try to do something useful/fun before bed (~9pm but usually 10-11pm).\nTuesday: pick Finnian from school at 2:45pm.\nWednesday: take Finnian to school at 8:30 and then start work closer to 9am. Someimtes I have dinners out with friends.\nSaturday: wake ~5:30am, no set routine \u2014 wants to make Saturdays more intentional. Sunday: wake ~5:30am, pick up Finnian at 11am, spend time until taking him back at 7pm.",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I'm continuing to fill out my basics form (part 4 of 4):\nInterests: Programming, game design, knitting, crochet, 3D printing. Wants to play games more. Reads books (mainly audiobooks, also ebooks and physical).\nI have a bunch of projects, but no motiviation to get them completed.\nValues: 1. Accountability (encompassing: Responsibility, Forgiveness, Open Mindedness, Honesty, Fairness, Respect)\n2. Logic\n3. Creativity\n4. Belonging\n5. Calm\n6. Learning\n7. Making A Difference\n8. Democracy\n9. Humour\nHealth & Goals: I have some health issues: heamophilia, obesity, diabetes (type 2), hypertension, and depression. All of these are medicated; the haemophilia is only as required, everything else is daily oral drugs.\nLooking into getting an ADHD diagnosis. After the separation form Geraldine, I had the time to notice things about me that hindered how I want to live and most of them pointed to ADHD. With the understanding that there is a genetic component, my uncle has been diagnosed, I'm fairly sure my grandfather was, and Finnian is currently in the process of getting diagnosed for autism and the first report suggested AuDHD.\nAbout a month ago, I started seeing a sports physiologist to get on track with strength and conditioning. This came from being in a social sports league and straining my MCL on my right knee. The goal is to get back to that league. Currently doing a swim on Tuesday mornings and guided gym work (mainly weights) on Thursday mornings. Also trying to get more walking in, including a dedicated long walk on Saturdays.\n\nPlease record this properly (a separate note for each person listed), and ask me about anything here you'd like more detail on.",
+    "label": "correct",
+    "actual": [
+      "remember_about_me"
+    ],
+    "embedding_choice": "log_activity",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I'm continuing to fill out my basics form (part 4 of 4):\nInterests: Programming, game design, knitting, crochet, 3D printing. Wants to play games more. Reads books (mainly audiobooks, also ebooks and physical).\nI have a bunch of projects, but no motiviation to get them completed.\nValues: 1. Accountability (encompassing: Responsibility, Forgiveness, Open Mindedness, Honesty, Fairness, Respect)\n2. Logic\n3. Creativity\n4. Belonging\n5. Calm\n6. Learning\n7. Making A Difference\n8. Democracy\n9. Humour\nHealth & Goals: I have some health issues: heamophilia, obesity, diabetes (type 2), hypertension, and depression. All of these are medicated; the haemophilia is only as required, everything else is daily oral drugs.\nLooking into getting an ADHD diagnosis. After the separation form Geraldine, I had the time to notice things about me that hindered how I want to live and most of them pointed to ADHD. With the understanding that there is a genetic component, my uncle has been diagnosed, I'm fairly sure my grandfather was, and Finnian is currently in the process of getting diagnosed for autism and the first report suggested AuDHD.\nAbout a month ago, I started seeing a sports physiologist to get on track with strength and conditioning. This came from being in a social sports league and straining my MCL on my right knee. The goal is to get back to that league. Currently doing a swim on Tuesday mornings and guided gym work (mainly weights) on Thursday mornings. Also trying to get more walking in, including a dedicated long walk on Saturdays.\n\nPlease record this properly (a separate note for each person listed), and ask me about anything here you'd like more detail on.",
+    "label": "correct",
+    "actual": [
+      "append_to_note",
+      "remember_about_me"
+    ],
+    "embedding_choice": "log_activity",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I'm continuing to fill out my basics form (part 4 of 4):\nInterests: Programming, game design, knitting, crochet, 3D printing. Wants to play games more. Reads books (mainly audiobooks, also ebooks and physical).\nI have a bunch of projects, but no motiviation to get them completed.\nValues: 1. Accountability (encompassing: Responsibility, Forgiveness, Open Mindedness, Honesty, Fairness, Respect)\n2. Logic\n3. Creativity\n4. Belonging\n5. Calm\n6. Learning\n7. Making A Difference\n8. Democracy\n9. Humour\nHealth & Goals: I have some health issues: heamophilia, obesity, diabetes (type 2), hypertension, and depression. All of these are medicated; the haemophilia is only as required, everything else is daily oral drugs.\nLooking into getting an ADHD diagnosis. After the separation form Geraldine, I had the time to notice things about me that hindered how I want to live and most of them pointed to ADHD. With the understanding that there is a genetic component, my uncle has been diagnosed, I'm fairly sure my grandfather was, and Finnian is currently in the process of getting diagnosed for autism and the first report suggested AuDHD.\nAbout a month ago, I started seeing a sports physiologist to get on track with strength and conditioning. This came from being in a social sports league and straining my MCL on my right knee. The goal is to get back to that league. Currently doing a swim on Tuesday mornings and guided gym work (mainly weights) on Thursday mornings. Also trying to get more walking in, including a dedicated long walk on Saturdays.\n\nPlease record this properly (a separate note for each person listed), and ask me about anything here you'd like more detail on.",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "log_activity",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "Ok, given that information, is there anything  that I can expand on that will help you help me?",
+    "label": "correct",
+    "actual": [
+      "read_about_me"
+    ],
+    "embedding_choice": "get_or_create_linked_note",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "Ok, given that information, is there anything  that I can expand on that will help you help me?",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "get_or_create_linked_note",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "Before i answer that, what do you know about the structure of the project that you are a part of?",
+    "label": "correct",
+    "actual": [
+      "list_projects"
+    ],
+    "embedding_choice": "list_projects",
+    "embedding_agrees": true,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "Before i answer that, what do you know about the structure of the project that you are a part of?",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "list_projects",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "Ok, there's also a small hardware device (ESP32-S3, small e-ink screen, speaker, microphone) that acts as both a way of playing sounds for alerts/reminders and to take a voice recording for general notes or replies to prompts.\nI built the firmware for the device, as well as the backend LangGraph setup that you run on.\n\nI tell you this as I have the ability add and change things as we discover what I need and what works for me. Do you understand? And can you save this into some kind of permanent memory so you don;t forget?",
+    "label": "correct",
+    "actual": [
+      "remember_about_me"
+    ],
+    "embedding_choice": "set_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "Ok, there's also a small hardware device (ESP32-S3, small e-ink screen, speaker, microphone) that acts as both a way of playing sounds for alerts/reminders and to take a voice recording for general notes or replies to prompts.\nI built the firmware for the device, as well as the backend LangGraph setup that you run on.\n\nI tell you this as I have the ability add and change things as we discover what I need and what works for me. Do you understand? And can you save this into some kind of permanent memory so you don;t forget?",
+    "label": "correct",
+    "actual": [
+      "get_or_create_project"
+    ],
+    "embedding_choice": "set_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "Ok, there's also a small hardware device (ESP32-S3, small e-ink screen, speaker, microphone) that acts as both a way of playing sounds for alerts/reminders and to take a voice recording for general notes or replies to prompts.\nI built the firmware for the device, as well as the backend LangGraph setup that you run on.\n\nI tell you this as I have the ability add and change things as we discover what I need and what works for me. Do you understand? And can you save this into some kind of permanent memory so you don;t forget?",
+    "label": "correct",
+    "actual": [
+      "save_note"
+    ],
+    "embedding_choice": "set_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "Ok, there's also a small hardware device (ESP32-S3, small e-ink screen, speaker, microphone) that acts as both a way of playing sounds for alerts/reminders and to take a voice recording for general notes or replies to prompts.\nI built the firmware for the device, as well as the backend LangGraph setup that you run on.\n\nI tell you this as I have the ability add and change things as we discover what I need and what works for me. Do you understand? And can you save this into some kind of permanent memory so you don;t forget?",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "set_reminder",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "One of the main things I was hoping for when starting to build this project was that you might be able to help me organise my days, especially Saturday.\nI think as a testing ground, over the next few Saturdays (thought perhaps not tomorrow), it would be good to have you generate some kind of structure for the day. I mainly want to progress on getting the house more tidy.",
+    "label": "correct",
+    "actual": [
+      "remember_about_me"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "One of the main things I was hoping for when starting to build this project was that you might be able to help me organise my days, especially Saturday.\nI think as a testing ground, over the next few Saturdays (thought perhaps not tomorrow), it would be good to have you generate some kind of structure for the day. I mainly want to progress on getting the house more tidy.",
+    "label": "correct",
+    "actual": [
+      "mark_onboarding_complete"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "One of the main things I was hoping for when starting to build this project was that you might be able to help me organise my days, especially Saturday.\nI think as a testing ground, over the next few Saturdays (thought perhaps not tomorrow), it would be good to have you generate some kind of structure for the day. I mainly want to progress on getting the house more tidy.",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "add_planning_task",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "Yeah, I think the short sprints with timed breaks would work best for me. So, like 20 min in the kitchen, break, 30 min on the lounge room and laundry, break, 20 min in work study, break, etc.\nWe will need to define the areas and potentially estimated effort.",
+    "label": "correct",
+    "actual": [
+      "remember_about_me"
+    ],
+    "embedding_choice": "set_timer",
+    "embedding_agrees": false,
+    "laya_choice": "add_planning_task",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "Yeah, I think the short sprints with timed breaks would work best for me. So, like 20 min in the kitchen, break, 30 min on the lounge room and laundry, break, 20 min in work study, break, etc.\nWe will need to define the areas and potentially estimated effort.",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "set_timer",
+    "embedding_agrees": false,
+    "laya_choice": "add_planning_task",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "Oh, that's a great idea for the use of a note in the vault. Can you build out a template for next weekend? I'll fill that in closer to the date.\nAlso, are there any changes you think could be done to the tools you can use to help get this done?",
+    "label": "correct",
+    "actual": [
+      "save_note"
+    ],
+    "embedding_choice": "save_note",
+    "embedding_agrees": true,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "Oh, that's a great idea for the use of a note in the vault. Can you build out a template for next weekend? I'll fill that in closer to the date.\nAlso, are there any changes you think could be done to the tools you can use to help get this done?",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "save_note",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I see the template in the vault and i was thinking of something a bit different. \nI'm thinking it could be a list of tasks I want t get done on that day (I'll assign and estimate the amount of time) and any things I already have planned (with time blocks). Then form that you organise into blocks with breaks, taking into account anything else I have booked in.\nI do like the reflections at the end of the day; I think this would be great as a link back to the frontend from the end of day email recap; like the rating of the checkins.\nAlso, this might change your suggestins for additions to the LangGraph back end and the device, so please update and tell me again.",
+    "label": "correct",
+    "actual": [
+      "read_note"
+    ],
+    "embedding_choice": "generate_schedule_blocks",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I see the template in the vault and i was thinking of something a bit different. \nI'm thinking it could be a list of tasks I want t get done on that day (I'll assign and estimate the amount of time) and any things I already have planned (with time blocks). Then form that you organise into blocks with breaks, taking into account anything else I have booked in.\nI do like the reflections at the end of the day; I think this would be great as a link back to the frontend from the end of day email recap; like the rating of the checkins.\nAlso, this might change your suggestins for additions to the LangGraph back end and the device, so please update and tell me again.",
+    "label": "correct",
+    "actual": [
+      "update_note_section"
+    ],
+    "embedding_choice": "generate_schedule_blocks",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I see the template in the vault and i was thinking of something a bit different. \nI'm thinking it could be a list of tasks I want t get done on that day (I'll assign and estimate the amount of time) and any things I already have planned (with time blocks). Then form that you organise into blocks with breaks, taking into account anything else I have booked in.\nI do like the reflections at the end of the day; I think this would be great as a link back to the frontend from the end of day email recap; like the rating of the checkins.\nAlso, this might change your suggestins for additions to the LangGraph back end and the device, so please update and tell me again.",
+    "label": "unneeded",
+    "actual": [
+      "read_note"
+    ],
+    "embedding_choice": "generate_schedule_blocks",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I see the template in the vault and i was thinking of something a bit different. \nI'm thinking it could be a list of tasks I want t get done on that day (I'll assign and estimate the amount of time) and any things I already have planned (with time blocks). Then form that you organise into blocks with breaks, taking into account anything else I have booked in.\nI do like the reflections at the end of the day; I think this would be great as a link back to the frontend from the end of day email recap; like the rating of the checkins.\nAlso, this might change your suggestins for additions to the LangGraph back end and the device, so please update and tell me again.",
+    "label": "correct",
+    "actual": [
+      "update_note_section"
+    ],
+    "embedding_choice": "generate_schedule_blocks",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I see the template in the vault and i was thinking of something a bit different. \nI'm thinking it could be a list of tasks I want t get done on that day (I'll assign and estimate the amount of time) and any things I already have planned (with time blocks). Then form that you organise into blocks with breaks, taking into account anything else I have booked in.\nI do like the reflections at the end of the day; I think this would be great as a link back to the frontend from the end of day email recap; like the rating of the checkins.\nAlso, this might change your suggestins for additions to the LangGraph back end and the device, so please update and tell me again.",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "generate_schedule_blocks",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "Ok, I've updated the backend and the device firmware, as well as updating the template to something closer  to what I expected. Can you confirm from what you can see that everything is in order?",
+    "label": "correct",
+    "actual": [
+      "read_note"
+    ],
+    "embedding_choice": "update_calendar_event",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "Ok, I've updated the backend and the device firmware, as well as updating the template to something closer  to what I expected. Can you confirm from what you can see that everything is in order?",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "update_calendar_event",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "Ok, I've updated the template, let's run a test tomorrow. Though, given the time, I might be up a bit later than usual and/or have a bit lower energy",
+    "label": "correct",
+    "actual": [
+      "get_current_datetime"
+    ],
+    "embedding_choice": "set_timer",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "Ok, I've updated the template, let's run a test tomorrow. Though, given the time, I might be up a bit later than usual and/or have a bit lower energy",
+    "label": "correct",
+    "actual": [
+      "get_calendar_events"
+    ],
+    "embedding_choice": "set_timer",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "Ok, I've updated the template, let's run a test tomorrow. Though, given the time, I might be up a bit later than usual and/or have a bit lower energy",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "set_timer",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "Oh, I've filled the template note with what I want to do tomorrow. Do you wantto copy it to a new note so it can be worked on for tomorrow?",
+    "label": "correct",
+    "actual": [
+      "read_note"
+    ],
+    "embedding_choice": "save_note",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "Oh, I've filled the template note with what I want to do tomorrow. Do you wantto copy it to a new note so it can be worked on for tomorrow?",
+    "label": "correct",
+    "actual": [
+      "add_planning_task"
+    ],
+    "embedding_choice": "save_note",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I saw the new note and copied in the details I already had.",
+    "label": "correct",
+    "actual": [
+      "search_notes"
+    ],
+    "embedding_choice": "save_note",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I saw the new note and copied in the details I already had.",
+    "label": "correct",
+    "actual": [
+      "read_note"
+    ],
+    "embedding_choice": "save_note",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I saw the new note and copied in the details I already had.",
+    "label": "correct",
+    "actual": [
+      "update_note_section"
+    ],
+    "embedding_choice": "save_note",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": false
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "I saw the new note and copied in the details I already had.",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "save_note",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  },
+  {
+    "thread_id": "onboarding",
+    "user_message": "Sounds great, catch you tomorrow morning",
+    "label": "correct",
+    "actual": [
+      "no_tool_needed"
+    ],
+    "embedding_choice": "get_weather_forecast",
+    "embedding_agrees": false,
+    "laya_choice": "no_tool_needed",
+    "laya_agrees": true
+  }
+]

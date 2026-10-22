@@ -1,0 +1,148 @@
+[
+ {
+  "id": "D17",
+  "date": "2026-11-03",
+  "weekday": "Tuesday",
+  "kind": "busy",
+  "entries": [
+   "User: morning whats the weather looking like today and do I need a jacket for the commute\nAssistant: Canberra today is **sunny, 9° in the morning rising to 22°**, light westerly wind. A light jacket for the ride in is plenty, you can leave it at the office by the afternoon.",
+   "User: remind me to take my vitamin d when I get to my desk at nine\nAssistant: Done. Reminder set for **9:00 AM today**: take vitamin D.",
+   "User: what do I have on today\nAssistant: Here's your Tuesday:\n- **10:00 AM** Sprint planning\n- **1:00 PM** 1:1 with Priya\n- **4:30 PM** Dentist check-up (Civic)\n\nWant a reminder before the dentist?",
+   "User: yeah remind me at four\nAssistant: Reminder set for **4:00 PM today**: leave for dentist appointment at 4:30.",
+   "User: ok so I booked the flights to Hobart finally, leaving Friday the eighteenth of December and coming back Tuesday the twenty second, can you put that on the calendar\nAssistant: Added two events: **Fri 18 Dec** Flight to Hobart, and **Tue 22 Dec** Flight home to Canberra. I didn't have flight times so they're all-day entries. Want to give me times?",
+   "User: um dont have the times on me I'll tell you later. whats the weather like in hobart in late december\nAssistant: Hobart in late December typically sits around **12° to 21°**, with changeable weather. There are sunny spells but a cool southerly can roll in quickly. Layers and a rain jacket would be sensible.",
+   "User: can you find vegetarian restaurants in hobart near the waterfront\nAssistant: The search came back thin. Mostly general Hobart restaurant lists rather than anything clearly vegetarian-focused, and a couple of Salamanca cafes came up that I couldn't confirm have veg options. Want me to search again with a narrower query?",
+   "User: nah leave it I'll look on my phone later. add a note called Hobart trip with a packing list, jacket, rain shell, walking shoes, charger and the book\nAssistant: Created a note **Hobart trip** with a Packing list section: jacket, rain shell, walking shoes, charger, book.",
+   "User: also put in a reminder to check the accommodation, I think I already booked the airbnb but not sure\nAssistant: Do you want that reminder at a specific time? I can set it for tomorrow morning or another day if you prefer.",
+   "User: tomorrow at lunch\nAssistant: Reminder set for **Wednesday 4 Nov, 12:30 PM**: check Hobart accommodation booking. I assumed 12:30 for lunch, so say if you'd like a different time.",
+   "User: how many days of annual leave would I need for that trip, the eighteenth is a friday\nAssistant: Flying out Friday 18 Dec and back Tuesday 22 Dec, the work days you'd miss are **Monday 21 Dec and Tuesday 22 Dec**, plus Friday afternoon if you leave during the day. So roughly 2 to 3 days depending on flight times.",
+   "User: perfect thanks. last thing set a timer for ten minutes I'm making tea\nAssistant: Timer set for **10 minutes**."
+  ],
+  "reflections": [
+   "Prompt (medium): \"What's one thing you're looking forward to, even something small?\"\nReply: Honestly the Hobart trip, I finally booked the flights today so it feels real now. Also just wandering around Salamanca with a coffee.",
+   "Prompt (low): \"Roll your neck slowly, once each direction. Where are you holding tension?\"\nReply: Yeah right shoulder mostly, I've been hunched over the laptop since sprint planning."
+  ]
+ },
+ {
+  "id": "D18",
+  "date": "2026-11-07",
+  "weekday": "Saturday",
+  "kind": "moderate",
+  "entries": [
+   "User: morning whats the weather for the walk today\nAssistant: Canberra is **partly cloudy, 14° now climbing to 24°**, with a small chance of a shower after **4 PM**. Morning is your best window for the walk.",
+   "User: ok start me a tidy list for the house, kitchen bathroom and the spare room desk\nAssistant: Started a note **Saturday tidy** with three items: Kitchen, Bathroom, Spare room desk. Want me to add sub-tasks to any of them?",
+   "User: add under spare room, sort the cables box and recycle old chargers\nAssistant: Added to Spare room desk: sort the cables box, recycle old chargers.",
+   "User: where can I recycle old chargers in canberra\nAssistant: I didn't find a clear answer. The results were mostly general e-waste articles and nothing I could confirm as a Canberra drop-off. The ACT Government's recycling page would be the safest place to check. Want me to try the search again?",
+   "User: nah. remind me at three to put the washing away\nAssistant: Reminder set for **3:00 PM today**: put the washing away.",
+   "User: and whats a good veggie dinner, I've got chickpeas, spinach, a tin of tomatoes and rice\nAssistant: A chickpea and spinach curry: soften onion and garlic if you have them, add the tinned tomatoes and a spoon of curry powder or cumin, simmer the chickpeas for about 15 minutes, then stir the spinach in at the end. Serve over rice. Around 30 minutes total."
+  ],
+  "reflections": [
+   "Prompt (low): \"Press your feet flat into the floor and notice the contact for a few seconds. What do you notice in your legs right now?\"\nReply: Legs are a bit tired from the walk earlier but kind of a good tired. Floor feels cool."
+  ]
+ },
+ {
+  "id": "D19",
+  "date": "2026-11-10",
+  "weekday": "Tuesday",
+  "kind": "quiet",
+  "entries": [
+   "User: what time is my first meeting tomorrow\nAssistant: Tomorrow (Wednesday 11 Nov) your first event is **9:30 AM**, Team standup. Nothing before that.",
+   "User: ok cool set an alarm.. uh reminder for nine fifteen to join early\nAssistant: Reminder set for **tomorrow, 9:15 AM**: join standup early."
+  ],
+  "reflections": []
+ },
+ {
+  "id": "D20",
+  "date": "2026-11-13",
+  "weekday": "Friday",
+  "kind": "rough-mood",
+  "entries": [
+   "User: I'm so tired today didn't sleep well, can you move my run reminder to tomorrow\nAssistant: Sorry to hear that. I can't edit an existing reminder, so I've set a new one for **tomorrow, 6:30 AM**: run. The one for today may still go off, you can just dismiss it.",
+   "User: whats on today\nAssistant: Friday 13 Nov:\n- **11:00 AM** Incident review\n- **2:00 PM** Release go/no-go\n- **3:30 PM** Quick sync with Dan\n\nThat's a heavy afternoon. Want a reminder or a gap left anywhere?",
+   "User: no. just remind me to eat lunch I always forget when its like this\nAssistant: Reminder set for **12:30 PM today**: eat lunch.",
+   "User: the release got pushed again honestly im so over this project, can you add a note, release slipped again, third time, need to talk to Dan about scope\nAssistant: Added to your **Work log**: \"Release slipped again (third time). Talk to Dan about scope.\" Want a reminder to raise it with Dan?",
+   "User: yeah monday morning\nAssistant: Reminder set for **Monday 16 Nov, 9:00 AM**: talk to Dan about scope.",
+   "User: any good dinner idea I cant be bothered cooking, vegetarian\nAssistant: Something low effort: tinned lentil soup with toast, a veggie stir-fry with frozen veg and noodles (about 10 minutes), or garlic and olive oil pasta. Which sounds least effort?",
+   "User: soup. ok. can you play some chill music\nAssistant: I can't play music, I don't have a way to control audio. I can set a reminder to step away for a break if that would help."
+  ],
+  "reflections": [
+   "Prompt (medium): \"On a scale of 1 to 10, how would you rate your stress level right now? What's driving that number?\"\nReply: Like a seven maybe eight. It's the release stuff and I'm running on bad sleep.",
+   "Prompt (low): \"Unclench your hands and let them go soft, then take one slow breath. Were you holding onto something?\"\nReply: Yeah my jaw too actually, I was gripping the mouse pretty hard.",
+   "Prompt (medium): \"You have coping skills you can lean on right now, whether that's slowing your breath or stepping away for a minute. Which one sounds most useful right now?\"\nReply: Stepping away I think. I'm gonna walk around the block before the two o'clock meeting."
+  ]
+ },
+ {
+  "id": "D21",
+  "date": "2026-11-17",
+  "weekday": "Tuesday",
+  "kind": "busy",
+  "entries": [
+   "User: morning remind me to take my morning tablet at eight thirty every day\nAssistant: Reminder set for **8:30 AM today**: take your morning tablet. I can only do one-off reminders, so that covers today only. A daily repeat would work better as a recurring calendar event.",
+   "User: ok yeah make a recurring calendar event for that at eight thirty\nAssistant: I couldn't create a recurring event, I can only add single events. I've added one for **tomorrow, 8:30 AM** (Morning tablet), but you'd need to set up the repeat in your calendar app.",
+   "User: weather today\nAssistant: Canberra: **cloudy, 17°**, top of **23°** with a chance of afternoon storms. Worth taking an umbrella if you're walking home.",
+   "User: whats on my calendar this week\nAssistant: This week:\n- **Tue 17 Nov** 2:00 PM Architecture review\n- **Wed 18 Nov** 12:00 PM Lunch with Maya\n- **Thu 19 Nov** 10:00 AM GP appointment\n- **Fri 20 Nov** Team offsite (all day)\n\nAnything you'd like reminders for?",
+   "User: yeah remind me an hour before the gp thursday\nAssistant: Reminder set for **Thursday 19 Nov, 9:00 AM**: GP appointment at 10:00 AM.",
+   "User: and the offsite is where again\nAssistant: The calendar entry just says **Team offsite** with no location. Check the invite email or ask whoever organised it.",
+   "User: can you look up a good vegetarian place in braddon for lunch with maya on wednesday\nAssistant: I searched but nothing useful came back, just generic directory pages and no clear vegetarian options for Braddon. Want me to try a different search?",
+   "User: no its fine add to my inbox note that I need to decide where to have lunch with maya\nAssistant: Added to your **Inbox** note: decide lunch spot with Maya (Wed 18 Nov, 12:00 PM).",
+   "User: I wanna start a little side project, a script that sorts my downloads folder by type, can you make a note with some ideas for how\nAssistant: Created a note **Downloads sorter** with a few approaches:\n- Watch the folder and move files by extension\n- A daily scheduled job that sorts anything older than a day\n- Rules in a small YAML file so categories are editable\n\nThe extension-based version is probably the simplest start.",
+   "User: nice. how do I say thank you in japanese, my coworkers leaving\nAssistant: **ありがとうございます** (arigatou gozaimasu) is the polite form, and **ありがとう** (arigatou) is the casual one. For a leaving colleague, **お疲れ様でした** (otsukaresama deshita) is also common.",
+   "User: set a timer for twenty five minutes for focus\nAssistant: Timer set for **25 minutes**. I'll ping you when it's done."
+  ],
+  "reflections": [
+   "Prompt (high): \"Did you protect your time or say no to something today in a way that felt good?\"\nReply: Kind of, I turned down a meeting that was just a status update and asked them to put it in writing. Felt pretty good."
+  ]
+ },
+ {
+  "id": "D22",
+  "date": "2026-11-24",
+  "weekday": "Tuesday",
+  "kind": "moderate",
+  "entries": [
+   "User: whats the weather this arvo I'm thinking of walking home\nAssistant: Canberra this afternoon: **sunny, 26°** at 4 PM easing to 22° by 6. Great walking weather, maybe bring water.",
+   "User: remind me to book the car service before the end of the week\nAssistant: Reminder set for **Friday 27 Nov, 9:00 AM**: book car service. I picked Friday morning, tell me if you'd rather another time.",
+   "User: whats the date on friday\nAssistant: Friday is **27 November**.",
+   "User: can you add a note to my work log, finished the migration script, tests passing, need to write the rollback docs\nAssistant: Added to **Work log** (Tue 24 Nov): Finished migration script, tests passing. To do: write rollback docs.",
+   "User: how long to roast cauliflower in the oven\nAssistant: Cut into florets, toss with oil and salt, and roast at **220°C for 25 to 30 minutes**, turning once, until golden at the edges.",
+   "User: whats a good book to take to hobart, not too long\nAssistant: That depends on the mood. Fiction, nonfiction, or something Tasmanian? Let me know and I'll suggest a few."
+  ],
+  "reflections": [
+   "Prompt (medium): \"What's something today that went better than you expected?\"\nReply: The migration script, I thought I'd be debugging it all afternoon and it just passed first go."
+  ]
+ },
+ {
+  "id": "D23",
+  "date": "2026-12-01",
+  "weekday": "Tuesday",
+  "kind": "quiet",
+  "entries": [
+   "User: remind me at six to put the bins out\nAssistant: Reminder set for **6:00 PM today**: put the bins out.",
+   "User: is it going to rain this week\nAssistant: Rain looks likely on **Thursday 3 Dec** (about 5 mm, mostly in the afternoon). Otherwise mostly dry and warm, 24° to 28°.",
+   "User: thanks\nAssistant: You're welcome. Anything else?"
+  ],
+  "reflections": [
+   "Prompt (low): \"Notice one smell in the air and the taste in your mouth right now, even if it's faint. What did you pick up on?\"\nReply: Coffee still on my tongue and the neighbour's cooking something with garlic I think."
+  ]
+ },
+ {
+  "id": "D24",
+  "date": "2026-12-05",
+  "weekday": "Saturday",
+  "kind": "good-mood",
+  "entries": [
+   "User: morning! whats the weather like for a saturday walk\nAssistant: Canberra today: **sunny, 12° rising to 27°**. Early is best since it gets warm by midday. Sunscreen is a good idea.",
+   "User: start a tidy list, kitchen, bathroom and the balcony, and add re-pot the basil\nAssistant: Created a note **Saturday tidy (5 Dec)**: Kitchen, Bathroom, Balcony, Re-pot the basil.",
+   "User: I finished the whole list by eleven, add that to my wins note, tidy done, basil repotted, also finished the rollback docs yesterday\nAssistant: Added to your **Wins** note (Sat 5 Dec): tidy list done by 11 AM, basil re-potted, rollback docs finished (Friday).",
+   "User: whats a good thing to make, I got pumpkin, beetroot and halloumi from the markets\nAssistant: Roast the pumpkin and beetroot together at 200°C for about 35 minutes, then toss with grilled halloumi, rocket if you have it, and a squeeze of lemon. An easy warm salad.",
+   "User: remind me at five to call mum\nAssistant: Reminder set for **5:00 PM today**: call Mum.",
+   "User: also what do I have on next week\nAssistant: Next week:\n- **Mon 7 Dec** 10:00 AM Planning\n- **Wed 9 Dec** 6:30 PM Climbing with Sam\n- **Fri 11 Dec** 12:30 PM Work Christmas lunch\n\nQuiet otherwise.",
+   "User: set a timer for forty minutes I'm gonna read on the balcony\nAssistant: Timer set for **40 minutes**. Enjoy the read!"
+  ],
+  "reflections": [
+   "Prompt (medium): \"Name one thing you're grateful for right now.\"\nReply: Honestly this sunny morning and having the whole day with nothing urgent. Feeling pretty good.",
+   "Prompt (medium): \"Who's someone you interacted with recently, even briefly, that you appreciate?\"\nReply: Dan, he helped me sort out the rollback docs on Friday without making a fuss, really appreciated that.",
+   "Prompt (medium): \"What's one small detail of your surroundings right now that you're glad is there?\"\nReply: The basil on the balcony, it already looks happier in the new pot.",
+   "Prompt (high): \"What's a value of yours that you actually lived up to today?\"\nReply: Taking care of my space I guess. I said I'd get the tidy done and did it before lunch instead of putting it off."
+  ]
+ }
+]

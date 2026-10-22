@@ -329,6 +329,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/laya-playground/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Laya Tool Candidates
+         * @description The live tool list "tool" mode actually tests against — shown
+         *     read-only in the Playground so it's clear what candidates Laya is
+         *     choosing between, straight from agent/tools/all_tools.py.
+         */
+        get: operations["list_laya_tool_candidates_laya_playground_tools_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/laya-playground/ask": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask Laya */
+        post: operations["ask_laya_laya_playground_ask_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/login": {
         parameters: {
             query?: never;
@@ -1258,6 +1297,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/settings/model-assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Model Assignments
+         * @description Which model does tool calling and which writes replies, for every mode
+         *     (agent/model_assignments.py) — effective values plus the stored overrides.
+         */
+        get: operations["get_model_assignments_settings_model_assignments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/debug/writer-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Debug Writer Log
+         * @description Newest-first log of every split-model decision (agent/writer.py): per
+         *     final reply or long note argument, whether the tool model's draft was
+         *     kept or the writer model's text used, why, both texts, and latency.
+         */
+        get: operations["debug_writer_log_debug_writer_log_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agent-activity/{thread_id}": {
         parameters: {
             query?: never;
@@ -1831,6 +1913,75 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** LayaAnswerOption */
+        LayaAnswerOption: {
+            /** Name */
+            name: string;
+            /** Probability */
+            probability: number;
+        };
+        /** LayaCandidate */
+        LayaCandidate: {
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+        };
+        /** LayaPlaygroundRequest */
+        LayaPlaygroundRequest: {
+            /** Text */
+            text: string;
+            /**
+             * Question Type
+             * @enum {string}
+             */
+            question_type: "yes_no" | "choose_one" | "choose_multiple" | "scale" | "tool";
+            /** Instructions */
+            instructions?: string | null;
+            /** Candidates */
+            candidates?: components["schemas"]["LayaCandidate"][] | null;
+            /** Yes Label */
+            yes_label?: string | null;
+            /** No Label */
+            no_label?: string | null;
+            /**
+             * Multi Threshold
+             * @default 0.5
+             */
+            multi_threshold: number;
+        };
+        /** LayaPlaygroundResponse */
+        LayaPlaygroundResponse: {
+            /** Question Type */
+            question_type: string;
+            /** Choice */
+            choice?: string | null;
+            /** Yes Probability */
+            yes_probability?: number | null;
+            /** Score */
+            score?: number | null;
+            /** Levels */
+            levels?: string[] | null;
+            /** Selected */
+            selected?: string[] | null;
+            /** Options */
+            options?: components["schemas"]["LayaAnswerOption"][] | null;
+            /** Backend */
+            backend: string;
+            /** Model */
+            model: string | null;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Route */
+            route: string[];
+        };
+        /** LayaToolCandidate */
+        LayaToolCandidate: {
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+        };
         /** LlmProviderResponse */
         LlmProviderResponse: {
             /** Provider */
@@ -1866,6 +2017,42 @@ export interface components {
         LoginRequest: {
             /** Password */
             password: string;
+        };
+        /** ModelAssignmentRow */
+        ModelAssignmentRow: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Tool Calls */
+            tool_calls: boolean;
+            /** Reply Rule */
+            reply_rule: string;
+            /** Tool Model */
+            tool_model: string | null;
+            /** Tool Override */
+            tool_override: string;
+            /** Writer Model */
+            writer_model: string | null;
+            /** Writer Override */
+            writer_override: string;
+            /** Reply Model */
+            reply_model: string;
+        };
+        /** ModelAssignmentsResponse */
+        ModelAssignmentsResponse: {
+            /** Provider */
+            provider: string;
+            /** Split Applies */
+            split_applies: boolean;
+            /** Default Tool Model */
+            default_tool_model: string;
+            /** Default Writer Model */
+            default_writer_model: string;
+            /** No Writer Value */
+            no_writer_value: string;
+            /** Rows */
+            rows: components["schemas"]["ModelAssignmentRow"][];
         };
         /** MoodByDay */
         MoodByDay: {
@@ -2001,6 +2188,12 @@ export interface components {
             llm_provider: string;
             /** Openrouter Configured */
             openrouter_configured: boolean;
+            /** Lmstudio Writer Model */
+            lmstudio_writer_model: string;
+            /** Tool Router Enabled */
+            tool_router_enabled: boolean;
+            /** Tool Suggestion Enabled */
+            tool_suggestion_enabled: boolean;
             /** Onboarding Complete */
             onboarding_complete: boolean;
             /** Basics Complete */
@@ -2175,6 +2368,12 @@ export interface components {
             llm_provider: string;
             /** Openrouter Configured */
             openrouter_configured: boolean;
+            /** Lmstudio Writer Model */
+            lmstudio_writer_model: string;
+            /** Tool Router Enabled */
+            tool_router_enabled: boolean;
+            /** Tool Suggestion Enabled */
+            tool_suggestion_enabled: boolean;
             /** Onboarding Complete */
             onboarding_complete: boolean;
             /** Basics Complete */
@@ -2224,8 +2423,20 @@ export interface components {
             llm_provider?: string | null;
             /** Lmstudio Chat Model */
             lmstudio_chat_model?: string | null;
+            /** Lmstudio Writer Model */
+            lmstudio_writer_model?: string | null;
+            /** Model Assignments */
+            model_assignments?: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            } | null;
             /** Openrouter Chat Model */
             openrouter_chat_model?: string | null;
+            /** Tool Router Enabled */
+            tool_router_enabled?: boolean | null;
+            /** Tool Suggestion Enabled */
+            tool_suggestion_enabled?: boolean | null;
         };
         /** TTSRequest */
         TTSRequest: {
@@ -3349,6 +3560,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_laya_tool_candidates_laya_playground_tools_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LayaToolCandidate"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ask_laya_laya_playground_ask_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LayaPlaygroundRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LayaPlaygroundResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4737,6 +5014,71 @@ export interface operations {
             path: {
                 thread_id: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_model_assignments_settings_model_assignments_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelAssignmentsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    debug_writer_log_debug_writer_log_get: {
+        parameters: {
+            query?: {
+                thread_id?: string | null;
+                limit?: number;
+            };
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;

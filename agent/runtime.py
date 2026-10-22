@@ -43,12 +43,15 @@ from utils.lmstudio_client import get_history_budget_tokens
 
 from utils.notify import send_gotify, notify_error
 from utils.recall_log_store import get_recall_for_thread
+from utils.tool_router_log import get_tool_router_log_for_thread
+from utils.tool_suggestion_log import get_tool_suggestion_log_for_thread
 
 logger = logging.getLogger(__name__)
 
 # A new default thread starts if more than this many seconds pass with
 # no request and no keyword-addressed continuation.
 SESSION_TIMEOUT_SECONDS = 5 * 60
+SUMMARY_REPLY_MAX_CHARS = 1200
 
 
 @dataclass
@@ -281,6 +284,12 @@ async def get_thread_debug(thread_id: str) -> dict:
     re-run search_conversations against the same last_user_msg each time
     since no new human message arrives mid-loop. So the two lists are
     reliably 1:1 orderable by simple zip, no timestamp matching needed.
+
+    Same zip-by-order pattern applies to the tool-router log
+    (utils/tool_router_log.py) and the tool-suggestion log
+    (utils/tool_suggestion_log.py) — each logged only when its own setting
+    is on, so most threads simply have no rows to zip in and stay
+    unannotated, same as a thread that predates recall_log.db above.
     """
     if app_state.graph is None:
         raise HTTPException(status_code=503, detail="Agent not initialised")
@@ -307,6 +316,10 @@ async def get_thread_debug(thread_id: str) -> dict:
 
     recall_log = await asyncio.to_thread(get_recall_for_thread, thread_id)
     recall_iter = iter(recall_log)
+    router_log = await asyncio.to_thread(get_tool_router_log_for_thread, thread_id)
+    router_iter = iter(router_log)
+    suggestion_log = await asyncio.to_thread(get_tool_suggestion_log_for_thread, thread_id)
+    suggestion_iter = iter(suggestion_log)
     for entry in turns:
         if entry["type"] != "ai":
             continue
@@ -317,6 +330,18 @@ async def get_thread_debug(thread_id: str) -> dict:
         # else: this thread predates recall_log.db, or has more "ai" turns
         # than logged recalls for some other reason — leave unannotated
         # rather than mismatching a later turn's recall onto this one.
+
+        routed = next(router_iter, None)
+        if routed is not None:
+            entry["router_categories"] = routed["categories"]
+            entry["router_probabilities"] = routed["probabilities"]
+            entry["router_reason"] = routed["reason"]
+
+        suggested = next(suggestion_iter, None)
+        if suggested is not None:
+            entry["suggested_tools"] = suggested["suggested"]
+            entry["suggestion_probabilities"] = suggested["probabilities"]
+            entry["suggestion_reason"] = suggested["reason"]
 
     return {
         "thread_id": thread_id,
@@ -534,6 +559,11 @@ async def run_agent(
     )
 
     summary = f"User: {cleaned_text}\nAssistant: {reply}"
+    # Writer-model replies (agent/writer.py) can be long; recall and the
+    # daily digest only need the gist, so the stored summary is capped while
+    # the push notification keeps the full reply.
+    stored_reply = reply if len(reply) <= SUMMARY_REPLY_MAX_CHARS else reply[:SUMMARY_REPLY_MAX_CHARS] + "…"
+    stored_summary = f"User: {cleaned_text}\nAssistant: {stored_reply}"
     label = f"Assistant [{keyword}]" if keyword else "Assistant"
     # Priority 3 keeps this in Android's low-importance channel (silent,
     # shows in the shade) rather than the default channel (sound +
@@ -548,7 +578,7 @@ async def run_agent(
     # alert from /voice's catch-all. Isolate it, but still surface it since
     # a silent failure here means future recall silently degrades.
     try:
-        app_state.memory.save_conversation_summary(summary, thread_id=thread_id)
+        app_state.memory.save_conversation_summary(stored_summary, thread_id=thread_id)
     except Exception as e:
         logger.error("Failed to save conversation summary for thread %s: %s", thread_id, e)
         notify_error("Conversation memory save failed (reply was still delivered)", e)

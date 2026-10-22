@@ -1,0 +1,163 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "search_web",
+      "description": "Search the web using SearxNG.",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query string"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Language code for results (e.g., 'en', 'en-US', 'fr', 'de').\n     Use None for no language preference."
+          },
+          "time_range": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Time range filter ('day', 'week', 'month', 'year').\n       Use None for no time filtering."
+          },
+          "safesearch": {
+            "default": false,
+            "type": "boolean",
+            "description": "Safe search filtering (True to enable, False to disable)"
+          },
+          "max_results": {
+            "default": 10,
+            "type": "integer",
+            "description": "Maximum number of results to return (default: 10)"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "search_images",
+      "description": "Search for images using SearxNG.",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Image search query"
+          },
+          "max_results": {
+            "default": 10,
+            "type": "integer",
+            "description": "Maximum number of results to return (default: 10)"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "search_videos",
+      "description": "Search for videos using SearxNG.",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Video search query"
+          },
+          "max_results": {
+            "default": 10,
+            "type": "integer",
+            "description": "Maximum number of results to return (default: 10)"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "search_news",
+      "description": "Search for news using SearxNG.",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "News search query"
+          },
+          "time_range": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Time range filter ('day', 'week', 'month', 'year').\n       Use None for no time filtering."
+          },
+          "max_results": {
+            "default": 10,
+            "type": "integer",
+            "description": "Maximum number of results to return (default: 10)"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "fetch_url",
+      "description": "Fetch content from a URL (html, text or pdf) and convert it to markdown.",
+      "parameters": {
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The URL to fetch and convert to markdown"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      }
+    }
+  }
+]

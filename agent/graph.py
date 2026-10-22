@@ -7,6 +7,8 @@ LLM connection is configured via environment variables.
 
 import asyncio
 import json
+import re
+from datetime import datetime
 import logging
 import time
 
@@ -17,14 +19,23 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
 
+from langchain_core.messages import AIMessage, ToolMessage
+
+from agent import model_assignments, writer
+from agent.date_guard import clean_search_queries, fix_relative_dates
 from agent.memory import MemoryStore
 from agent.settings import settings
+from agent.tool_router import build_category_index, choose_tool_subset
+from agent.tool_suggestion import build_suggestion_text, build_tool_candidates, suggest_tools
 from agent.tools.all_tools import get_tools
 from utils import vault
+from utils.datetime import format_now_human
 from utils.llm_client import get_chat_llm
 from utils.lmstudio_client import get_history_budget_tokens
 from utils.openrouter_client import get_history_budget_tokens as get_openrouter_history_budget_tokens
 from utils.recall_log_store import log_recall
+from utils.tool_router_log import log_tool_router
+from utils.tool_suggestion_log import log_tool_suggestion
 
 logger = logging.getLogger(__name__)
 
@@ -46,16 +57,15 @@ GEMINI_HISTORY_BUDGET_TOKENS = 200_000
 PROJECT_THREAD_PREFIX = "project_"
 
 
-SYSTEM_PROMPT = """You are a personal assistant agent with access to tools including get_current_datetime and
-search_web.
+SYSTEM_PROMPT = """You are a personal assistant agent with access to tools including search_web.
 
-## MANDATORY: Date and Time Grounding
-You do NOT know the current date or time — your training data has a cutoff and you have no
-built-in clock, so any date/time knowledge you seem to have is unreliable. Before any action
-involving a relative time reference (today, tomorrow, next week, in an hour, this weekend,
-etc.), call get_current_datetime first and compute the actual target date/time from that
-result — every time, even if you already called it earlier this conversation, since time may
-have passed. Never guess, estimate, or reuse a remembered date.
+## Date and Time Grounding
+The current date and time is given below (see "CURRENT DATE AND TIME"), refreshed every turn —
+use it directly for any relative time reference (today, tomorrow, next week, in an hour, this
+weekend, etc.) instead of guessing from training data, which has a cutoff and no built-in
+clock. get_current_datetime still exists for when the user explicitly asks what time/date it
+is right now, but you don't need to call it just to reason about relative dates — the value is
+already here.
 
 If the user gives a bare 12-hour time with no AM/PM (e.g. "9 o'clock", "at 9"), default to AM
 unless context implies otherwise ("9 o'clock tonight" → PM; "lunch at 12" → PM). State the
@@ -66,7 +76,12 @@ You do NOT have live knowledge of real-world businesses, addresses, current even
 other real-world specifics — call search_web rather than inventing or inferring one from
 memory, even if the request seems minor or expects you to "just know" (e.g. "add [a
 business]'s details", "find a good [X] near [Y]", "what's the address of..."). If a search
-returns nothing usable, say you couldn't verify it rather than fabricating one.
+returns nothing usable, say you couldn't verify it rather than fabricating one. Before saving
+anything from a search, check that the name the user gave actually appears in the result's title
+or snippet; if no result matches, say so and ask instead of saving the closest-looking one. Never
+add a date or weekday to a search query unless the user said it. When adding a found event to the
+calendar, pass the venue or address from the result as location. If the snippets don't give the
+start time, call fetch_webpage on the event page for it before adding; never make up a start time.
 
 search_web results are short pointer snippets, not the actual data — if they don't contain
 enough to fully answer (a full list, specific dates/figures, step-by-step detail), call
@@ -135,8 +150,9 @@ _tools_token_estimate: int = 0
 
 
 def get_fixed_overhead_tokens() -> int:
-    """Base system prompt + bound tool schemas, no mode addendum/memory block
-    (those vary per turn and aren't known outside call_llm) — a lower-bound
+    """Base system prompt + bound tool schemas, no mode addendum/datetime
+    block/memory block (those vary per turn and aren't known outside
+    call_llm) — a lower-bound
     estimate of the fixed cost every turn pays, for readouts like
     agent/runtime.py's get_thread_size that need a number before any request
     is actually being built."""
@@ -165,12 +181,13 @@ ONBOARDING_ADDENDUM = """
 You're actively interviewing the user to build out their About Me profile — driving the
 conversation, not waiting for facts to come up naturally (unlike passive learning mode).
 
-They already filled out a basics form before this conversation started (name, birthday,
-location, occupation, job, people, and short notes on preferences/routine/interests/health &
-goals/important dates may already be recorded) — call read_about_me first to see what's there,
-and don't re-ask anything it already answered. Location is set separately via
-set_home_location; only touch that if they bring up moving. Go deeper on whatever they gave
-short answers to, and offer to say more about specific people if several were listed.
+They already filled out a basics form before this conversation started, and everything on it
+is already recorded in About Me exactly as typed (name, birthday, occupation, job, important
+dates, preferences, routine, interests, values, health & goals), with a linked note for each
+person listed holding their relation to the user. Call read_about_me first to see what's
+there, and don't re-ask or re-record anything it already answered. Location is set separately
+via set_home_location; only touch that if they bring up moving. Go deeper on whatever they
+gave short answers to, and offer to say more about specific people if several were listed.
 
 Use as a guide for what's still thin, not a script to read verbatim:
   - Preferences, People, Routine, Interests — go deeper than the form's short notes
@@ -194,9 +211,9 @@ For a specific person (e.g. going through several one by one) or any other disti
 sub-topic likely to accumulate detail later, use get_or_create_linked_note instead of
 writing into a shared About Me section.
 
-Once the main areas feel reasonably covered, call mark_onboarding_complete, let them know,
-and mention they can add more later via the dashboard — don't keep interviewing
-indefinitely."""
+Once the main areas feel reasonably covered, tell them they can press Finished on the
+dashboard whenever they're done and add more later — don't keep interviewing indefinitely.
+Only record what the user actually said; never fill in details they haven't given."""
 
 PROFILE_CHAT_ADDENDUM = """
 
@@ -272,6 +289,74 @@ This is your only turn for this goal — work through every part before ending, 
 partway. Once done, reply with a short summary of what you did and where to find it (e.g.
 note title(s)), not the full content again."""
 
+# Per-mode tool sets for the tool model. Each of these modes is a separate,
+# narrow flow (see the *_ADDENDUM prompts above), so offering the full ~31+
+# tool schemas just gives a 1.2B model more ways to pick wrong. Names that
+# don't exist in the live tool list are skipped; an empty result falls back
+# to the full list (build_graph).
+_NOTE_EDIT_TOOLS = ["read_note", "append_to_note", "update_note_section", "search_notes"]
+MODE_TOOL_NAMES = {
+    "onboarding": [
+        "read_about_me", "remember_about_me", "get_or_create_linked_note",
+        "set_home_location", *_NOTE_EDIT_TOOLS,
+    ],
+    "profile_chat": ["read_about_me", "remember_about_me", "get_or_create_linked_note", *_NOTE_EDIT_TOOLS],
+    "day_planning": ["add_planning_task", "generate_schedule_blocks", "get_todays_events", "get_calendar_events"],
+    "project_chat": [*_NOTE_EDIT_TOOLS, "save_note", "list_projects", "get_or_create_project"],
+    "agent_run": [
+        *_NOTE_EDIT_TOOLS, "save_note", "list_projects", "get_or_create_project",
+        "search_web", "fetch_webpage",
+    ],
+}
+
+
+_SCHEDULING_RE = re.compile(
+    r"\b(remind\w*|timer|events?|calendar|schedul\w*|appointments?|meetings?|book|cancel|move|add|delete|"
+    r"tonight|today|tomorrow|yesterday|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b"
+    r"|\b\d{1,2}[:.]\d{2}\b|\b\d{1,2}\s?[ap]\.?m\b",
+    re.IGNORECASE,
+)
+
+
+# A lookup and a write in one batch run together, so the write can't use what
+# the lookup found. The 1.2B tool model does this; the write waits a step.
+LOOKUP_TOOLS = {"search_web", "search_news", "search_images", "search_videos", "fetch_url", "fetch_webpage"}
+WRITE_AFTER_LOOKUP_TOOLS = writer.TEMPLATE_TOOLS | {
+    "save_note", "append_to_note", "update_note_section", "remember_about_me", "add_planning_task",
+}
+
+
+def defer_writes_after_lookup(tool_calls: list[dict]) -> tuple[list[dict], list[dict]]:
+    """(calls to run now, calls held back). Writes are held back only when the
+    same batch also looks something up."""
+    if not any(c.get("name") in LOOKUP_TOOLS for c in tool_calls):
+        return list(tool_calls), []
+    run = [c for c in tool_calls if c.get("name") not in WRITE_AFTER_LOOKUP_TOOLS]
+    held = [c for c in tool_calls if c.get("name") in WRITE_AFTER_LOOKUP_TOOLS]
+    return run, held
+
+
+def _held_back_message(call: dict) -> ToolMessage:
+    name = call.get("name")
+    return ToolMessage(
+        content=(
+            f"Failed to run {name} yet: it was requested in the same step as a lookup, so it could not "
+            f"use the lookup's results and was not run. Read the results above, then call {name} again "
+            "with the details you found (or tell the user nothing useful was found)."
+        ),
+        tool_call_id=call["id"],
+        name=name,
+    )
+
+
+def skip_recall(message: str) -> bool:
+    """A request that names a day or time, or is about the calendar/reminders,
+    gets no cross-thread recall: old turns carry other dates and times, and
+    the small tool model copies them into new events instead of resolving
+    "tonight" against the date it was given."""
+    return bool(_SCHEDULING_RE.search(str(message or "")))
+
+
 def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None):
     tools = get_tools(memory)
     if mcp_tools:
@@ -307,6 +392,50 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
                 tools
             )
         return llm_with_tools_by_provider[provider]
+
+    # Optional, feature-flagged narrowing of which tools get bound per turn
+    # (agent/tool_router.py, settings.tool_router_enabled — off by default).
+    # category_index is built once here, same "tool list is fixed for the
+    # process lifetime" reasoning as _tools_token_estimate below. Bounded —
+    # at most one entry per (provider, distinct combination of categories
+    # actually seen) — since routing can select any subset of ~9
+    # categories, not just one, worst case is 2^9 × 3 providers, but in
+    # practice only whatever combinations real requests actually produce
+    # ever get built. Separate cache from llm_with_tools_by_provider so the
+    # full-tool-list path above is never affected by anything routing does.
+    category_index = build_category_index(tools)
+    llm_with_narrowed_tools_by_key = {}
+
+    # Optional, feature-flagged tool suggestion (agent/tool_suggestion.py,
+    # settings.tool_suggestion_enabled — off by default) — unlike routing
+    # above, this never touches which tools are bound, only appends a hint
+    # to the system prompt, so it needs no bind-cache of its own.
+    tool_candidates = build_tool_candidates(tools)
+
+    mode_tools = {}
+    for mode_key, names in MODE_TOOL_NAMES.items():
+        subset = [t for t in tools if t.name in names]
+        if subset:
+            mode_tools[mode_key] = subset
+    llm_with_mode_tools_by_key = {}
+
+    def get_llm_with_mode_tools(provider: str, mode_key: str):
+        key = (provider, mode_key)
+        if key not in llm_with_mode_tools_by_key:
+            llm_with_mode_tools_by_key[key] = get_chat_llm(temperature=0.2, provider=provider).bind_tools(
+                mode_tools[mode_key]
+            )
+        return llm_with_mode_tools_by_key[key]
+
+    def get_llm_with_narrowed_tools(provider: str, categories: list[str], subset: list):
+        # categories can be any non-empty subset of the ~9 categories now
+        # (multi-category selection, see agent/tool_router.py) — sorted so
+        # {"weather", "reminders"} and {"reminders", "weather"} share a
+        # cache entry instead of building the same bind twice.
+        key = (provider, tuple(sorted(categories)))
+        if key not in llm_with_narrowed_tools_by_key:
+            llm_with_narrowed_tools_by_key[key] = get_chat_llm(temperature=0.2, provider=provider).bind_tools(subset)
+        return llm_with_narrowed_tools_by_key[key]
 
     # Tool list is fixed for the process lifetime, so this is computed once here
     # rather than every call_llm turn. ponytail: reuses the same chars/4 approximate
@@ -375,7 +504,7 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
             # MemoryStore/Chroma has no async client, so this still blocks — but
             # to_thread keeps it off the event loop instead of freezing every
             # other concurrent request for the duration of the search.
-            recalled = await asyncio.to_thread(
+            recalled = [] if skip_recall(last_user_msg) else await asyncio.to_thread(
                 memory.search_conversations,
                 last_user_msg,
                 n_results=3,
@@ -409,7 +538,21 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
         # keys off this local rather than a value frozen at graph-build time.
         provider = settings.llm_provider
 
-        system = SystemMessage(content=SYSTEM_PROMPT + addendum + memory_block)
+        # Computed fresh every turn, same reasoning as memory_block above —
+        # local models were unreliable calling get_current_datetime
+        # themselves for relative-date grounding (see SYSTEM_PROMPT's "Date
+        # and Time Grounding" section), so the real value is just always
+        # present instead of depending on a tool call actually happening.
+        datetime_block = f"\n\nCURRENT DATE AND TIME: {format_now_human(settings.zoneinfo())}"
+
+        suggestion_block = ""
+        if settings.tool_suggestion_enabled:
+            suggestion_decision = await suggest_tools(last_user_msg, tool_candidates)
+            if thread_id:
+                await asyncio.to_thread(log_tool_suggestion, thread_id, last_user_msg, suggestion_decision)
+            suggestion_block = build_suggestion_text(suggestion_decision.suggested)
+
+        system = SystemMessage(content=SYSTEM_PROMPT + addendum + datetime_block + suggestion_block + memory_block)
         # "onboarding"/"profile_chat"/"project_<slug>" threads reuse the same
         # thread_id forever and are never swept (see PROJECT_THREAD_PREFIX
         # comment above), so unlike normal threads their history can grow
@@ -426,8 +569,10 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
         # of the budget before history gets whatever's left. Without this, history
         # alone could grow to fill the full budget and the actual request (system +
         # tools + history) would still overflow the model's real context.
+        surface = model_assignments.surface_key(mode, one_shot, bool(project_slug and agent_run))
+        tool_model_id = model_assignments.tool_model(surface)
         if provider == "lmstudio":
-            budget = await get_history_budget_tokens()
+            budget = await get_history_budget_tokens(tool_model_id)
         elif provider == "openrouter":
             budget = await get_openrouter_history_budget_tokens()
         else:
@@ -447,6 +592,7 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
             strategy="last",
             start_on="human",
         )
+        history = writer.tool_model_view(history)
         if not history:
             # A too-small history_budget (system+tools alone already at or
             # over the model's context) trims everything away, including
@@ -458,7 +604,20 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
             # worst case this slightly overflows the model's real context
             # and fails with a clearer error than a template crash.
             history = state["messages"][-1:]
-        llm_with_tools = get_llm_with_tools(provider)
+
+        mode_key = "agent_run" if (project_slug and agent_run) else mode
+        if mode_key in mode_tools:
+            llm_with_tools = get_llm_with_mode_tools(provider, mode_key)
+        elif settings.tool_router_enabled:
+            decision = await choose_tool_subset(last_user_msg, category_index, tools)
+            if thread_id:
+                await asyncio.to_thread(log_tool_router, thread_id, last_user_msg, decision)
+            llm_with_tools = (
+                get_llm_with_narrowed_tools(provider, decision.categories, decision.tools)
+                if decision.narrowed else get_llm_with_tools(provider)
+            )
+        else:
+            llm_with_tools = get_llm_with_tools(provider)
         # Both lmstudio and openrouter have a dashboard-editable model
         # (settings.lmstudio_chat_model / settings.openrouter_chat_model, see
         # their respective Models admin pages), so neither can be baked into
@@ -470,7 +629,7 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
         # gemini has no such live switch, so it skips straight to the plain
         # ainvoke below.
         if provider == "lmstudio":
-            active_llm = llm_with_tools.bind(model=settings.lmstudio_chat_model)
+            active_llm = llm_with_tools.bind(model=tool_model_id)
             async with llm_semaphore:
                 response = await active_llm.ainvoke([system] + history)
         elif provider == "openrouter":
@@ -483,13 +642,72 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
             # LM Studio's shared unified KV cache; a cloud API has no such
             # constraint.
             response = await llm_with_tools.ainvoke([system] + history)
+
+        # Split-model handoff (agent/writer.py): only a final reply (no tool
+        # calls) can be rewritten; a tool-calling response goes straight on.
+        if provider == "lmstudio" and not getattr(response, "tool_calls", None):
+            draft = writer._text(response.content)
+            new_text = await writer.finalize_reply(
+                list(state["messages"]) + [response],
+                draft=draft, thread_id=thread_id, mode=mode, one_shot=one_shot,
+                agent_run=bool(project_slug and agent_run),
+            )
+            if new_text:
+                response = AIMessage(
+                    content=new_text,
+                    id=response.id,
+                    additional_kwargs={**(response.additional_kwargs or {}), writer.WRITER_FLAG: True},
+                )
         return {"messages": [response]}
 
     tool_node = ToolNode(tools)
 
+    async def run_tools(state: MessagesState, config: RunnableConfig):
+        # Rule B (agent/writer.py): a writer rewrite of a note-writing tool's
+        # long text argument is used for this execution only — the stored AI
+        # message keeps the tool model's original args, since its chat
+        # template can't round-trip arbitrary writer text (e.g. double quotes).
+        cfg = (config or {}).get("configurable", {})
+        thread_id = cfg.get("thread_id")
+        project_run = bool(
+            cfg.get("agent_run") and cfg.get("mode") == "project_chat"
+            and thread_id and thread_id.startswith(PROJECT_THREAD_PREFIX)
+        )
+        messages = list(state["messages"])
+        new_calls = await writer.rewrite_tool_calls(
+            messages, thread_id=thread_id, mode=cfg.get("mode"), agent_run=project_run,
+            one_shot=bool(cfg.get("one_shot")),
+        )
+        if new_calls:
+            messages[-1] = messages[-1].model_copy(update={"tool_calls": new_calls})
+        # A "tonight"/"tomorrow" request whose call carries some other date
+        # (copied from recalled context) is corrected for this execution.
+        user_text = writer.current_turn(messages).user_message
+        fixed = fix_relative_dates(
+            user_text, list(messages[-1].tool_calls or []), datetime.now(settings.zoneinfo())
+        )
+        if fixed:
+            logger.info("Corrected tool-call date(s) to match %r", user_text)
+            messages[-1] = messages[-1].model_copy(update={"tool_calls": fixed})
+        cleaned = clean_search_queries(user_text, list(messages[-1].tool_calls or []))
+        if cleaned:
+            logger.info("Removed dates the user didn't give from search query: %s",
+                        [c["args"].get("query") for c in cleaned if c["name"] in LOOKUP_TOOLS])
+            messages[-1] = messages[-1].model_copy(update={"tool_calls": cleaned})
+        run_now, held = defer_writes_after_lookup(list(messages[-1].tool_calls or []))
+        if not held:
+            return await tool_node.ainvoke({"messages": messages}, config)
+        logger.info("Holding back %s until the lookup in the same step has returned", [c["name"] for c in held])
+        messages[-1] = messages[-1].model_copy(update={"tool_calls": run_now})
+        result = await tool_node.ainvoke({"messages": messages}, config)
+        by_id = {m.tool_call_id: m for m in result["messages"]}
+        by_id.update({c["id"]: _held_back_message(c) for c in held})
+        order = [c["id"] for c in state["messages"][-1].tool_calls]
+        return {"messages": [by_id[i] for i in order if i in by_id]}
+
     graph = StateGraph(MessagesState)
     graph.add_node("llm", call_llm)
-    graph.add_node("tools", tool_node)
+    graph.add_node("tools", run_tools)
     graph.add_edge(START, "llm")
     graph.add_conditional_edges("llm", tools_condition)
     graph.add_edge("tools", "llm")

@@ -50,7 +50,7 @@ from agent.runtime import AgentResult, create_background_thread, run_agent
 from agent.scheduler import scheduler
 from agent.settings import settings
 from utils import activity_log_store, checkins_store, vault
-from utils.llm_client import get_chat_llm, stringify_content
+from utils.llm_client import get_chat_llm, get_writer_llm, stringify_content
 from utils.notify import notify_error, send_gotify
 
 logger = logging.getLogger(__name__)
@@ -187,7 +187,7 @@ async def answer_checkin(checkin_id: str, text: str) -> AgentResult | None:
 
 
 def _personalization_llm() -> BaseChatModel:
-    return get_chat_llm(temperature=0.35)
+    return get_writer_llm(temperature=0.35, surface="checkin")
 
 
 def _llm_select(bank: list[str], context: str) -> str:

@@ -91,6 +91,24 @@ def get_chat_llm(temperature: float, provider: str | None = None) -> BaseChatMod
     )
 
 
+def get_writer_llm(temperature: float, surface: str | None = None) -> BaseChatModel:
+    """LLM for prose the user reads. On the lmstudio provider it uses the
+    writer model for `surface` (agent/model_assignments.py: that mode's
+    override, else settings.lmstudio_writer_model) when there is one,
+    otherwise identical to get_chat_llm()."""
+    from agent.model_assignments import writer_model
+
+    model = writer_model(surface)
+    if settings.llm_provider == "lmstudio" and model:
+        return ChatOpenAI(
+            base_url=os.environ["LMSTUDIO_OPENAI_URL"],
+            api_key="lm-studio",
+            model=model,
+            temperature=temperature,
+        )
+    return get_chat_llm(temperature)
+
+
 def describe_chat_llm() -> dict:
     """Which provider/model/base_url get_chat_llm() actually builds right
     now, straight from the live settings.llm_provider — for the

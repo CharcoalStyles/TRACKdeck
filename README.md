@@ -12,6 +12,7 @@ light, and don't make the model do more reasoning than it needs to for a given s
 ## Contents
 
 - [Architecture at a glance](#architecture-at-a-glance)
+- [Planned: split-model architecture](#planned-split-model-architecture-lfm--a-bigger-writer)
 - [Core concepts](#core-concepts)
   - [The three memory systems](#the-three-memory-systems)
   - [Threading and keyword addressing](#threading-and-keyword-addressing)
@@ -60,6 +61,97 @@ between them for the vault), and Radicale (a bundled CalDAV server for the calen
 integration — swap it out for an external CalDAV server if you'd rather, see Configuration
 below). LM Studio, Gotify, and your mail provider are external services the app talks to
 over HTTP/SMTP — none of them run in this compose file.
+
+## Planned: split-model architecture (LFM + a bigger writer)
+
+**Status: implemented, off by default (2026-10-12).** Set `lmstudio_writer_model` (Settings page's
+Writer Model card, or `LMSTUDIO_WRITER_MODEL`) to turn it on; blank means every LLM call uses
+the single chat model exactly as before. See "As implemented" below for what the code actually
+does — the routing list that follows is the original design intent. The plan is what the LoRA work
+(`scratchpad/training_data/`) and the digest taste test
+(`scratchpad/training_data/digest_eval/`, 24 synthetic days x 9 models, scored 1-5 by the
+user) are building towards.
+
+**Why split.** Fine-tuning `liquid/lfm2.5-1.2b` on this app's tool-calling data moved it from
+26/45 to 38/45 on the held-out tool eval, but it did nothing for prose: in the digest taste
+test every LFM variant (stock, v1, v2) averaged about 2.1/5, while 8-9B local models scored
+3.75-4.5 (Gemma 4 E4B 4.50, Granite 4.1 8B 4.00, Llama 3.1 8B 3.92, Qwen 3.5 9B 3.83,
+Llama 3.3 8B 3.75; Claude-written reference 3.17). LFM is good at *condensing* data, just
+not at turning it into text the user wants to read. So each model does what it is good at:
+
+| Role | Model | Used for |
+|---|---|---|
+| **Tool-caller / gatherer** | LoRA-trained LFM2.5 1.2B (fast, small, always loaded) | Choosing and calling tools, short factual replies, condensing raw data (log entries, search results, calendar agendas) into a compact brief |
+| **Writer** | A larger local model (8-9B class; **choice still open**, see the table above) | Anything that produces substantial or lasting prose |
+
+**Routing, by interaction shape:**
+
+1. **One-shot turns** (the ESP32 voice-note path, `one_shot=True`): LFM handles the whole
+   turn: tool calls and the short confirmation. This is the common case and stays fast and
+   cheap.
+2. **Anything that writes into a note** (saving or editing a vault note, creating a linked
+   note, drafting text for the user): LFM still picks the tool and gathers the inputs, but
+   the note *text* is written by the writer model and passed to the tool. Note text is
+   durable and read later, so prose quality matters more than latency.
+3. **Scheduled prose** (the daily digest; check-in prompt wording is a candidate): backend
+   code gathers the data deterministically, optionally has LFM condense it, then hands the
+   brief to the writer. No tools involved.
+4. **Multi-turn back-and-forth** (dashboard chat, mid-conversation follow-ups): expected to
+   be rare for this user, so these go to the writer model for the conversational text, with
+   LFM still available for the tool-calling steps inside the turn.
+
+Rule of thumb: LFM gathers, the bigger model writes. If the output will be stored, emailed
+or read at length, the writer produces it.
+
+**As implemented** (`agent/writer.py`, hooks in `agent/graph.py`, log in `utils/writer_log.py`,
+`GET /debug/writer-log`). Only active when `llm_provider` is `lmstudio` and a writer model is
+set; any writer failure or 90 s timeout silently keeps the tool model's own text.
+
+- **Rule A — final replies.** The tool model runs the turn as before. When it produces the
+  final (no-tool-call) reply, `writer.decide()` either keeps that draft or has the writer redo
+  it, given the conversation, the tool calls/results and the draft. Writer when, in order: the
+  draft is empty; a tool's latest result this turn is an error (the tool model tends to say
+  "Done" over failures); `generate_schedule_blocks` / `get_reflection_prompt` / `fetch_webpage`
+  were used; the mode is `onboarding`, `profile_chat`, `day_planning`, `project_chat` or a
+  project agent run (always writer); or, outside `one_shot`, there were no tool calls (plain
+  conversation) or the draft is longer than 240 chars (confirmation tools only) / 500 chars
+  (anything else). `one_shot` voice turns otherwise keep the tool model's reply. Writer
+  replies are tagged (`additional_kwargs["by_writer"]`) and shown to the tool model shortened
+  to ~200 chars in later turns so long prose in its history doesn't pull it toward long prose.
+- **Rule B — note text.** Before `ToolNode` runs `save_note` / `append_to_note` /
+  `update_note_section`, a content argument of 400+ chars is tidied by the writer (anchors —
+  numbers, URLs, `[[links]]` — must survive or the original is used). In a project *agent run*
+  it is instead composed by the writer from the turn's search/fetch/read results. The rewrite
+  is used for that execution only; the stored tool call keeps the tool model's original args
+  (its chat template can't round-trip arbitrary text such as double quotes). Short notes and
+  `remember_about_me` facts are never rewritten.
+- **Per-mode tool narrowing.** Onboarding, profile chat, day planning, project chat and project
+  agent runs bind only their own small tool set (`MODE_TOOL_NAMES` in `agent/graph.py`) instead
+  of every tool; this applies regardless of the writer setting.
+- **Per-mode model assignments** (`agent/model_assignments.py`, Settings page "Models by Mode",
+  `GET /settings/model-assignments`). Each surface (chat, voice one-shot, onboarding, profile
+  chat, day planning, project chat, project agent run, daily digest, check-ins) can override
+  its tool model and its reply (writer) model; blank means the global default
+  (`lmstudio_chat_model` / `lmstudio_writer_model`). A reply override of `@tool` ("Tool model
+  only") means no separate writer for that surface. The overrides live in `settings.db` as the
+  `model_assignments` JSON setting. Every distinct model named must be loaded in LM Studio.
+  The history budget follows the surface's tool model.
+- **Other pieces.** The daily digest and check-in rewording use their surface's writer (falling
+  back to the chat model when a surface has none). The cross-thread recall summary stores at
+  most 1200 chars of a reply.
+
+**Hallucination guard (applies to every writer prompt).** Larger models invented trends
+("over recent weeks...") when the prompt asked for them without supplying the data. Writer
+prompts must (a) pass in whatever history the claim would rest on, (b) say a trend counts only
+if it is visible in that supplied history on 3+ days, and (c) say nothing about trends
+otherwise. The daily digest now does this: see `_load_previous_recaps` in `jobs/digest.py`.
+
+**Open decisions.** Which writer model(s) to standardize on (Gemma 4 E4B led, but the
+second half of the taste test, days D13-D24 with the repeat-topic and rough-mood days, is
+still to be scored); whether to use one writer for everything or different ones for digest
+vs note writing; how the 16GB Mac Mini keeps both models resident (LM Studio JIT loading
+vs. keeping LFM loaded and swapping the writer); and whether a second quality check
+(rating note text and check-in wording the same way) is worth running before committing.
 
 ## Core concepts
 
@@ -110,7 +202,7 @@ setting, never baked into the conversation history):
 | Default | always | Date/time grounding, multi-part request completion, fact-verification rules |
 | `one_shot` | `one_shot=True` on `/text` or `/voice` | Never ends on a clarifying question — makes a reasonable assumption, states it, completes the task. Simulates the real ESP32 constraint (no way to hear a follow-up) for testing before the hardware exists |
 | Learning mode | `settings.learning_mode` (standing toggle) | Passive — opportunistically records durable facts about the user as they come up naturally, via `remember_about_me` |
-| `onboarding` | `mode="onboarding"`, fixed thread `"onboarding"` | Active — drives a getting-to-know-you interview using a checklist as a guide, not a script; records as it goes, not at the end; calls `mark_onboarding_complete` once the main areas feel covered, which switches `profile.html`'s merged Onboarding/Profile page to its Profile Q&A view by default |
+| `onboarding` | `mode="onboarding"`, fixed thread `"onboarding"` | Active — drives a getting-to-know-you interview using a checklist as a guide, not a script; records as it goes, not at the end; the basics form itself is written into About Me directly by `agent/profile_import.py` (no LLM; free text verbatim, one linked note per person) and the model only runs the follow-up interview. It can't mark onboarding complete: the dashboard's Finished button does, which switches the merged Onboarding/Profile page to its Profile Q&A view by default |
 | `profile_chat` | `mode="profile_chat"`, fixed thread `"profile_chat"` | Scoped to answering/correcting what's in the profile |
 
 Learning mode and the two active modes are mutually exclusive per turn.
@@ -195,7 +287,12 @@ find-and-replace, so it structurally can't mangle prose it wasn't asked to touch
   protocol-generic. Bundled by default with Radicale (see "First-run calendar setup"
   below), or point at any external CalDAV server (Nextcloud, Baikal, Fastmail, etc.).
   `add_calendar_event`, `get_calendar_events`, `update_calendar_event`,
-  `delete_calendar_event`, `get_todays_events`.
+  `move_calendar_event` (title or UID + new start; keeps length), `delete_calendar_event`,
+  `get_todays_events`. Writes are guarded in code, not by the model: a start already in
+  the past is refused with the current date, a "tonight"/"tomorrow" request whose call
+  carries a different date is corrected (`agent/date_guard.py`), cross-thread recall is
+  skipped for scheduling requests, and the confirmation is built from the saved result
+  (`writer.template_reply`) so it can only say what was stored.
 - **Weather** (`agent/tools/weather.py`) — Open-Meteo, no API key needed.
 - **Web search** (`agent/tools/general.py`) — SearXNG, self-hosted. Falls back to a plain
   "not connected" message if `SEARXNG_URL` isn't set.
@@ -344,8 +441,12 @@ interrupts you).
 
 `jobs/digest.py`, scheduled via APScheduler for 20:45 `Australia/Canberra` (35 minutes
 before a 21:20 bedtime read). Pulls the day's conversation summaries out of Chroma, asks
-the LLM to write a short recap (not a raw log dump), emails it, then sweeps the
-keyword-addressable thread registry for the new day. `POST /debug/digest` fires it on
+the LLM to write a short recap (not a raw log dump), emails it, writes it to the vault
+(`daily-YYYY-MM-DD.md`, tag `daily-digest`), then sweeps the keyword-addressable thread
+registry for the new day. The prompt is also given the previous 7 days' recaps read back
+from those vault notes (`_load_previous_recaps`; gaps are left as gaps), and may only call
+something a trend if it appears on 3+ days of that history. The recap speaks to the user
+as their assistant, and treats suggestions as suggestions, not completed actions. `POST /debug/digest` fires it on
 demand for testing.
 
 ### Dashboard

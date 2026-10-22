@@ -1,0 +1,323 @@
+<title>Digest Taste Test</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap">
+<style>
+:root {
+  --bg: #eef1f4; --surface: #ffffff; --ink: #17212b; --muted: #5a6877; --line: #d5dce3;
+  --accent: #1f5f7a; --accent-ink: #ffffff; --log-bg: #f6f8fa;
+  --good: #1e7a4c; --good-bg: #e3f3ea; --bad: #b3382c; --bad-bg: #fbe9e6; --warn: #8a5a00; --warn-bg: #fbf0d9;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --serif: "Newsreader", Georgia, "Times New Roman", serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151b; --surface: #172029; --ink: #e6ecf1; --muted: #93a1af; --line: #2a3640;
+    --accent: #6fb6d3; --accent-ink: #0b1a22; --log-bg: #121a21;
+    --good: #5cc08c; --good-bg: #16301f; --bad: #ef8a7d; --bad-bg: #3a1c19; --warn: #e0b25a; --warn-bg: #33280f;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151b; --surface: #172029; --ink: #e6ecf1; --muted: #93a1af; --line: #2a3640;
+  --accent: #6fb6d3; --accent-ink: #0b1a22; --log-bg: #121a21;
+  --good: #5cc08c; --good-bg: #16301f; --bad: #ef8a7d; --bad-bg: #3a1c19; --warn: #e0b25a; --warn-bg: #33280f;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 14px; line-height: 1.5; padding-inline: 16px; padding-block: 16px 48px; }
+.wrap { max-width: 1120px; margin-inline: auto; display: flex; flex-direction: column; gap: 14px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; justify-content: space-between; }
+h1 { font-family: var(--serif); font-weight: 500; font-size: 26px; margin: 0; letter-spacing: -0.01em; }
+.sub { color: var(--muted); font-size: 13px; max-width: 62ch; }
+.progress { display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.bar { width: 120px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .2s; }
+.linkbtn { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; color: var(--ink); }
+.linkbtn:hover { border-color: var(--accent); }
+
+.strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.chip { flex: none; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; font-family: var(--mono); font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.chip[aria-current="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.chip .dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--muted); }
+.chip[data-s="part"] .dot { background: linear-gradient(90deg, var(--accent) 50%, transparent 50%); border-color: var(--accent); }
+.chip[data-s="done"] .dot { background: var(--accent); border-color: var(--accent); }
+.chip[data-s="none"] { opacity: .5; }
+
+.dayhead { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.dayhead h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.tag { font-size: 12px; background: var(--log-bg); border: 1px solid var(--line); border-radius: 999px; padding: 1px 9px; color: var(--muted); }
+.nav { margin-left: auto; display: flex; gap: 6px; }
+
+.cols { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 14px; align-items: start; }
+@media (max-width: 800px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+
+.log { background: var(--log-bg); border: 1px solid var(--line); border-radius: 8px; padding: 0; font-family: var(--mono); font-size: 12px; line-height: 1.55; }
+.log summary { padding: 10px 14px; cursor: pointer; font-family: var(--sans); font-weight: 600; font-size: 13px; }
+.log .body { padding: 0 14px 12px; max-height: 70vh; overflow-y: auto; }
+.ent { padding: 8px 0; border-top: 1px dashed var(--line); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ent .u { color: var(--accent); }
+.ent.refl { color: var(--muted); }
+.lab { font-family: var(--sans); text-transform: uppercase; letter-spacing: .06em; font-size: 11px; color: var(--muted); margin: 10px 0 0; }
+.empty { color: var(--muted); font-family: var(--sans); padding: 8px 0; }
+
+.outs { display: flex; flex-direction: column; gap: 12px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.card[data-focus="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.card .lbl { font-family: var(--mono); font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.card .lbl b { color: var(--ink); font-size: 13px; }
+.text { font-family: var(--serif); font-size: 17px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; max-width: 68ch; }
+.rate { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.scale { display: flex; gap: 4px; align-items: center; }
+.scale .end { font-size: 11px; color: var(--muted); padding: 0 4px; }
+.vote { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; width: 38px; padding: 5px 0; font-weight: 500; font-variant-numeric: tabular-nums; }
+.vote:hover { border-color: var(--muted); }
+.vote[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.vote[data-k="1"][aria-pressed="true"], .vote[data-k="2"][aria-pressed="true"] { background: var(--bad); border-color: var(--bad); color: var(--surface); }
+.vote[data-k="4"][aria-pressed="true"], .vote[data-k="5"][aria-pressed="true"] { background: var(--good); border-color: var(--good); color: var(--surface); }
+.fab { display: flex; gap: 6px; align-items: center; margin-left: 6px; cursor: pointer; user-select: none; }
+.fab input { accent-color: var(--warn); width: 15px; height: 15px; }
+.fab:has(input:checked) { color: var(--warn); font-weight: 500; }
+.notebtn { background: none; border: none; color: var(--muted); text-decoration: underline; padding: 0; margin-left: auto; }
+.note { width: 100%; font: inherit; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; background: var(--log-bg); color: var(--ink); resize: vertical; min-height: 54px; }
+kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--surface); }
+.keys { color: var(--muted); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.msg { background: var(--warn-bg); color: var(--warn); border-radius: 6px; padding: 8px 12px; }
+.wait { background: var(--surface); border: 1px dashed var(--line); border-radius: 8px; padding: 22px; color: var(--muted); text-align: center; }
+
+.results { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+.results h3 { margin: 0 0 8px; font-size: 14px; }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 12px 6px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-weight: 500; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+.pct { display: inline-block; height: 8px; border-radius: 4px; background: var(--good); vertical-align: middle; margin-left: 8px; }
+@media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Digest Taste Test</h1>
+      <div class="sub">Each day shows the log the assistant saw, then recaps from different models, labelled only A, B, C. Score each recap 1–5 as you'd feel receiving it as the evening email: 1 wrong or useless, 3 fine, 5 exactly what you'd want. Tick “Made things up” for anything not in the log.</div>
+    </div>
+    <div class="progress"><span id="prog">0 / 0 rated</span><span class="bar"><i id="barfill"></i></span><button class="linkbtn" id="resBtn" type="button">Results</button></div>
+  </header>
+
+  <div id="results" class="results" hidden></div>
+  <div id="strip" class="strip" role="tablist" aria-label="Days"></div>
+  <div id="main"></div>
+  <div class="keys" id="keys"></div>
+</div>
+
+<script>
+(function () {
+  const MODEL_NAMES = { ref: "Reference", stock: "Stock LFM", v1: "LFM v1", v2: "LFM v2", v3: "LFM v3",
+    "gemma-4-e4b": "Gemma 4 E4B", "granite-4.1-8b": "Granite 4.1 8B", "llama3.1-8b-q4": "Llama 3.1 8B",
+    "llama3.3-8b-q4": "Llama 3.3 8B", "qwen3.5-9b": "Qwen 3.5 9B" };
+  const MODEL_ORDER = ["stock", "v1", "v2", "v3", "gemma-4-e4b", "granite-4.1-8b", "llama3.1-8b-q4", "llama3.3-8b-q4", "qwen3.5-9b", "ref"];
+  const rank = (m) => { const i = MODEL_ORDER.indexOf(m); return i < 0 ? MODEL_ORDER.length - 1.5 : i; };
+  const state = { days: [], outs: {}, ratings: {}, cur: null, focus: 0, notes: {}, showResults: false };
+  let db = null, can = true, typing = false;
+
+  const $ = (s) => document.querySelector(s);
+  const el = (t, a = {}, ...kids) => {
+    const n = document.createElement(t);
+    for (const [k, v] of Object.entries(a)) {
+      if (k === "class") n.className = v;
+      else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+      else if (v === true) n.setAttribute(k, "");
+      else if (v !== false && v != null) n.setAttribute(k, v);
+    }
+    for (const c of kids.flat()) n.append(c);
+    return n;
+  };
+
+  function hash(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  function outsFor(dayId) {
+    const list = Object.values(state.outs).filter((o) => o.day === dayId);
+    return list.sort((a, b) => hash(dayId + a.model) - hash(dayId + b.model));
+  }
+  const oid = (o) => o.day + "__" + o.model;
+  const scoreOf = (o) => state.ratings[oid(o)]?.score;
+  const ratedCount = (dayId) => outsFor(dayId).filter((o) => scoreOf(o)).length;
+
+  function totals() {
+    const all = Object.values(state.outs);
+    return { n: all.length, r: all.filter((o) => scoreOf(o)).length };
+  }
+
+  const writing = new Map();
+  function saveRating(o, patch) {
+    const id = oid(o);
+    const next = { ...(state.ratings[id] || {}), ...patch, day: o.day, model: o.model, at: Date.now() };
+    state.ratings[id] = next;
+    const prev = writing.get(id) || Promise.resolve();
+    const p = prev.then(() => db.doc("ratings/" + id).set(next)).catch((e) => {
+      can = false; flash("Couldn't save: " + (e && e.message ? e.message : "no write access"));
+    });
+    writing.set(id, p);
+    renderChrome();
+  }
+
+  function flash(t) { const m = $("#flash"); if (m) { m.textContent = t; m.hidden = false; } }
+
+  function renderStrip() {
+    const s = $("#strip"); s.replaceChildren();
+    for (const d of state.days) {
+      const outs = outsFor(d.id), r = ratedCount(d.id);
+      const st = !outs.length ? "none" : r === 0 ? "off" : r === outs.length ? "done" : "part";
+      s.append(el("button", { class: "chip", type: "button", role: "tab", "data-s": st, "aria-current": d.id === state.cur ? "true" : "false", onclick: () => go(d.id) },
+        el("span", { class: "dot" }), d.id));
+    }
+    const cur = s.querySelector('[aria-current="true"]'); if (cur) cur.scrollIntoView({ block: "nearest", inline: "center" });
+  }
+
+  function renderChrome() {
+    const t = totals();
+    $("#prog").textContent = t.r + " / " + t.n + " rated";
+    $("#barfill").style.width = (t.n ? (100 * t.r) / t.n : 0) + "%";
+    renderStrip();
+    if (state.showResults) renderResults();
+  }
+
+  function renderResults() {
+    const box = $("#results"); box.hidden = !state.showResults; if (!state.showResults) return;
+    const kindOf = Object.fromEntries(state.days.map((d) => [d.id, d.kind || "?"]));
+    const by = {}, grid = {};
+    for (const o of Object.values(state.outs)) {
+      const r = state.ratings[oid(o)]; const b = (by[o.model] ||= { n: 0, sum: 0, k: 0, hi: 0, lo: 0, fab: 0 });
+      b.n++; if (r?.fab) b.fab++;
+      if (r?.score) {
+        b.k++; b.sum += r.score; if (r.score >= 4) b.hi++; if (r.score <= 2) b.lo++;
+        const g = ((grid[kindOf[o.day]] ||= {})[o.model] ||= { s: 0, k: 0 }); g.s += r.score; g.k++;
+      }
+    }
+    const models = Object.keys(by).sort((x, y) => rank(x) - rank(y));
+    const rows = models.map((m) => {
+      const b = by[m], mean = b.k ? b.sum / b.k : 0;
+      return el("tr", {}, el("td", {}, MODEL_NAMES[m] || m), el("td", {}, b.k + " / " + b.n),
+        el("td", {}, b.k ? mean.toFixed(2) : "none rated", b.k ? el("span", { class: "pct", style: "width:" + mean * 18 + "px" }) : ""),
+        el("td", {}, b.k ? Math.round((100 * b.hi) / b.k) + "%" : "–"), el("td", {}, b.k ? Math.round((100 * b.lo) / b.k) + "%" : "–"),
+        el("td", {}, String(b.fab)));
+    });
+    const kinds = Object.keys(grid).sort();
+    const cell = (k, m) => { const g = grid[k][m]; return el("td", {}, g ? (g.s / g.k).toFixed(1) + " (" + g.k + ")" : "–"); };
+    box.replaceChildren(el("h3", {}, "Results by model (unblinded)"),
+      rows.length ? el("div", { class: "tbl" }, el("table", {}, el("thead", {}, el("tr", {}, ...["Model", "Scored", "Mean (1–5)", "4–5", "1–2", "Made things up"].map((h) => el("th", {}, h)))), el("tbody", {}, rows)))
+        : el("div", { class: "empty" }, "No outputs loaded yet."),
+      kinds.length ? el("h3", { style: "margin-top:16px" }, "Mean score by kind of day (number scored)") : "",
+      kinds.length ? el("div", { class: "tbl" }, el("table", {}, el("thead", {}, el("tr", {}, el("th", {}, "Day kind"), ...models.map((m) => el("th", {}, MODEL_NAMES[m] || m)))), el("tbody", {}, kinds.map((k) => el("tr", {}, el("td", {}, k), ...models.map((m) => cell(k, m))))))) : "");
+  }
+
+  function renderMain(reveal) {
+    const y = window.scrollY;
+    const m = $("#main"); m.replaceChildren();
+    if (!state.days.length) { m.append(el("div", { class: "wait" }, "Loading the days…")); return; }
+    const d = state.days.find((x) => x.id === state.cur) || state.days[0];
+    state.cur = d.id;
+    const idx = state.days.indexOf(d);
+    const outs = outsFor(d.id);
+    if (state.focus >= outs.length) state.focus = 0;
+
+    const wd = d.weekday || "";
+    m.append(el("div", { class: "dayhead" },
+      el("h2", {}, d.id + " · " + wd + " " + d.date), el("span", { class: "tag" }, (d.entries || []).length + " log entries"), el("span", { class: "tag" }, (d.reflections || []).length + " check-ins"),
+      el("div", { class: "nav" },
+        el("button", { class: "linkbtn", type: "button", disabled: idx === 0, onclick: () => go(state.days[idx - 1].id) }, "← Prev"),
+        el("button", { class: "linkbtn", type: "button", disabled: idx === state.days.length - 1, onclick: () => go(state.days[idx + 1].id) }, "Next →"))));
+    m.append(el("div", { id: "flash", class: "msg", hidden: true, role: "status" }));
+
+    const logBody = el("div", { class: "body" });
+    if (d.expect) logBody.append(el("div", { class: "lab" }, "What to watch for"), el("div", { class: "ent refl" }, d.expect));
+    if (d.history) {
+      logBody.append(el("div", { class: "lab" }, "Earlier recaps the writer was given (" + d.history.length + ")"));
+      if (!d.history.length) logBody.append(el("div", { class: "empty" }, "(none, first day on record)"));
+      for (const h of d.history) logBody.append(el("div", { class: "ent" }, el("span", { class: "u" }, h.weekday + " " + h.date), "\n" + h.recap));
+    }
+    if ((d.entries || []).length) {
+      logBody.append(el("div", { class: "lab" }, "Logged activity"));
+      for (const e of d.entries) {
+        const [u, ...rest] = e.split("\nAssistant:");
+        logBody.append(el("div", { class: "ent" }, el("span", { class: "u" }, u), rest.length ? "\nAssistant:" + rest.join("\nAssistant:") : ""));
+      }
+    } else logBody.append(el("div", { class: "empty" }, "(nothing logged today)"));
+    logBody.append(el("div", { class: "lab" }, "Check-in reflections"));
+    if ((d.reflections || []).length) for (const r of d.reflections) logBody.append(el("div", { class: "ent refl" }, r));
+    else logBody.append(el("div", { class: "empty" }, "(none answered today)"));
+    const log = el("details", { class: "log" }, el("summary", {}, "What the assistant saw"), logBody);
+    log.open = true;
+
+    const col = el("div", { class: "outs" });
+    if (!outs.length) col.append(el("div", { class: "wait" }, "No recaps for this day yet. They appear here once the model outputs are loaded."));
+    outs.forEach((o, i) => col.append(card(o, i)));
+    m.append(el("div", { class: "cols" }, log, col));
+    renderChrome();
+    window.scrollTo(0, y);
+    if (reveal) { const c = document.querySelectorAll(".card")[state.focus]; if (c) c.scrollIntoView({ block: "nearest" }); }
+  }
+
+  function card(o, i) {
+    const id = oid(o), r = state.ratings[id] || {};
+    const noteOpen = state.notes[id] ?? !!r.note;
+    const label = String.fromCharCode(65 + i);
+    const vote = (n) => el("button", { class: "vote", type: "button", "data-k": String(n), "aria-label": "Score " + n + " of 5", "aria-pressed": String(r.score === n), onclick: () => { state.focus = i; saveRating(o, { score: r.score === n ? null : n }); renderMain(); } }, String(n));
+    const ta = el("textarea", { class: "note", id: "note-" + id, placeholder: "What was off, or good? (optional)", "aria-label": "Note on recap " + label });
+    ta.value = r.note || "";
+    let t; ta.addEventListener("input", () => { typing = true; clearTimeout(t); t = setTimeout(() => saveRating(o, { note: ta.value }), 700); });
+    ta.addEventListener("blur", () => { clearTimeout(t); typing = false; if (ta.value !== (state.ratings[id]?.note || "")) saveRating(o, { note: ta.value }); });
+    return el("article", { class: "card", "data-focus": String(i === state.focus), onclick: () => { state.focus = i; document.querySelectorAll(".card").forEach((c, j) => c.dataset.focus = String(j === i)); } },
+      el("div", { class: "lbl" }, el("b", {}, "Recap " + label), el("span", {}, (o.text || "").split(/\s+/).filter(Boolean).length + " words")),
+      el("p", { class: "text" }, o.text || ""),
+      el("div", { class: "rate" }, el("div", { class: "scale", role: "group", "aria-label": "Score recap " + label }, el("span", { class: "end" }, "bad"), [1, 2, 3, 4, 5].map(vote), el("span", { class: "end" }, "great")),
+        el("label", { class: "fab" }, el("input", { type: "checkbox", id: "fab-" + id, checked: !!r.fab, onchange: (e) => { state.focus = i; saveRating(o, { fab: e.target.checked }); } }), "Made things up"),
+        el("button", { class: "notebtn", type: "button", onclick: () => { state.notes[id] = !noteOpen; renderMain(); } }, noteOpen ? "Hide note" : "Add note")),
+      noteOpen ? ta : "");
+  }
+
+  function go(id) { state.cur = id; state.focus = 0; renderMain(); window.scrollTo({ top: 0 }); }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const tag = (e.target.tagName || "").toLowerCase();
+    if (tag === "textarea" || tag === "input" && e.target.type === "text") return;
+    const d = state.days.find((x) => x.id === state.cur); if (!d) return;
+    const outs = outsFor(d.id), idx = state.days.indexOf(d), k = e.key.toLowerCase();
+    const o = outs[state.focus];
+    if (k === "arrowright" || k === "n" || k === "]") { if (idx < state.days.length - 1) go(state.days[idx + 1].id); }
+    else if (k === "arrowleft" || k === "p" || k === "[") { if (idx > 0) go(state.days[idx - 1].id); }
+    else if (o && /^[1-5]$/.test(k)) { saveRating(o, { score: +k }); if (state.focus < outs.length - 1) state.focus++; renderMain(true); }
+    else if (k === "arrowdown" || k === "j") { state.focus = Math.min(state.focus + 1, outs.length - 1); renderMain(true); }
+    else if (k === "arrowup" || k === "k") { state.focus = Math.max(state.focus - 1, 0); renderMain(true); }
+    else if (o && k === "f") { saveRating(o, { fab: !state.ratings[oid(o)]?.fab }); renderMain(); }
+    else return;
+    e.preventDefault();
+  });
+
+  $("#keys").innerHTML = "<span><kbd>1</kbd>-<kbd>5</kbd> score recap and move to the next</span><span><kbd>↑</kbd> <kbd>↓</kbd> pick recap</span><span><kbd>F</kbd> made things up</span><span><kbd>←</kbd> <kbd>→</kbd> change day</span>";
+  $("#resBtn").addEventListener("click", () => { state.showResults = !state.showResults; renderResults(); });
+
+  function ingest(snap, into, key) {
+    const o = {}; snap.docs.forEach((d) => { o[d.id] = d.data(); }); state[into] = o;
+  }
+  function refresh() {
+    state.days = Object.values(state.days_map || {}).sort((a, b) => a.id.localeCompare(b.id));
+    if (typing) { renderChrome(); return; }
+    renderMain();
+  }
+
+  async function start() {
+    renderMain();
+    const claude = window.claude;
+    db = claude && claude.use ? await claude.use("db") : null;
+    if (!db) { $("#main").replaceChildren(el("div", { class: "wait" }, "Sign in to claude.ai to open this page's saved data.")); return; }
+    const err = () => {};
+    db.collection("days").onSnapshot((s) => { const m = {}; s.docs.forEach((d) => (m[d.id] = d.data())); state.days_map = m; refresh(); }, err);
+    db.collection("outputs").onSnapshot((s) => { ingest(s, "outs"); refresh(); }, err);
+    db.collection("ratings").onSnapshot((s) => { ingest(s, "ratings"); refresh(); }, err);
+  }
+  start();
+})();
+</script>
