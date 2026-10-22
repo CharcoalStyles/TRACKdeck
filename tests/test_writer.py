@@ -117,7 +117,7 @@ def enabled(monkeypatch, tmp_path):
     writer_log.init_db()
     calls = []
 
-    async def fake_invoke(messages, temperature, timeout, surface=None):
+    async def fake_invoke(messages, temperature, timeout):
         calls.append(messages)
         return fake_invoke.reply
 

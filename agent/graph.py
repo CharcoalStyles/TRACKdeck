@@ -19,7 +19,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 from langchain_core.messages import AIMessage, ToolMessage
 
-from agent import model_assignments, writer
+from agent import writer
 from agent.date_guard import clean_search_queries, fix_relative_dates
 from agent.settings import settings
 from agent.tools.all_tools import get_tools
@@ -273,8 +273,7 @@ def build_graph(checkpointer, mcp_tools: list | None = None):
         # of the budget before history gets whatever's left. Without this, history
         # alone could grow to fill the full budget and the actual request (system +
         # tools + history) would still overflow the model's real context.
-        surface = model_assignments.surface_key(mode, one_shot)
-        tool_model_id = model_assignments.tool_model(surface)
+        tool_model_id = settings.lmstudio_chat_model
         budget = await get_history_budget_tokens(tool_model_id)
         reserved = count_tokens_approximately([system]) + _tools_token_estimate
         history_budget = max(budget - reserved, 0)

@@ -4,7 +4,6 @@ Personal Assistant — FastAPI + LangGraph
 """
 import os
 import asyncio
-import json
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -64,7 +63,6 @@ if os.environ.get("SESSION_SECRET_KEY") in (None, _PLACEHOLDER_SESSION_SECRET_KE
     )
 
 import auth
-from agent import model_assignments
 from agent.graph import build_graph
 from agent.memory import MemoryStore, make_chroma_client, make_embedding_function
 from agent.runtime import (
@@ -672,8 +670,6 @@ class SettingsUpdate(BaseModel):
     lmstudio_chat_model: str | None = None
     # LM Studio model for user-read prose (digest first); blank = same as chat model.
     lmstudio_writer_model: str | None = None
-    # Per-mode model overrides (agent/model_assignments.py); the whole dict replaces the stored one.
-    model_assignments: dict[str, dict[str, str]] | None = None
     @model_validator(mode="after")
     def _check_values(self):
         if self.timezone is not None and not is_valid_timezone(self.timezone):
@@ -702,8 +698,6 @@ class SettingsUpdate(BaseModel):
             self.max_history_tokens
         ):
             raise ValueError("max_history_tokens must be between 500 and 200000")
-        if self.model_assignments is not None:
-            model_assignments.validate(self.model_assignments)
         return self
 
 
@@ -824,9 +818,6 @@ async def _apply_settings_update(update: SettingsUpdate) -> None:
     if update.lmstudio_writer_model is not None:
         settings.lmstudio_writer_model = update.lmstudio_writer_model.strip()
         changed["lmstudio_writer_model"] = settings.lmstudio_writer_model
-    if update.model_assignments is not None:
-        settings.model_assignments = json.dumps(model_assignments.validate(update.model_assignments))
-        changed["model_assignments"] = settings.model_assignments
 
     if reschedule_digest:
         scheduler.reschedule_job("daily_digest", trigger=digest_trigger())
@@ -1125,34 +1116,6 @@ async def debug_thread(
     isn't satisfiable without a reasoning-capable model swap.
     """
     return await get_thread_debug(thread_id)
-
-
-class ModelAssignmentRow(BaseModel):
-    key: str
-    label: str
-    tool_calls: bool
-    reply_rule: str
-    tool_model: str | None
-    tool_override: str
-    writer_model: str | None
-    writer_override: str
-    reply_model: str
-
-
-class ModelAssignmentsResponse(BaseModel):
-    provider: str
-    split_applies: bool
-    default_tool_model: str
-    default_writer_model: str
-    no_writer_value: str
-    rows: list[ModelAssignmentRow]
-
-
-@app.get("/settings/model-assignments", response_model=ModelAssignmentsResponse)
-async def get_model_assignments(_: Annotated[None, Depends(auth.require_session_or_token)]):
-    """Which model does tool calling and which writes replies, for every mode
-    (agent/model_assignments.py) — effective values plus the stored overrides."""
-    return model_assignments.matrix()
 
 
 @app.get("/debug/writer-log")

@@ -27,7 +27,6 @@ from dataclasses import dataclass, field
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
-from agent import model_assignments
 from agent.settings import settings
 from utils import writer_log
 from utils.datetime import format_now_human
@@ -309,8 +308,8 @@ def unbacked_detail_claim(draft: str, info: TurnInfo) -> str | None:
     return "\n".join(sentences) + "\nI didn't add a venue or description, so the event has only the title and time."
 
 
-def writer_enabled(surface: str | None = None) -> bool:
-    return bool(model_assignments.writer_model(surface))
+def writer_enabled() -> bool:
+    return bool(settings.lmstudio_writer_model)
 
 
 def shorten_for_tool_model(text: str, limit: int = TOOL_VIEW_MAX_CHARS) -> str:
@@ -339,8 +338,8 @@ def tool_model_view(messages: list[BaseMessage]) -> list[BaseMessage]:
 _semaphore = asyncio.Semaphore(1)
 
 
-async def _invoke(messages: list[BaseMessage], temperature: float, timeout: float, surface: str | None = None) -> str:
-    llm = get_writer_llm(temperature, surface)
+async def _invoke(messages: list[BaseMessage], temperature: float, timeout: float) -> str:
+    llm = get_writer_llm(temperature)
     async with _semaphore:
         response = await asyncio.wait_for(llm.ainvoke(messages), timeout=timeout)
     return _clean(_text(response.content))
@@ -408,7 +407,6 @@ async def rewrite_reply(
     mode: str | None = None,
     one_shot: bool = False,
     timeout: float = WRITER_TIMEOUT_SECONDS,
-    surface: str | None = None,
 ) -> str:
     """Ask the writer model for the turn's final reply. Raises on failure."""
     info = current_turn(messages)
@@ -429,7 +427,6 @@ async def rewrite_reply(
         [SystemMessage(content=system), *_conversation_for_writer(messages), HumanMessage(content=final)],
         temperature=0.5,
         timeout=timeout,
-        surface=surface,
     )
     if not out:
         raise ValueError("writer returned empty text")
@@ -447,7 +444,6 @@ async def finalize_reply(
     one_shot: bool,
 ) -> str | None:
     """Rule A. Returns replacement text, or None to keep the tool model's draft."""
-    surface = model_assignments.surface_key(mode, one_shot)
     info = current_turn(messages)
     templated = template_reply(mode=mode, info=info)
     if templated:
@@ -463,10 +459,10 @@ async def finalize_reply(
         await _log(thread_id=thread_id, kind="reply", mode=mode, reason="unsupported_claim",
                    tools=info.tool_names, draft=draft, route="template", model=None, final=NO_CHANGE_REPLY)
         return NO_CHANGE_REPLY
-    if not writer_enabled(surface):
+    if not writer_enabled():
         return None
     use_writer, reason = decide(mode=mode, one_shot=one_shot, info=info, draft=draft)
-    model = model_assignments.writer_model(surface)
+    model = settings.lmstudio_writer_model
     log_kwargs = dict(thread_id=thread_id, kind="reply", mode=mode,
                       reason=reason, tools=info.tool_names, draft=draft)
     if not use_writer:
@@ -474,7 +470,7 @@ async def finalize_reply(
         return None
     started = time.monotonic()
     try:
-        text = await rewrite_reply(messages, draft=draft, mode=mode, one_shot=one_shot, surface=surface)
+        text = await rewrite_reply(messages, draft=draft, mode=mode, one_shot=one_shot)
     except Exception as e:  # noqa: BLE001 — any writer failure must fall back to the draft
         logger.warning("writer failed (%s), keeping tool-model draft: %r", reason, e)
         await _log(route="fallback", model=model, final=draft, latency_ms=_ms(started),

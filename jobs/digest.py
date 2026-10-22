@@ -114,7 +114,7 @@ def _load_previous_recaps(today: date, days: int = HISTORY_DAYS) -> list[str]:
 
 def _write_recap(entries: list[str], reflections: list[str], history: list[str] | None = None) -> str:
     """Blocking LLM call — run via asyncio.to_thread from async code."""
-    llm = get_writer_llm(temperature=0.7, surface="digest")
+    llm = get_writer_llm(temperature=0.7)
     joined = "\n---\n".join(entries) if entries else "(nothing logged today)"
     joined_reflections = "\n---\n".join(reflections) if reflections else "(none answered today)"
     joined_history = "\n\n".join(history) if history else "(no earlier recaps available)"

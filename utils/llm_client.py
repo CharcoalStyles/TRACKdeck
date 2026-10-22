@@ -46,14 +46,10 @@ def get_chat_llm(temperature: float) -> BaseChatModel:
     )
 
 
-def get_writer_llm(temperature: float, surface: str | None = None) -> BaseChatModel:
-    """LLM for prose the user reads. Uses the writer model for `surface`
-    (agent/model_assignments.py: that mode's override, else
-    settings.lmstudio_writer_model) when there is one,
+def get_writer_llm(temperature: float) -> BaseChatModel:
+    """LLM for prose the user reads: settings.lmstudio_writer_model when set,
     otherwise identical to get_chat_llm()."""
-    from agent.model_assignments import writer_model
-
-    model = writer_model(surface)
+    model = settings.lmstudio_writer_model
     if model:
         return ChatOpenAI(
             base_url=os.environ["LMSTUDIO_OPENAI_URL"],

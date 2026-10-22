@@ -51,7 +51,7 @@ def env(monkeypatch, tmp_path):
 
     state = {"writer_calls": [], "writer_reply": "Gemma says hello, at some length."}
 
-    async def fake_writer(messages, temperature, timeout, surface=None):
+    async def fake_writer(messages, temperature, timeout):
         state["writer_calls"].append(messages)
         return state["writer_reply"]
 
@@ -119,24 +119,6 @@ def test_tool_model_sees_shortened_writer_history(env):
     # the writer itself still gets the full stored text
     writer_history = [m for m in state["writer_calls"][1] if m.type == "ai"]
     assert len(writer_history[0].content) > writer.TOOL_VIEW_MAX_CHARS * 2
-
-
-def test_per_mode_models_are_used(env, monkeypatch):
-    import json
-
-    make, state = env
-    monkeypatch.setattr(settings, "model_assignments", json.dumps({"day_planning": {"tool": "tool-override"}}))
-    fake, g = make([AIMessage(content="ok")])
-    invoke(g, "plan my day", mode="day_planning")
-    assert fake.bound_models == ["tool-override"]
-    assert len(state["writer_calls"]) == 1
-
-    monkeypatch.setattr(settings, "model_assignments", json.dumps({"day_planning": {"writer": "@tool"}}))
-    fake, g = make([AIMessage(content="Here's the plan.")])
-    result = invoke(g, "plan my day", thread="t2", mode="day_planning")
-    assert fake.bound_models == ["lfm-test"]
-    assert result["messages"][-1].content == "Here's the plan."
-    assert len(state["writer_calls"]) == 1  # no new writer call — NO_WRITER override
 
 
 def test_mode_tool_names_exist():

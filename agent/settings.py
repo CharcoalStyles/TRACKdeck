@@ -278,10 +278,6 @@ class Settings:
     # Live-editable, no restart.
     lmstudio_writer_model: str = os.environ.get("LMSTUDIO_WRITER_MODEL", "")
 
-    # Per-mode model overrides, JSON: {"day_planning": {"tool": "<id>", "writer": "<id>"}, ...}.
-    # Blank/missing = lmstudio_chat_model for tools, lmstudio_writer_model for
-    # replies. See agent/model_assignments.py. Live-editable, read per turn.
-    model_assignments: str = "{}"
 
     def zoneinfo(self) -> ZoneInfo:
         return ZoneInfo(self.timezone)
@@ -341,8 +337,6 @@ def apply_persisted(values: dict[str, str]) -> None:
         settings.lmstudio_chat_model = values["lmstudio_chat_model"]
     if "lmstudio_writer_model" in values:
         settings.lmstudio_writer_model = values["lmstudio_writer_model"]
-    if "model_assignments" in values:
-        settings.model_assignments = values["model_assignments"]
     if "gotify_url" in values:
         settings.gotify_url = values["gotify_url"]
     if "gotify_token" in values:
