@@ -804,7 +804,6 @@ async def health():
 
 
 class SettingsUpdate(BaseModel):
-    learning_mode: bool | None = None
     # Fallback location for weather tools when none is named in the request.
     default_location: str | None = None
     # IANA timezone name — must be a valid zoneinfo key.
@@ -933,7 +932,6 @@ class SettingsUpdate(BaseModel):
 
 
 class SettingsResponse(BaseModel):
-    learning_mode: bool
     default_location: str
     timezone: str
     digest_time: str
@@ -965,7 +963,6 @@ class SettingsResponse(BaseModel):
 
 def _current_settings() -> dict:
     return {
-        "learning_mode": settings.learning_mode,
         "default_location": settings.default_location,
         "timezone": settings.timezone,
         "digest_time": settings.digest_time,
@@ -1012,9 +1009,6 @@ async def _apply_settings_update(update: SettingsUpdate) -> None:
     both go through the same write/reschedule/persist logic."""
     changed: dict[str, str] = {}
 
-    if update.learning_mode is not None:
-        settings.learning_mode = update.learning_mode
-        changed["learning_mode"] = "true" if update.learning_mode else "false"
     if update.default_location is not None:
         settings.default_location = update.default_location.strip()
         changed["default_location"] = settings.default_location

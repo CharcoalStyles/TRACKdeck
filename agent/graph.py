@@ -117,20 +117,6 @@ honesty", "what a profound insight") — respond to what the user actually said
 instead of praising them for saying it. Emoji should be rare, not a default.
 Routine, lighter requests can still get a normal friendly tone."""
 
-LEARNING_ADDENDUM = """
-
-## Learning About the User
-Notice durable facts worth remembering as they come up naturally — preferences, recurring
-people/places, ongoing projects, routines, things they care about — and record them with
-remember_about_me directly (it always resolves the right note itself; never search for it or
-track an id). For a specific person/project/sub-topic, use get_or_create_linked_note instead.
-Never use remember_about_me mode="replace" on a section holding multiple entries (e.g.
-"People") — it wipes everything in it, not just one.
-
-Be selective, not exhaustive — most requests have nothing worth recording (a one-off task like
-"turn off the kitchen light" has nothing to learn from), and this should never delay or
-distract from completing what was actually asked. It's a secondary, occasional side effect."""
-
 # Fixed per-turn overhead that call_llm's history budget must reserve room for —
 # see get_fixed_overhead_tokens below. Base prompt cost is static (computed once at
 # import time); the tools estimate is set by build_graph once the tool list is known.
@@ -490,8 +476,6 @@ def build_graph(checkpointer, memory: MemoryStore, mcp_tools: list | None = None
             addendum += PROJECT_AGENT_ADDENDUM.format(project=project_slug)
         elif project_slug:
             addendum += PROJECT_CHAT_ADDENDUM.format(project=project_slug)
-        elif settings.learning_mode:
-            addendum += LEARNING_ADDENDUM
 
         # Read once per turn — live-switchable via the dashboard's Settings
         # page (agent/settings.py's llm_provider), so every branch below

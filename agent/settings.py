@@ -157,11 +157,6 @@ def _default_mcp_servers() -> str:
 
 
 class Settings:
-    # When on, the agent proactively notices and records durable facts
-    # about you into a canonical "About Me" note as they come up in
-    # conversation — see agent/graph.py's LEARNING_ADDENDUM.
-    learning_mode: bool = _bool_env("LEARNING_MODE_DEFAULT", "true")
-
     # Fallback location for weather tools when the user doesn't name one
     # (agent/tools/weather.py). No env var — collected via the onboarding
     # "Basics" form / Settings page, not .env, so there's one source of
@@ -390,8 +385,6 @@ def apply_persisted(values: dict[str, str]) -> None:
     sqlite3 only stores strings, so each field is parsed back to its real
     type here — explicit per-field, not a generic loop, to match this
     module's existing style."""
-    if "learning_mode" in values:
-        settings.learning_mode = values["learning_mode"] == "true"
     if "default_location" in values:
         settings.default_location = values["default_location"]
     if "timezone" in values:

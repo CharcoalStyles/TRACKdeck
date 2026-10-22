@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import Card from '../components/Card'
-import Toggle from '../components/Toggle'
 import SaveStatus, { type SaveState } from '../components/SaveStatus'
 
 const TIMEZONES =
@@ -29,7 +28,6 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <LearningModeCard data={data} onSaved={invalidate} />
       <LlmProviderCard data={data} onSaved={invalidate} />
       <ModelAssignmentsCard data={data} onSaved={invalidate} />
       <LocationTimeCard data={data} onSaved={invalidate} />
@@ -96,7 +94,6 @@ function ResetAboutMeCard() {
 }
 
 type Settings = NonNullable<ReturnType<typeof useQuery<{
-  learning_mode: boolean
   default_location: string
   timezone: string
   digest_time: string
@@ -116,38 +113,6 @@ type Settings = NonNullable<ReturnType<typeof useQuery<{
   lmstudio_writer_model: string
   openrouter_configured: boolean
 }>>['data']>
-
-function LearningModeCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
-  const status = useSaveStatus()
-  const mutation = useMutation({
-    mutationFn: async (learning_mode: boolean) => {
-      const { error } = await api.POST('/settings', { body: { learning_mode } })
-      if (error) throw new Error()
-    },
-    onMutate: () => status.setState('saving'),
-    onSuccess: () => {
-      status.setState('saved')
-      onSaved()
-    },
-    onError: () => status.setState('error'),
-  })
-
-  return (
-    <Card>
-      <h2 className="mb-1 text-lg font-semibold">Assistant Behavior</h2>
-      <p className="mb-3 text-sm text-text-muted">
-        Standing toggles — these apply to every interaction until changed here.
-      </p>
-      <Toggle
-        checked={!!data?.learning_mode}
-        onChange={(checked) => mutation.mutate(checked)}
-        label="Learning mode"
-        sublabel="Proactively notices and records durable facts about you into your About Me profile as they come up in conversation."
-      />
-      <SaveStatus state={status.state} />
-    </Card>
-  )
-}
 
 function LlmProviderCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
   const status = useSaveStatus()
