@@ -168,7 +168,7 @@ echo
 echo "== 4. vault / syncthing-config / radicale / received_notes directories =="
 echo "      (must exist before 'docker compose up', or Docker auto-creates"
 echo "      them as root on first run and the containers can't write to them)"
-for dir in "${DATA_DIR}/vault/Inbox" "${DATA_DIR}/syncthing-config" \
+for dir in "${DATA_DIR}/vault" "${DATA_DIR}/syncthing-config" \
            "${DATA_DIR}/radicale/config" "${DATA_DIR}/radicale/data" \
            "./received_notes"; do
     if [[ -d "$dir" ]]; then

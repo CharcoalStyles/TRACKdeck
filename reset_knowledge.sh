@@ -21,7 +21,7 @@
 # static/profile.html defaults to the Profile Q&A view over an onboarding
 # thread that no longer has any history — an inconsistent state.
 #
-# The Obsidian vault (your actual notes, About Me, Inbox) is NOT touched
+# The Obsidian vault (your actual notes, About Me) is NOT touched
 # by default. It's synced live to every device you've paired via
 # Syncthing — deleting it here would delete it everywhere once sync
 # runs. Pass --vault if you genuinely want that too.
@@ -176,7 +176,7 @@ fi
 
 echo
 echo "Re-running setup.sh to recreate empty placeholders (chroma_db, memory.db,"
-echo "onboarding_complete.flag, vault/Inbox, ...) as this user — it never touches"
+echo "onboarding_complete.flag, ...) as this user — it never touches"
 echo ".env/.env.docker/.env.example, so nothing configured is affected."
 echo
 ./setup.sh

@@ -16,8 +16,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 import auth
-from agent.runtime import app_state
-from agent.vault_watcher import index_note_file
 from utils import vault
 from utils.planning import (
     REFLECTION_SECTION_HEADING,
@@ -110,8 +108,6 @@ async def save_reflection(
     note.body = vault.replace_section(note.body, REFLECTION_SECTION, format_reflection_section(values))
     note.updated = vault.now_iso()
     vault.write_note_atomic(note.path, vault.serialize_note(note))
-    if app_state.memory is not None:
-        await index_note_file(app_state.memory, note.path)
 
     return {
         "date": update.date,

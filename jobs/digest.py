@@ -30,7 +30,6 @@ from zoneinfo import ZoneInfo
 from agent.memory import MemoryStore
 from agent.runtime import app_state, prune_thread_locks
 from agent.settings import settings
-from agent.vault_watcher import index_note_file
 from jobs import checkin as checkin_jobs
 from utils import checkins_store, vault
 from utils.llm_client import get_writer_llm, stringify_content
@@ -279,7 +278,6 @@ async def send_daily_digest(memory: MemoryStore) -> None:
 
         try:
             note = await asyncio.to_thread(_write_recap_to_vault, recap, now_local)
-            await index_note_file(memory, note.path)
             logger.info("Daily digest written to vault note %s.", note.path.name)
         except Exception as e:
             logger.error("Daily digest vault write failed: %s", e)

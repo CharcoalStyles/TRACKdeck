@@ -106,7 +106,6 @@ from jobs.device_sync import build_sync_payload
 from jobs.digest import send_daily_digest
 from jobs.reminders import create_test_reminder, fire_reminder
 
-from agent.vault_watcher import reconcile_vault, watch_vault
 from utils import (
     alert_sounds_store,
     checkins_store,
@@ -295,25 +294,7 @@ async def lifespan(app: FastAPI):
 
         scheduler.start()
 
-        # Reconciliation runs as a background task rather than being
-        # awaited here, so the app starts serving requests immediately
-        # rather than blocking on a full vault sweep (which can involve
-        # LLM calls for any leftover Inbox files). The live watcher
-        # covers everything from this point forward; reconciliation is
-        # the catch-up pass for anything that happened while the app was
-        # down.
-        reconcile_task = asyncio.create_task(reconcile_vault(app_state.memory))
-        watch_task = asyncio.create_task(watch_vault(app_state.memory))
-
         yield
-
-        watch_task.cancel()
-        reconcile_task.cancel()
-        for task in (watch_task, reconcile_task):
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
 
         scheduler.shutdown(wait=False)
 
@@ -920,17 +901,6 @@ async def trigger_calendar_sync_now(_: Annotated[None, Depends(auth.require_sess
     """
     await sync_calendar_reminders()
     return {"status": "synced"}
-
-
-@app.post("/debug/reconcile-vault")
-async def trigger_reconcile_now(_: Annotated[None, Depends(auth.require_session_or_token)]):
-    """
-    Manually forces a full vault reconciliation sweep — useful for
-    confirming the notes index actually matches the vault on disk without
-    waiting for the live watcher or an app restart.
-    """
-    await reconcile_vault(app_state.memory)
-    return {"status": "reconciled"}
 
 
 @app.post("/debug/bedtime")

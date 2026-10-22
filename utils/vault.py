@@ -2,20 +2,15 @@
 utils/vault.py
 ---------------
 Core file I/O and markdown/frontmatter handling for the Obsidian-synced
-notes vault. This module owns the on-disk format; agent/vault_watcher.py
-builds on top of it rather than touching files directly.
+notes vault. This module owns the on-disk format.
 
 Vault layout:
     <VAULT_PATH>/
-        Inbox/       Landing pad for notes not created via direct agent
-                      interaction (e.g. typed on your phone via Obsidian
-                      mobile). Watched and auto-processed into a real,
-                      indexed note, then removed from Inbox.
         <note>.md     Processed notes live flat at the vault root by
                       default — no category folders. Tags and [[links]] do
                       the organizing, not folder placement.
         <folder>/    One level deep, no nesting — is_project_dir() treats
-                      any such folder (other than Inbox/dotfiles) as a
+                      any such folder (other than dotfiles) as a
                       content folder for list_vault_notes() to scan.
 
 Frontmatter schema:
@@ -27,7 +22,7 @@ Frontmatter schema:
     updated: ISO8601 UTC timestamp, bumped on every agent-driven change
     tags:    list of strings
     aliases: list of strings (Obsidian reads this natively)
-    source:  "agent" | "inbox"
+    source:  "agent"
 
 Section editing:
     Sections are markdown H2 headings ("## Heading"). append_to_section
@@ -48,7 +43,6 @@ from pathlib import Path
 
 import yaml
 
-INBOX_DIRNAME = "Inbox"
 FRONTMATTER_DELIM = "---"
 
 # The About Me note is a singleton with a fixed, known location, unlike
@@ -81,13 +75,8 @@ def vault_root() -> Path:
     return Path(os.environ.get("VAULT_PATH", "./data/vault"))
 
 
-def inbox_dir() -> Path:
-    return vault_root() / INBOX_DIRNAME
-
-
 def ensure_vault_dirs() -> None:
     vault_root().mkdir(parents=True, exist_ok=True)
-    inbox_dir().mkdir(parents=True, exist_ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +99,7 @@ def slugify(title: str) -> str:
 
 
 def is_ignorable(path: Path) -> bool:
-    """Files the watcher/reconciler should never treat as notes."""
+    """Files that should never be treated as notes."""
     name = path.name
     if not name.endswith(".md"):
         return True
@@ -253,7 +242,7 @@ def unique_note_path(title: str) -> Path:
 
     The candidate is claimed with an exclusive create (not just an
     existence check) so a concurrent writer computing the same slug —
-    the Inbox watcher — can't race past a stale check and overwrite this
+    another writer can't race past a stale check and overwrite this
     note once real content is written. The caller's subsequent
     write_note_atomic replaces this empty placeholder with the actual
     content.
@@ -280,12 +269,11 @@ def unique_note_path(title: str) -> Path:
 
 def is_project_dir(path: Path) -> bool:
     """True for a vault-root subdirectory that groups one project's notes —
-    everything except Inbox and dotfile directories (e.g. Obsidian's own
+    everything except dotfile directories (e.g. Obsidian's own
     .obsidian)."""
     return (
         path.is_dir()
         and path.parent == vault_root()
-        and path.name != INBOX_DIRNAME
         and not path.name.startswith(".")
     )
 
@@ -296,7 +284,7 @@ def is_project_dir(path: Path) -> bool:
 
 def list_vault_notes() -> list[Path]:
     """All managed note files at the vault root and one level inside any
-    project folder (excludes Inbox)."""
+    project folder."""
     root = vault_root()
     if not root.exists():
         return []
@@ -304,13 +292,6 @@ def list_vault_notes() -> list[Path]:
     for project_dir in (p for p in root.iterdir() if is_project_dir(p)):
         notes.extend(p for p in project_dir.iterdir() if p.is_file() and not is_ignorable(p))
     return notes
-
-
-def list_inbox_files() -> list[Path]:
-    inbox = inbox_dir()
-    if not inbox.exists():
-        return []
-    return [p for p in inbox.iterdir() if p.is_file() and not is_ignorable(p)]
 
 
 def find_note_by_id(note_id: str) -> Path | None:

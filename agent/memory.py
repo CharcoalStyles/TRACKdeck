@@ -6,9 +6,8 @@ Long-term semantic memory backed by Chroma (embedded mode).
 Chroma runs inside the FastAPI process — no separate service needed.
 Data is persisted to ./data/chroma_db/ on disk.
 
-Two collections:
-  - "conversations"  : summaries of past exchanges, for contextual recall
-  - "notes"          : user-saved notes, searchable by content
+One collection:
+  - "conversations"  : summaries of past exchanges (check-in answers, digest input)
 
 Embeddings are generated locally via LM Studio's /v1/embeddings endpoint.
 The embedding model is configured via the EMBEDDING_MODEL env var.
@@ -118,7 +117,7 @@ def make_chroma_client() -> chromadb.ClientAPI:
 
 class MemoryStore:
     """
-    Thin wrapper around two Chroma collections.
+    Thin wrapper around the Chroma conversations collection.
     Initialise once at startup, pass via app.state.
     """
 
@@ -128,10 +127,6 @@ class MemoryStore:
 
         self.conversations = client.get_or_create_collection(
             name="conversations",
-            metadata={"hnsw:space": "cosine"},
-        )
-        self.notes = client.get_or_create_collection(
-            name="notes",
             metadata={"hnsw:space": "cosine"},
         )
 
@@ -267,116 +262,6 @@ class MemoryStore:
             return None
         latest = max(groups.values(), key=lambda s: s["metadata"].get("timestamp", 0))
         return latest["text"]
-
-    # ------------------------------------------------------------------
-    # Notes
-    # ------------------------------------------------------------------
-
-    def upsert_note(
-        self, note_id: str, content: str, title: str, path: str, mtime: float, project: str = ""
-    ) -> None:
-        """
-        Index (or re-index) a note file by its stable frontmatter id. The
-        markdown file on disk is the source of truth — this just keeps the
-        search index current with it. Safe to call repeatedly for the same
-        note; always overwrites rather than duplicating.
-
-        `project` is the note's containing project folder name, or "" for a
-        vault-root note — Chroma metadata values can't be None, so an empty
-        string is the "no project" sentinel. Lets search_notes scope a query
-        to one project via a `where` filter.
-        """
-        if not content or not str(content).strip():
-            content = title or "Untitled"
-        self.delete_note(note_id)  # clear any existing chunks before re-adding
-        pairs = chunk_text(content)
-        ids = [f"{note_id}::{i}" for i in range(len(pairs))]
-        # Embed the title together with each chunk's body, not just the body — a
-        # query that's really just the note's name (e.g. searching for a
-        # note by something close to its title) should match reliably,
-        # not only queries that happen to resemble the body's content.
-        embeddings = [
-            self._embed(f"{title}\n\n{embed_text}" if title else embed_text) for embed_text, _ in pairs
-        ]
-        documents = [stored_text for _, stored_text in pairs]
-        metadatas = [
-            {"note_id": note_id, "title": title, "path": path, "mtime": mtime, "project": project, "chunk_index": i}
-            for i in range(len(pairs))
-        ]
-        self.notes.add(ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas)
-
-    def delete_note(self, note_id: str) -> None:
-        try:
-            results = self.notes.get(where={"note_id": note_id})
-            ids = results.get("ids", [])
-            if ids:
-                self.notes.delete(ids=ids)
-            else:
-                self.notes.delete(ids=[note_id])  # legacy pre-chunking entry, no note_id metadata
-        except Exception:
-            pass  # already gone / never indexed — fine either way
-
-    def delete_note_by_path(self, path: str) -> None:
-        """Used by the live watcher on delete events, where we don't have
-        the file (and therefore its id) available anymore."""
-        results = self.notes.get(where={"path": path})
-        ids = results.get("ids", [])
-        if ids:
-            self.notes.delete(ids=ids)
-
-    def list_indexed_notes(self) -> dict:
-        """note_id -> metadata for every indexed note (one entry per note, not
-        per chunk). Used by reconciliation to find orphaned entries (file
-        deleted) and stale ones (file changed since last indexed)."""
-        if self.notes.count() == 0:
-            return {}
-        results = self.notes.get()
-        groups = _group_chunks(
-            results.get("ids", []), results.get("documents", []), results.get("metadatas", []), "note_id"
-        )
-        return {note_id: g["metadata"] for note_id, g in groups.items()}
-
-    def search_notes(self, query: str, n_results: int = 5, project: str | None = None) -> list[dict]:
-        """
-        Semantic search over the notes index. Returns short excerpts, not
-        full bodies — deliberately, to keep search results cheap on
-        context. Callers should use read_note for the complete note.
-
-        `project`, if given, scopes the search to that project's notes only
-        (via a Chroma metadata `where` filter) instead of the whole vault.
-
-        A note may be indexed as several chunks; over-fetches past n_results
-        (same trick as search_conversations) so the results can be deduped
-        back down to distinct notes, keeping each note's best-matching chunk.
-        """
-        if self.notes.count() == 0:
-            return []
-        embedding = self._embed(query)
-        fetch_n = min(n_results * 4, self.notes.count())
-        query_kwargs = {"query_embeddings": [embedding], "n_results": fetch_n}
-        if project:
-            query_kwargs["where"] = {"project": project}
-        results = self.notes.query(**query_kwargs)
-        output = []
-        seen_note_ids = set()
-        for chunk_id, doc, meta in zip(
-            results["ids"][0], results["documents"][0], results["metadatas"][0]
-        ):
-            note_id = meta.get("note_id") or chunk_id
-            if note_id in seen_note_ids:
-                continue
-            seen_note_ids.add(note_id)
-            excerpt = doc.strip().replace("\n", " ")
-            if len(excerpt) > 400:
-                excerpt = excerpt[:400].rsplit(" ", 1)[0] + "…"
-            output.append({"id": note_id, "title": meta.get("title", "Untitled"), "excerpt": excerpt})
-            if len(output) >= n_results:
-                break
-        return output
-
-    # ------------------------------------------------------------------
-    # Internal
-    # ------------------------------------------------------------------
 
     def _embed(self, text: str) -> list[float]:
       # Force convert to a completely clean, raw python string

@@ -155,14 +155,6 @@ export default function TestingPage() {
         successText="Synced."
       />
       <TriggerCard
-        title="Vault Reconcile"
-        description="Forces a full notes-vault reconciliation sweep immediately, without waiting for the live watcher or a restart."
-        path="/debug/reconcile-vault"
-        buttonLabel="Reconcile vault now"
-        pendingText="Reconciling..."
-        successText="Reconciled."
-      />
-      <TriggerCard
         title="Gotify Notification"
         description="Sends a one-off test push — confirms GOTIFY_URL/GOTIFY_TOKEN are configured correctly."
         path="/debug/notify"
