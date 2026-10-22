@@ -108,7 +108,7 @@ async def _transcribe_and_run(
         if await checkin_jobs.answer_checkin(checkin_id, transcription):
             return transcription, "", ""
 
-    result = await run_agent(transcription, one_shot=one_shot)
+    result = await run_agent(transcription, one_shot=one_shot, source="voice")
     return transcription, result.reply, result.keyword
 
 

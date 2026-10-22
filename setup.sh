@@ -155,6 +155,14 @@ else
     mkdir -p "$CHROMA_DIR"
 fi
 
+LOGS_DIR="${DATA_DIR}/logs"
+if [[ -d "$LOGS_DIR" ]]; then
+    echo "  OK: $LOGS_DIR already exists as a directory."
+else
+    echo "  Creating $LOGS_DIR (append-only event log, events-YYYY-MM.jsonl)..."
+    mkdir -p "$LOGS_DIR"
+fi
+
 HF_CACHE_DIR="${DATA_DIR}/hf_cache"
 if [[ -d "$HF_CACHE_DIR" ]]; then
     echo "  OK: $HF_CACHE_DIR already exists as a directory."

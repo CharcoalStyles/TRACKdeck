@@ -38,6 +38,9 @@ from agent.graph import get_fixed_overhead_tokens
 from agent.keywords import generate_keyword, match_keyword_prefix
 from agent.memory import MemoryStore
 from agent.settings import settings
+from agent.tools.jot import save_capture
+from agent.writer import current_turn
+from utils.event_log import log_event
 from utils.llm_client import stringify_content
 from utils.lmstudio_client import get_history_budget_tokens
 
@@ -371,6 +374,9 @@ def resolve_thread(text: str) -> tuple[str, str, str]:
     return info.thread_id, info.keyword, text
 
 
+FALLBACK_CAPTURE_REPLY = "Saved to today's captures."
+
+
 @dataclass
 class AgentResult:
     reply: str
@@ -383,6 +389,7 @@ async def run_agent(
     thread_id: str | None = None,
     one_shot: bool = False,
     mode: str | None = None,
+    source: str = "text",
 ) -> AgentResult:
     """
     Runs one turn through the agent graph and returns the reply, along
@@ -396,6 +403,10 @@ async def run_agent(
 
     mode switches the system prompt into a different active behavior —
     see agent/graph.py's MODE_TOOL_NAMES/DAY_PLANNING_ADDENDUM.
+
+    source names the channel ("voice", "text", "job") for the event log. A
+    voice or one-shot turn has no follow-up to ask for, so when the model
+    chooses no tool at all the user's words are saved as a capture instead.
     """
     if app_state.graph is None:
         raise HTTPException(status_code=503, detail="Agent not initialised")
@@ -420,7 +431,10 @@ async def run_agent(
             keyword=keyword,
         )
 
-    config = {"configurable": {"thread_id": thread_id, "one_shot": one_shot, "mode": mode}}
+    config = {"configurable": {
+        "thread_id": thread_id, "one_shot": one_shot, "mode": mode,
+        "user_text": cleaned_text, "source": source,
+    }}
 
     async with get_thread_lock(thread_id):
         result = await app_state.graph.ainvoke(
@@ -437,6 +451,21 @@ async def run_agent(
     reply = next(
         (stringify_content(m.content) for m in reversed(result["messages"]) if m.content),
         "Done.",
+    )
+
+    turn = current_turn(result["messages"])
+    fallback_capture = (one_shot or source == "voice") and mode is None and not turn.tool_calls
+    if fallback_capture:
+        try:
+            save_capture(cleaned_text, source=source, via="fallback")
+            reply = FALLBACK_CAPTURE_REPLY
+        except OSError as e:
+            logger.error("Fallback capture failed: %s", e)
+            notify_error("Could not save a voice capture", e)
+    log_event(
+        "interaction", source=source, thread_id=thread_id, one_shot=one_shot, mode=mode,
+        user_text=cleaned_text, tools=[{"name": n, "args": a} for n, a in turn.tool_calls],
+        reply=reply, fallback_capture=fallback_capture,
     )
 
     summary = f"User: {cleaned_text}\nAssistant: {reply}"

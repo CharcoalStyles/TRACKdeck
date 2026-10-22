@@ -59,7 +59,7 @@ CONFIRMATION_TOOLS = {
 # reply can only say what was actually saved.
 TEMPLATE_TOOLS = {
     "add_calendar_event", "update_calendar_event", "move_calendar_event", "delete_calendar_event",
-    "set_reminder", "set_timer", "cancel_reminder",
+    "set_reminder", "set_timer", "cancel_reminder", "jot_note",
 }
 _RESULT_LEAD_RE = re.compile(r"^Event (?:added|updated|deleted) successfully\.(?: UID: \S+?\.)?\s*")
 # Tools whose output the user needs turned into real prose.

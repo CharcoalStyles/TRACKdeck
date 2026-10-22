@@ -18,6 +18,7 @@ from agent.settings import settings
 from agent.tools.alerts import cancel_reminder, list_reminders, set_reminder, set_timer
 from agent.tools.calendar import get_tools as get_calendar_tools
 from agent.tools.checkin import get_reflection_prompt
+from agent.tools.jot import jot_note
 from agent.tools.general import (
     fetch_webpage,
     get_current_datetime,
@@ -67,6 +68,7 @@ def get_tools():
         list_reminders,
         cancel_reminder,
         get_reflection_prompt,
+        jot_note,
         fetch_webpage,
         set_home_location,
     ])

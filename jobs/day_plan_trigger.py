@@ -70,7 +70,7 @@ async def fire_day_plan(plan_id: str) -> str | None:
             f"Generate my schedule for {plan['date']} from the tasks already saved in its "
             f"planning note.{notes_block}{window_block}"
         )
-        result = await run_agent(text, thread_id=f"day_planning:{plan['date']}", mode="day_planning")
+        result = await run_agent(text, thread_id=f"day_planning:{plan['date']}", mode="day_planning", source="job")
         await asyncio.to_thread(day_plans_store.mark_generated, plan_id, result.reply)
         await asyncio.to_thread(
             send_gotify, f"Day plan ready — {plan['date']}", result.reply, NOTIFY_PRIORITY

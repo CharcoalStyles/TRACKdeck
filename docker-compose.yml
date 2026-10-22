@@ -55,6 +55,9 @@ services:
       - ./data/day_plans.db:/app/data/day_plans.db
       - ./data/task_library.db:/app/data/task_library.db
       - ./data/chroma_db:/app/data/chroma_db
+      # Append-only event log (utils/event_log.py): what was said, which tools
+      # ran, captures and their provenance.
+      - ./data/logs:/app/data/logs
       # The notes vault — shared with the syncthing service below so both
       # containers see the same files. Must match VAULT_PATH in .env.
       - ./data/vault:/app/vault
