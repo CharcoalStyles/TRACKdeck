@@ -17,33 +17,18 @@ const primaryBtnClass =
 
 type TaskRow = { task: string; minutes: string }
 type FixedBlockRow = { name: string; startTime: string; endTime: string }
-type TaskLibraryItem = { id: string; label: string; default_minutes: number; group_name?: string | null }
-type DayPlan = {
+type TaskLibraryItem = {
   id: string
-  date: string
-  start_time: string | null
-  end_time: string | null
-  notes: string | null
-  status: string
-  reply?: string | null
-  trigger_at?: string | null
+  label: string
+  default_minutes: number
+  group_name?: string | null
+  order_hint?: string | null
 }
-
-function formatTriggerAt(iso: string) {
-  return new Date(iso).toLocaleString([], {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
+type TaskLibraryInput = { label: string; default_minutes: number; group_name: string | null; order_hint: string | null }
 
 export default function DayPlanningPage() {
-  const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const date = searchParams.get('date') || TODAY
-  const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
   const [tasks, setTasks] = useState<TaskRow[]>([{ task: '', minutes: '' }])
   const [fixedBlocks, setFixedBlocks] = useState<FixedBlockRow[]>([])
   const [notes, setNotes] = useState('')
@@ -51,7 +36,6 @@ export default function DayPlanningPage() {
   const [endTime, setEndTime] = useState('')
   const [status, setStatus] = useState<SaveState>('idle')
   const [reply, setReply] = useState<string | null>(null)
-  const [scheduledMessage, setScheduledMessage] = useState<string | null>(null)
 
   function updateTask(i: number, field: keyof TaskRow, value: string) {
     setTasks((prev) => prev.map((t, idx) => (idx === i ? { ...t, [field]: value } : t)))
@@ -59,17 +43,6 @@ export default function DayPlanningPage() {
 
   function updateFixedBlock(i: number, field: keyof FixedBlockRow, value: string) {
     setFixedBlocks((prev) => prev.map((b, idx) => (idx === i ? { ...b, [field]: value } : b)))
-  }
-
-  function resetForm() {
-    setEditingPlanId(null)
-    setTasks([{ task: '', minutes: '' }])
-    setFixedBlocks([])
-    setNotes('')
-    setStartTime('')
-    setEndTime('')
-    setReply(null)
-    setScheduledMessage(null)
   }
 
   const taskLibraryQuery = useQuery({
@@ -80,15 +53,7 @@ export default function DayPlanningPage() {
     },
   })
 
-  const upcomingPlansQuery = useQuery({
-    queryKey: ['day-plans', 'upcoming'],
-    queryFn: async () => {
-      const { data } = await api.GET('/day-plans')
-      return (data ?? []) as DayPlan[]
-    },
-  })
-
-  const saveMutation = useMutation({
+  const runMutation = useMutation({
     mutationFn: async () => {
       const body = {
         date,
@@ -100,85 +65,43 @@ export default function DayPlanningPage() {
         start_time: startTime || null,
         end_time: endTime || null,
       }
-      const { data, error } = editingPlanId
-        ? await api.PUT('/day-plans/{plan_id}', { params: { path: { plan_id: editingPlanId } }, body })
-        : await api.POST('/day-plans', { body })
+      const { data, error } = await api.POST('/day-plans/run', { body })
       if (error) throw new Error()
       return data
     },
     onMutate: () => {
       setStatus('saving')
       setReply(null)
-      setScheduledMessage(null)
     },
     onSuccess: (data) => {
       setStatus('saved')
-      if (data?.reply) {
-        setReply(data.reply)
-      } else if (data?.trigger_at) {
-        setScheduledMessage(`Scheduled — will build your schedule at ${formatTriggerAt(data.trigger_at)}.`)
-      }
-      queryClient.invalidateQueries({ queryKey: ['day-plans', 'upcoming'] })
-      if (editingPlanId) resetForm()
+      setReply(data?.reply ?? null)
+      setTasks([{ task: '', minutes: '' }])
+      setFixedBlocks([])
     },
     onError: () => setStatus('error'),
   })
-
-  const cancelPlanMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await api.POST('/day-plans/{plan_id}/cancel', { params: { path: { plan_id: id } } })
-      if (error) throw new Error()
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['day-plans', 'upcoming'] }),
-  })
-
-  async function startEditing(plan: DayPlan) {
-    const { data } = await api.GET('/day-plans/{plan_id}', { params: { path: { plan_id: plan.id } } })
-    if (!data) return
-    setEditingPlanId(plan.id)
-    setSearchParams({ date: plan.date })
-    setTasks(
-      data.tasks.length ? data.tasks.map((t) => ({ task: t.task, minutes: String(t.minutes) })) : [{ task: '', minutes: '' }],
-    )
-    setFixedBlocks(data.fixed_blocks.map((b) => ({ name: b.name, startTime: b.start_time, endTime: b.end_time })))
-    setNotes(data.notes ?? '')
-    setStartTime(data.start_time ?? '')
-    setEndTime(data.end_time ?? '')
-    setReply(null)
-    setScheduledMessage(null)
-  }
 
   function addLibraryItem(item: TaskLibraryItem) {
     setTasks((prev) => [...prev, { task: item.label, minutes: String(item.default_minutes) }])
   }
 
   const hasTasks = tasks.some((t) => t.task.trim())
-  const upcomingPlans = upcomingPlansQuery.data ?? []
 
   return (
     <div className="flex flex-col gap-4 w-full max-w-xl">
       <TaskLibraryCard items={taskLibraryQuery.data ?? []} onAdd={addLibraryItem} />
 
       <Card>
-        <h2 className="mb-1 text-lg font-semibold">{editingPlanId ? 'Edit plan' : 'Plan my day'}</h2>
+        <h2 className="mb-1 text-lg font-semibold">Plan my day</h2>
         <p className="mb-3 text-sm text-text-muted">
           List today's tasks with a time estimate, then build a schedule around your calendar.
         </p>
-        {!editingPlanId && (
-          <div className="mb-4 rounded border border-border bg-card-alt p-3 text-xs text-text-muted">
-            <p className="mb-1 font-semibold text-text-primary">Two ways to use this:</p>
-            <p className="mb-1">
-              <strong>Set up now:</strong> add tasks below (with a rough time estimate each), then hit
-              the button — they're saved to the day's planning note and, if the start time is now or
-              already past, a schedule is built around your calendar straight away.
-            </p>
-            <p>
-              <strong>Set up ahead of time:</strong> set a future start time (e.g. tomorrow at 09:00) —
-              your tasks are saved now, but the actual schedule isn't built until 15 minutes before that
-              time. It'll show up under Upcoming Plans below until then, where you can edit or cancel it.
-            </p>
-          </div>
-        )}
+        <p className="mb-4 text-xs text-text-muted">
+          Add tasks (with a rough time estimate each) and hit the button — they're saved to the
+          day's planning note and a schedule is built around your calendar straight away. Leave the
+          task list empty to schedule whatever's already saved in that day's note.
+        </p>
 
         <div className="mb-3 flex flex-col gap-1">
           <label className="text-sm text-text-muted">Date</label>
@@ -187,7 +110,6 @@ export default function DayPlanningPage() {
             value={date}
             onChange={(e) => setSearchParams({ date: e.target.value })}
             className={inputClass}
-            disabled={!!editingPlanId}
           />
         </div>
 
@@ -213,8 +135,7 @@ export default function DayPlanningPage() {
         </div>
         <p className="mb-3 -mt-2 text-xs text-text-muted">
           Leave blank to plan the whole day (wake time to bedtime) — set both to plan just part of
-          it, like an evening. The "From" time (or wake time, if blank) also decides when the
-          schedule actually gets built: 15 minutes beforehand.
+          it, like an evening.
         </p>
 
         <div className="mb-3 flex flex-col gap-1">
@@ -309,27 +230,14 @@ export default function DayPlanningPage() {
           />
         </div>
 
-        <div className="flex gap-2">
-          <button
-            type="button"
-            disabled={saveMutation.isPending}
-            onClick={() => saveMutation.mutate()}
-            className={`${primaryBtnClass} disabled:opacity-50`}
-          >
-            {editingPlanId ? 'Save changes' : hasTasks ? 'Build my schedule' : 'Generate schedule from saved tasks'}
-          </button>
-          {editingPlanId && (
-            <button type="button" onClick={resetForm} className={secondaryBtnClass}>
-              Cancel edit
-            </button>
-          )}
-        </div>
-        {!editingPlanId && !hasTasks && (
-          <p className="mt-1 text-xs text-text-muted">
-            No tasks entered here — this will schedule whatever's already saved in {date}'s
-            planning note (e.g. from a previous session) instead of adding anything new.
-          </p>
-        )}
+        <button
+          type="button"
+          disabled={runMutation.isPending}
+          onClick={() => runMutation.mutate()}
+          className={`${primaryBtnClass} disabled:opacity-50`}
+        >
+          {runMutation.isPending ? 'Building...' : hasTasks ? 'Build my schedule' : 'Build from saved tasks'}
+        </button>
         <SaveStatus state={status} />
       </Card>
 
@@ -345,53 +253,6 @@ export default function DayPlanningPage() {
         </Card>
       )}
 
-      {scheduledMessage && (
-        <Card>
-          <p className="text-sm text-text-primary">{scheduledMessage}</p>
-        </Card>
-      )}
-
-      <Card>
-        <h2 className="mb-1 text-lg font-semibold">Upcoming Plans</h2>
-        <p className="mb-3 text-sm text-text-muted">
-          Plans queued up for a future date — nothing's generated yet, edit or cancel freely.
-        </p>
-        {upcomingPlans.length === 0 ? (
-          <p className="text-sm text-text-muted">
-            {upcomingPlansQuery.isPending ? 'Loading...' : 'No upcoming plans.'}
-          </p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {upcomingPlans.map((plan) => (
-              <div
-                key={plan.id}
-                className="flex items-center justify-between gap-2 rounded border border-border bg-card-alt p-3"
-              >
-                <div>
-                  <p className="text-sm font-semibold">{plan.date}</p>
-                  <p className="text-xs text-text-muted">
-                    {plan.start_time ? `From ${plan.start_time}` : 'Whole day'}
-                    {plan.end_time ? ` to ${plan.end_time}` : ''}
-                    {plan.trigger_at ? ` — builds at ${formatTriggerAt(plan.trigger_at)}` : ''}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => startEditing(plan)} className={secondaryBtnClass}>
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => cancelPlanMutation.mutate(plan.id)}
-                    className={secondaryBtnClass}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
     </div>
   )
 }
@@ -402,7 +263,7 @@ function TaskLibraryCard({ items, onAdd }: { items: TaskLibraryItem[]; onAdd: (i
   const [editingId, setEditingId] = useState<string | null>(null)
 
   const createMutation = useMutation({
-    mutationFn: async (input: { label: string; default_minutes: number; group_name: string | null }) => {
+    mutationFn: async (input: TaskLibraryInput) => {
       const { error } = await api.POST('/task-library', { body: input })
       if (error) throw new Error()
     },
@@ -418,7 +279,7 @@ function TaskLibraryCard({ items, onAdd }: { items: TaskLibraryItem[]; onAdd: (i
       input,
     }: {
       id: string
-      input: { label: string; default_minutes: number; group_name: string | null }
+      input: TaskLibraryInput
     }) => {
       const { error } = await api.PUT('/task-library/{item_id}', { params: { path: { item_id: id } }, body: input })
       if (error) throw new Error()
@@ -482,7 +343,9 @@ function TaskLibraryCard({ items, onAdd }: { items: TaskLibraryItem[]; onAdd: (i
                   >
                     <div>
                       <p className="text-sm font-semibold">{item.label}</p>
-                      <p className="text-xs text-text-muted">{item.default_minutes} mins</p>
+                      <p className="text-xs text-text-muted">
+                        {item.default_minutes} mins{item.order_hint ? ` — ${item.order_hint}` : ''}
+                      </p>
                     </div>
                     <div className="flex gap-2">
                       <button type="button" onClick={() => onAdd(item)} className={secondaryBtnClass}>
@@ -510,13 +373,14 @@ function TaskLibraryForm({
   onDelete,
 }: {
   initial?: TaskLibraryItem
-  onSave: (input: { label: string; default_minutes: number; group_name: string | null }) => void
+  onSave: (input: TaskLibraryInput) => void
   onCancel: () => void
   onDelete?: () => void
 }) {
   const [label, setLabel] = useState(initial?.label ?? '')
   const [minutes, setMinutes] = useState(String(initial?.default_minutes ?? 20))
   const [group, setGroup] = useState(initial?.group_name ?? '')
+  const [orderHint, setOrderHint] = useState(initial?.order_hint ?? '')
 
   return (
     <div className="mb-3 rounded border border-border bg-card-alt p-3">
@@ -544,11 +408,23 @@ function TaskLibraryForm({
         placeholder="Group (optional, e.g. Chores)"
         className={`${inputClass} mb-2`}
       />
+      <input
+        type="text"
+        value={orderHint}
+        onChange={(e) => setOrderHint(e.target.value)}
+        placeholder='Order hint (optional, e.g. "before Shower" or "after Dishes")'
+        className={`${inputClass} mb-2`}
+      />
       <div className="flex gap-2">
         <button
           type="button"
           onClick={() =>
-            onSave({ label: label.trim(), default_minutes: Number(minutes) || 20, group_name: group.trim() || null })
+            onSave({
+              label: label.trim(),
+              default_minutes: Number(minutes) || 20,
+              group_name: group.trim() || null,
+              order_hint: orderHint.trim() || null,
+            })
           }
           disabled={!label.trim()}
           className={`${primaryBtnClass} disabled:opacity-50`}

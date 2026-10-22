@@ -104,6 +104,39 @@ def _free_gaps(
     return gaps
 
 
+ORDER_HINT = re.compile(r"^(?P<rel>before|after)\s+(?P<ref>\S.*?)\s*$", re.IGNORECASE)
+
+
+def parse_order_hint(text: Optional[str]) -> Optional[tuple[str, str]]:
+    """("before" | "after", other task's label) from a task-library hint
+    like "after Clean the kitchen"; None for blank or malformed text."""
+    match = ORDER_HINT.match((text or "").strip())
+    return (match.group("rel").lower(), match.group("ref")) if match else None
+
+
+def order_tasks(tasks: list[tuple[str, int]], hints: dict[str, str]) -> list[tuple[str, int]]:
+    """Moves each hinted task to just before/after the task its hint names
+    (labels match case-insensitively; `hints` is lower-cased label -> hint
+    text). A hint naming a task that isn't in today's list is ignored, and
+    unhinted tasks keep their order. Hints are applied once, in list order,
+    so contradictory hints settle deterministically instead of looping."""
+    ordered = list(tasks)
+    for task in tasks:
+        parsed = parse_order_hint(hints.get(task[0].strip().lower()))
+        if not parsed:
+            continue
+        rel, ref = parsed
+        ref_key = ref.strip().lower()
+        if ref_key == task[0].strip().lower():
+            continue
+        if not any(other[0].strip().lower() == ref_key for other in ordered):
+            continue
+        ordered.remove(task)
+        ref_index = next(i for i, other in enumerate(ordered) if other[0].strip().lower() == ref_key)
+        ordered.insert(ref_index if rel == "before" else ref_index + 1, task)
+    return ordered
+
+
 def compute_schedule_blocks(
     tasks: list[tuple[str, int]],
     occupied: list[tuple[datetime, datetime]],

@@ -31,7 +31,7 @@ from langchain_core.tools import tool
 from agent.scheduler import scheduler
 from agent.settings import settings
 from jobs.reminders import fire_reminder
-from utils import reminders_store, vault
+from utils import reminders_store, task_library_store, vault
 from utils.caldav_client import create_or_update_event, get_events_in_range
 from utils.datetime import parse_local_datetime, text_to_utc
 from utils.planning import (
@@ -40,6 +40,7 @@ from utils.planning import (
     format_reflection_digest,
     format_schedule_section,
     occupied_from_calendar_events,
+    order_tasks,
     parse_fixed_blocks,
     parse_reflection_section,
     parse_target_tasks,
@@ -100,10 +101,9 @@ def _recent_reflections(before_date_str: str, days: int = RECENT_REFLECTION_DAYS
 def save_planning_tasks(date_str: str, tasks: list[tuple[str, int]]) -> None:
     """Append one or more (task, duration_minutes) tasks to a day's
     planning note's Tasks section — the LLM-free core of
-    add_planning_task, also called directly by routes/day_plans.py so
+    add_planning_task, also called directly by routes/day_planning.py so
     the dashboard's "Plan my day" form can save a whole plan's tasks
-    without spending an agent turn on it (see the day-planning
-    task-library/upcoming-plans feature's design)."""
+    without spending an agent turn on it."""
     with _planning_note_lock:
         note = vault.get_or_create_planning_note(date_str, settings.planning_template_note_id)
         for task, duration_minutes in tasks:
@@ -121,7 +121,7 @@ def save_fixed_blocks(date_str: str, blocks: list[tuple[str, str, str]]) -> None
     generate_schedule_blocks treats as occupied on top of the day's
     real calendar events, and materializes onto the calendar itself if
     not already there. LLM-free, same reasoning as save_planning_tasks;
-    called directly by routes/day_plans.py."""
+    called directly by routes/day_planning.py."""
     with _planning_note_lock:
         note = vault.get_or_create_planning_note(date_str, settings.planning_template_note_id)
         for name, start_time, end_time in blocks:
@@ -220,6 +220,7 @@ def generate_schedule_blocks(
         window_start = parse_local_datetime(f"{date_str} {start_time or settings.wake_time}:00")
         window_end = parse_local_datetime(f"{date_str} {end_time or settings.bedtime}:00")
 
+        tasks = order_tasks(tasks, task_library_store.hints_by_label())
         blocks, unscheduled = compute_schedule_blocks(tasks, occupied, window_start, window_end)
 
         note.body = vault.replace_section(note.body, SCHEDULE_SECTION, format_schedule_section(blocks, unscheduled))

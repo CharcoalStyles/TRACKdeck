@@ -55,7 +55,6 @@ services:
       # rebuild silently erases the evidence for why a turn went the way
       # it did.
       - ./data/writer_log.db:/app/data/writer_log.db
-      - ./data/day_plans.db:/app/data/day_plans.db
       - ./data/task_library.db:/app/data/task_library.db
       # Append-only event log (utils/event_log.py): what was said, which tools
       # ran, captures and their provenance.

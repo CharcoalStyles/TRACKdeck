@@ -106,7 +106,7 @@ fi
 echo
 echo "== 3. memory.db / reminders.db / checkins.db / settings.db / alert_sounds.db /"
 echo "      device_errors.db / device_state.db /"
-echo "      writer_log.db / day_plans.db / task_library.db"
+echo "      writer_log.db / task_library.db"
 echo "      (docker-compose bind mounts) =="
 DATA_DIR="./data"
 mkdir -p "$DATA_DIR"
@@ -131,7 +131,7 @@ ensure_db_file() {
 
 for db in memory.db reminders.db checkins.db settings.db alert_sounds.db \
           device_errors.db device_state.db \
-          writer_log.db day_plans.db task_library.db; do
+          writer_log.db task_library.db; do
     ensure_db_file "${DATA_DIR}/${db}"
 done
 

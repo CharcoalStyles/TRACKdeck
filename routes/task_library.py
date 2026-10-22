@@ -11,10 +11,11 @@ import uuid
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 import auth
 from utils import task_library_store
+from utils.planning import parse_order_hint
 
 router = APIRouter()
 
@@ -24,12 +25,24 @@ class TaskLibraryItem(BaseModel):
     label: str
     default_minutes: int
     group_name: Optional[str] = None
+    order_hint: Optional[str] = None
 
 
 class TaskLibraryInput(BaseModel):
     label: str
     default_minutes: int
     group_name: Optional[str] = None
+    order_hint: Optional[str] = None
+
+    @field_validator("order_hint")
+    @classmethod
+    def _valid_order_hint(cls, value: Optional[str]) -> Optional[str]:
+        value = (value or "").strip()
+        if not value:
+            return None
+        if parse_order_hint(value) is None:
+            raise ValueError('order_hint must read "before <task>" or "after <task>"')
+        return value
 
 
 @router.get("/task-library", response_model=list[TaskLibraryItem])
@@ -43,7 +56,12 @@ async def create_task_library_item(
 ):
     item_id = str(uuid.uuid4())
     await asyncio.to_thread(
-        task_library_store.create, item_id, body.label, body.default_minutes, body.group_name
+        task_library_store.create,
+        item_id,
+        body.label,
+        body.default_minutes,
+        body.group_name,
+        body.order_hint,
     )
     return await asyncio.to_thread(task_library_store.get, item_id)
 
@@ -55,7 +73,12 @@ async def update_task_library_item(
     if await asyncio.to_thread(task_library_store.get, item_id) is None:
         raise HTTPException(status_code=404, detail="Task library item not found")
     return await asyncio.to_thread(
-        task_library_store.update, item_id, body.label, body.default_minutes, body.group_name
+        task_library_store.update,
+        item_id,
+        body.label,
+        body.default_minutes,
+        body.group_name,
+        body.order_hint,
     )
 
 
