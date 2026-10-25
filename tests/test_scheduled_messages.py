@@ -217,27 +217,6 @@ def test_compose_morning_uses_writer(env, monkeypatch):
     assert "Thursday 22 October 2026" in prompts[0]
 
 
-def test_checkins_today_listed_verbatim_with_unanswered(env):
-    checkin_log.append_entry("c1", _at(10), "answered", "What went well?", "Finished the draft\nand slept ok")
-    checkin_log.append_entry("c2", _at(15), "skipped", "How is your energy?")
-    assert evening.render_checkins_today(DAY) == (
-        "- 10:00 What went well?\n"
-        "  > Finished the draft\n"
-        "  > and slept ok\n"
-        "- 15:00 How is your energy?\n"
-        "  (no answer)"
-    )
-    assert evening.render_checkins_today(date(2026, 10, 21)) == "No check-ins today."
-
-
-def test_render_checkin_answers_is_verbatim_and_skips_unanswered(env):
-    checkin_log.append_entry("c1", _at(10, day=date(2026, 10, 21)), "answered", "A very long prompt " * 20, "tired " * 100)
-    checkin_log.append_entry("c2", _at(15), "skipped", "Skipped one")
-    text = day_context.render_checkin_answers(date(2026, 10, 20), DAY)
-    assert "[Wednesday 21 October]" in text and "Skipped one" not in text
-    assert ("tired " * 100).strip() in text and "..." not in text
-
-
 def test_captures_line_counts_and_links(env, monkeypatch):
     assert evening.captures_line(DAY) == "No unticked captures."
     daily_notes.append_capture(_at(9), "one")
@@ -248,72 +227,24 @@ def test_captures_line_counts_and_links(env, monkeypatch):
 
 
 def test_evening_message_structure_and_order(env, monkeypatch):
-    _stub_context(monkeypatch)
     monkeypatch.setattr(day_context, "render_calendar", lambda a, b: "- Fri 23 Oct 09:00-10:00 Dentist")
     monkeypatch.setattr(day_context, "render_reminders", lambda a, b: "")
     checkin_log.append_entry("c1", _at(10), "answered", "What went well?", "Finished the draft")
     daily_notes.append_capture(_at(9), "write report")
-    prompts = []
-    monkeypatch.setattr(evening, "write", lambda p, **k: prompts.append(p) or "You wrote \"Finished the draft\".")
+
+    def never(*a, **k):
+        raise AssertionError("the evening message must not call a model")
+
+    monkeypatch.setattr(common, "write", never)
     text, day = evening.compose_evening_message(DAY)
     assert day == DAY
     order = [
         text.index("Bedtime tonight: 21:20."),
-        text.index("Today's check-ins:"),
-        text.index("- 10:00 What went well?\n  > Finished the draft"),
-        text.index("A reading across the last few days:"),
         text.index("1 unticked capture."),
         text.index("Tomorrow:\n- Fri 23 Oct 09:00-10:00 Dentist"),
     ]
     assert order == sorted(order)
-    # The writer only ever sees the check-in answers, never captures or the calendar.
-    assert len(prompts) == 1
-    assert "Finished the draft" in prompts[0] and "write report" not in prompts[0] and "Dentist" not in prompts[0]
-
-
-def test_evening_prompt_forbids_recap_and_motives():
-    prompt = evening.build_reading_prompt("[Thursday 22 October]\n- 10:00 ...")
-    assert "Do not summarise what the user did" in prompt
-    assert "Never state why the user feels or does something" in prompt
-    assert "Quote the user's own words" in prompt
-    assert "recap" not in prompt.lower()
-
-
-def test_evening_without_checkin_answers_skips_the_writer(env, monkeypatch):
-    monkeypatch.setattr(day_context, "render_calendar", lambda a, b: "")
-    monkeypatch.setattr(day_context, "render_reminders", lambda a, b: "")
-
-    def never(p, **k):
-        raise AssertionError("writer must not be called")
-
-    monkeypatch.setattr(evening, "write", never)
-    text, _ = evening.compose_evening_message(DAY)
-    assert "reading" not in text
-    assert "No check-ins today." in text and "Nothing on the calendar or reminders yet." in text
-
-
-def test_evening_reading_uses_last_five_days_only(env, monkeypatch):
-    monkeypatch.setattr(day_context, "render_calendar", lambda a, b: "")
-    monkeypatch.setattr(day_context, "render_reminders", lambda a, b: "")
-    checkin_log.append_entry("old", _at(10, day=date(2026, 10, 16)), "answered", "Old prompt", "too old")
-    checkin_log.append_entry("in", _at(10, day=date(2026, 10, 18)), "answered", "In prompt", "in window")
-    prompts = []
-    monkeypatch.setattr(evening, "write", lambda p, **k: prompts.append(p) or "Reading.")
-    evening.compose_evening_message(DAY)
-    assert "in window" in prompts[0] and "too old" not in prompts[0]
-
-
-def test_evening_survives_writer_failure(env, monkeypatch):
-    monkeypatch.setattr(day_context, "render_calendar", lambda a, b: "")
-    monkeypatch.setattr(day_context, "render_reminders", lambda a, b: "")
-    checkin_log.append_entry("c1", _at(10), "answered", "Prompt", "answer")
-
-    def boom(p, **k):
-        raise RuntimeError("model down")
-
-    monkeypatch.setattr(evening, "write", boom)
-    text, _ = evening.compose_evening_message(DAY)
-    assert "> answer" in text and "reading" not in text
+    assert "check-in" not in text.lower() and "Finished the draft" not in text
 
 
 def test_weekly_prompt_covers_the_iso_week(env, monkeypatch):
@@ -497,7 +428,7 @@ def test_apply_persisted_parses_new_fields(monkeypatch):
             "weekly_review_time": "17:30",
             "monthly_review_timing": "first_morning",
             "monthly_review_morning_time": "07:45",
-            "digest_email_to": "old@example.com",
+            "email_to": "me@example.com",
             "daily_commentary": "1",
             "weather_enabled": "0",
         }
@@ -506,7 +437,7 @@ def test_apply_persisted_parses_new_fields(monkeypatch):
     assert settings.weekly_review_time == "17:30"
     assert settings.monthly_review_timing == "first_morning"
     assert settings.monthly_review_morning_time == "07:45"
-    assert settings.email_to == "old@example.com"  # the pre-v2 key still loads
+    assert settings.email_to == "me@example.com"
     assert settings.daily_commentary is True
     assert settings.weather_enabled is False
 

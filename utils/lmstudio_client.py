@@ -11,7 +11,7 @@ management API's /models endpoint has both — loaded_context_length (what
 the model was actually loaded with, e.g. tuned down from its max to fit
 RAM — as opposed to max_context_length, its architectural ceiling) and
 every downloaded model regardless of whether it's currently loaded.
-Backs the dashboard's LM Studio Models admin card.
+Backs the Settings page's Models card.
 
 Optional and best-effort throughout: if LMSTUDIO_MANAGEMENT_URL isn't
 set, the model isn't currently loaded, or the request fails for any
@@ -83,7 +83,7 @@ async def get_loaded_context_length(model: str | None = None) -> int | None:
         "LM Studio's management API has no loaded entry matching "
         "settings.lmstudio_chat_model=%r — currently loaded: %r. Falling "
         "back to the max_history_tokens setting instead of this model's "
-        "real context length; check the LM Studio Models admin page picked "
+        "real context length; check the Settings page's Models card picked "
         "a model that's actually loaded.",
         chat_model, loaded_ids,
     )
@@ -102,8 +102,8 @@ async def fetch_models() -> list[LmStudioModel]:
     """Every chat-capable model LM Studio currently has downloaded, via the
     same management API surface as get_loaded_context_length() above. No
     caching — a cheap LAN call, and staying uncached means a model just
-    downloaded/loaded in LM Studio shows up on the dashboard's LM Studio
-    Models admin card immediately. Empty list if LMSTUDIO_MANAGEMENT_URL
+    downloaded/loaded in LM Studio shows up on the Settings page's Models
+    card immediately. Empty list if LMSTUDIO_MANAGEMENT_URL
     isn't set or the request fails — the dashboard falls back to a plain
     text field in that case.
 

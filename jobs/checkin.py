@@ -27,7 +27,7 @@ agent/scheduler.py):
 Every place that's about to schedule a NEW check-in checks the day's
 target (3-5, decided once by jobs/day_start.py and persisted via
 utils.checkins_store's day_plans table) and the waking-hours window
-(settings.wake_time/settings.latest_checkin_time) first, and no-ops if
+(settings.checkin_start_time/settings.latest_checkin_time) first, and no-ops if
 either is exhausted.
 """
 from __future__ import annotations
@@ -71,15 +71,15 @@ def _pick_category(exclude: str | None, high_used: bool) -> str:
 
 
 def _local_checkin_window(now_local: datetime) -> tuple[datetime, datetime]:
-    wake_hour, wake_minute = (int(p) for p in settings.wake_time.split(":"))
+    start_hour, start_minute = (int(p) for p in settings.checkin_start_time.split(":"))
     end_hour, end_minute = (int(p) for p in settings.latest_checkin_time.split(":"))
-    wake_dt = now_local.replace(hour=wake_hour, minute=wake_minute, second=0, microsecond=0)
+    wake_dt = now_local.replace(hour=start_hour, minute=start_minute, second=0, microsecond=0)
     checkin_end_dt = now_local.replace(hour=end_hour, minute=end_minute, second=0, microsecond=0)
     return wake_dt, checkin_end_dt
 
 
 def waking_day_bounds(now_local: datetime) -> tuple[int, int]:
-    """UTC epoch (start, end) for today's check-in window ([wake_time,
+    """UTC epoch (start, end) for today's check-in window ([checkin_start_time,
     latest_checkin_time) on now_local's calendar date) — the day-boundary
     concept this feature uses for its 3-5/day cap and once/day 'high'
     rule. Deliberately separate from a midnight-anchored
@@ -95,7 +95,7 @@ def waking_day_bounds(now_local: datetime) -> tuple[int, int]:
 async def get_or_create_day_target(day_start_utc: int) -> int:
     """Today's check-in count (3-5), decided once and persisted so a
     restart doesn't reroll it. Normally decided by jobs/day_start.py at
-    wake_time; the create path here is just a defensive fallback in case
+    checkin_start_time; the create path here is just a defensive fallback in case
     something needs it before that's run."""
     plan = await asyncio.to_thread(checkins_store.get_day_plan, day_start_utc)
     if plan is not None:
@@ -182,9 +182,9 @@ async def schedule_first_of_day(
 ) -> None:
     """Called by jobs/day_start.py's start_of_day_setup(). Idempotent —
     no-ops if today already has any scheduled/fired row, or we're outside
-    [wake_time, latest_checkin_time) right now — safe to call
+    [checkin_start_time, latest_checkin_time) right now — safe to call
     unconditionally at startup as a catch-up for "app was down through
-    today's wake_time"."""
+    today's checkin_start_time"."""
     wake_dt, checkin_end_dt = _local_checkin_window(now_local)
     if not (wake_dt <= now_local < checkin_end_dt):
         return
@@ -256,7 +256,7 @@ async def _schedule_next(resolved: dict, outcome: str) -> None:
     scheduled_at = now_local + delay
     _, checkin_end_dt = _local_checkin_window(now_local)
     if scheduled_at >= checkin_end_dt:
-        return  # tomorrow's wake_time cron job (jobs/day_start.py) starts the next day's plan
+        return  # tomorrow's checkin_start_time cron job (jobs/day_start.py) starts the next day's plan
     await _create_and_schedule(scheduled_at, category, retry_of)
 
 
@@ -291,7 +291,7 @@ async def expire_checkin(checkin_id: str) -> None:
 
 async def next_wake_at() -> int:
     """Epoch seconds the device should set its next RTC wake alarm for —
-    the earliest still-pending check-in, or tomorrow's wake_time if none
+    the earliest still-pending check-in, or tomorrow's checkin_start_time if none
     are queued (e.g. today's target is already met)."""
     pending = await asyncio.to_thread(checkins_store.list_pending_unfired)
     if pending:

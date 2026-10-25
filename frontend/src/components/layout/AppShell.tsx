@@ -5,7 +5,6 @@ import { useLogout } from "../../hooks/useAuth";
 const ADMIN_PATHS = [
   "/settings",
   "/admin/testing",
-  "/admin/models",
   "/admin/checkins",
   "/admin/alert-sounds",
   "/admin/errors",
@@ -114,9 +113,6 @@ const AdminNav = () => {
         </NavLink>
         <NavLink to="/admin/testing" className={navLinkClass}>
           Testing
-        </NavLink>
-        <NavLink to="/admin/models" className={navLinkClass}>
-          Models
         </NavLink>
         <NavLink to="/admin/checkins" className={navLinkClass}>
           Check-Ins

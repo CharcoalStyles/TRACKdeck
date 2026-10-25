@@ -4,13 +4,11 @@ jobs/evening.py
 The evening message, pushed through Gotify (and emailed when email_to is set)
 at settings.evening_time. Deliberately NOT a recap of the day: the assistant
 cannot know what the user actually did, so it would invent. The message is
-assembled by code from what the user themselves wrote:
+assembled entirely by code, with no model call:
   1. bedtime tonight
-  2. today's check-in prompts and the user's answers, verbatim
-  3. a short grounded reading across the last few days' check-in answers
-     (the only part the writer model produces; skipped if there are none)
-  4. how many captures are still unticked, with a link to the Captures page
-  5. tomorrow's calendar and reminders
+  2. how many captures are still unticked, with a link to the Captures page
+  3. tomorrow's calendar and reminders
+Check-in answers are not in it; they stay in the vault's Check-ins/ notes.
 With settings.daily_commentary on, the same text is saved to
 Reviews/Daily/YYYY-MM-DD.md.
 
@@ -30,8 +28,8 @@ from datetime import date, datetime, timedelta
 
 from agent.runtime import app_state, prune_thread_locks
 from agent.settings import settings
-from jobs.common import WRITING_RULES, deliver, write
-from utils import checkin_log, day_context, reviews
+from jobs.common import deliver
+from utils import day_context, reviews
 from utils.notify import notify_error
 from voice import UPLOAD_DIR
 
@@ -39,45 +37,6 @@ logger = logging.getLogger(__name__)
 
 RECEIVED_NOTES_MAX_AGE_SECONDS = 24 * 60 * 60
 EVENING_PRIORITY = 3
-READING_DAYS = 5  # today plus the four days before it
-
-READING_PROMPT = """You are the user's personal assistant. Below are the user's own answers to \
-check-in prompts over the last few days. Write a short reading of what they say: three to five \
-plain sentences.
-
-How to write it:
-- Quote the user's own words (in quotation marks) when you point at something.
-- Offer observations, or ask a question or two. Do not give conclusions or advice.
-- Never state why the user feels or does something; you do not know their motives.
-- Call something a pattern only if it appears on two or more separate days.
-- Do not summarise what the user did, and do not list their activities.
-- Keep the tone plain and even: no cheerleading, no alarm.
-- If there is too little to read, say so in one sentence.
-
-{rules}
-
-Check-in answers, oldest first:
-{answers}
-"""
-
-
-def build_reading_prompt(answers: str) -> str:
-    return READING_PROMPT.format(rules=WRITING_RULES, answers=answers)
-
-
-def render_checkins_today(today: date) -> str:
-    entries = checkin_log.read_entries(today.isoformat())
-    if not entries:
-        return "No check-ins today."
-    lines = []
-    for e in entries:
-        lines.append(f'- {e["time"]} {e["prompt"]}')
-        if e["answer"]:
-            lines.extend(f"  > {line}" if line else "  >" for line in e["answer"].strip().splitlines())
-        else:
-            lines.append("  (no answer)")
-    return "\n".join(lines)
-
 
 def captures_line(today: date) -> str:
     count = len(day_context.leftover_captures(today))
@@ -101,33 +60,15 @@ def tomorrow_section(today: date) -> str:
     return "\n".join(rows) if rows else "Nothing on the calendar or reminders yet."
 
 
-def compose_reading(today: date) -> str:
-    """Blocking. Empty string when there is nothing to read or the writer fails
-    (the rest of the message is still worth sending)."""
-    first = today - timedelta(days=READING_DAYS - 1)
-    answers = day_context.render_checkin_answers(first, today)
-    if not answers:
-        return ""
-    try:
-        return write(build_reading_prompt(answers), temperature=0.5)
-    except Exception as e:
-        logger.warning("Evening reading skipped, writer failed: %s", e)
-        return ""
-
-
-def assemble_message(today: date, reading: str) -> str:
-    parts = [f"Bedtime tonight: {settings.bedtime}.", f"Today's check-ins:\n{render_checkins_today(today)}"]
-    if reading:
-        parts.append(f"A reading across the last few days:\n{reading}")
-    parts.append(captures_line(today))
-    parts.append(f"Tomorrow:\n{tomorrow_section(today)}")
-    return "\n\n".join(parts)
-
-
 def compose_evening_message(today: date | None = None) -> tuple[str, date]:
     """Blocking — run via asyncio.to_thread. Returns the text and the day it covers."""
     today = today or datetime.now(settings.zoneinfo()).date()
-    return assemble_message(today, compose_reading(today)), today
+    parts = [
+        f"Bedtime tonight: {settings.bedtime}.",
+        captures_line(today),
+        f"Tomorrow:\n{tomorrow_section(today)}",
+    ]
+    return "\n\n".join(parts), today
 
 
 def save_daily_commentary(text: str, day: date):

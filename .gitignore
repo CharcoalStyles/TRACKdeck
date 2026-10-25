@@ -147,7 +147,6 @@ celerybeat.pid
 env/
 venv/
 ENV/
-scratchpad/laya_playground_venv/
 env.bak/
 venv.bak/
 

@@ -20,7 +20,6 @@ interface DeviceState {
 }
 
 interface LlmProvider {
-  provider: string
   model?: string | null
   base_url?: string | null
 }
@@ -249,7 +248,6 @@ export default function TestingPage() {
           {!llmProviderQuery.data
             ? 'Loading…'
             : [
-                `Provider: ${llmProviderQuery.data.provider}`,
                 `Model: ${llmProviderQuery.data.model ?? '—'}`,
                 `Base URL: ${llmProviderQuery.data.base_url ?? '—'}`,
               ].join('\n')}

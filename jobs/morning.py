@@ -3,7 +3,7 @@ jobs/morning.py
 ----------------
 The wake-up day-ahead message: today's and tomorrow's weather, today's
 calendar and reminders, what's left unticked from yesterday's captures.
-Pushed through Gotify (and emailed when email_to is set) at settings.wake_time. All context is gathered by
+Pushed through Gotify (and emailed when email_to is set) at settings.morning_time. All context is gathered by
 plain code (utils/day_context.py) and handed to the writer model.
 """
 from __future__ import annotations

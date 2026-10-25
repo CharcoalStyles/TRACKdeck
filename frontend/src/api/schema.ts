@@ -610,7 +610,7 @@ export interface paths {
          *     field is also write-through persisted to settings.db
          *     (utils/settings_store.py) so it survives a restart.
          *
-         *     timezone/evening_time/bedtime/calendar_sync_interval_minutes/wake_time
+         *     timezone/evening_time/bedtime/calendar_sync_interval_minutes/morning_time/checkin_start_time
          *     also live-reschedule their APScheduler jobs, since they're registered
          *     as fixed triggers rather than being read fresh like the other settings.
          *     latest_checkin_time needs no reschedule — jobs/checkin.py reads it
@@ -641,9 +641,8 @@ export interface paths {
          * @description Every chat-capable model LM Studio currently has downloaded
          *     (utils/lmstudio_client.py, live, uncached — a local LAN call to
          *     LMSTUDIO_MANAGEMENT_URL, the same management API surface used for
-         *     live context-length lookups), plus which model
-         *     settings.lmstudio_chat_model currently points at. Backs the dashboard's LM Studio Models admin
-         *     card. Empty models list (management_configured: false) if
+         *     live context-length lookups). Backs the Settings page's Models card.
+         *     Empty models list (management_configured: false) if
          *     LMSTUDIO_MANAGEMENT_URL isn't set.
          */
         get: operations["get_lmstudio_models_debug_lmstudio_models_get"];
@@ -1580,8 +1579,6 @@ export interface components {
         };
         /** LlmProviderResponse */
         LlmProviderResponse: {
-            /** Provider */
-            provider: string;
             /** Model */
             model: string | null;
             /** Base Url */
@@ -1604,8 +1601,6 @@ export interface components {
             models: components["schemas"]["LmStudioModel"][];
             /** Management Configured */
             management_configured: boolean;
-            /** Configured Model */
-            configured_model: string | null;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -1720,6 +1715,10 @@ export interface components {
             bedtime: string;
             /** Calendar Sync Interval Minutes */
             calendar_sync_interval_minutes: number;
+            /** Morning Time */
+            morning_time: string;
+            /** Checkin Start Time */
+            checkin_start_time: string;
             /** Wake Time */
             wake_time: string;
             /** Latest Checkin Time */
@@ -1740,6 +1739,8 @@ export interface components {
             planning_template_note_id: string;
             /** Chime Alert Sound Id */
             chime_alert_sound_id: string;
+            /** Lmstudio Chat Model */
+            lmstudio_chat_model: string;
             /** Lmstudio Writer Model */
             lmstudio_writer_model: string;
         };
@@ -1769,6 +1770,10 @@ export interface components {
             bedtime?: string | null;
             /** Calendar Sync Interval Minutes */
             calendar_sync_interval_minutes?: number | null;
+            /** Morning Time */
+            morning_time?: string | null;
+            /** Checkin Start Time */
+            checkin_start_time?: string | null;
             /** Wake Time */
             wake_time?: string | null;
             /** Latest Checkin Time */

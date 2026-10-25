@@ -8,7 +8,6 @@ def test_defaults_to_chatopenai(monkeypatch):
     assert type(llm).__name__ == "ChatOpenAI"
     assert llm.model_name == "m"
     assert llm_client.describe_chat_llm() == {
-        "provider": "lmstudio",
         "model": "m",
         "base_url": "http://x",
     }

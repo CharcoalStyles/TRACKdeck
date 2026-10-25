@@ -51,8 +51,8 @@ Local only, through LM Studio's OpenAI-compatible API:
 it logs: empty_draft, tool_error, prose_tool, mode:day_planning, one_shot, conversation,
 short_draft (<=240 chars for confirmation-only tools, <=500 otherwise), long_draft. Every decision
 goes to `writer_log.db` (`GET /debug/writer-log`). Any writer failure falls back to the tool
-model's own text. Don't try to fix LFM's prose by training; tune the handoff. Per-surface model
-overrides live in `agent/model_assignments.py` (Settings page, "Models by Mode").
+model's own text. Don't try to fix LFM's prose by training; tune the handoff. There are exactly two
+models (tool and writer); there are no per-surface overrides.
 
 ## Commands
 
@@ -186,19 +186,18 @@ when saved. Job ids: `morning_message`, `evening_message`, `weekly_review`, `mon
 `bedtime_reminder`, `day_start`, `calendar_reminder_sync`, plus per-item `reminder:<id>`,
 `checkin:<id>`, `checkin_expire:<id>`.
 
-- **Morning** (`jobs/morning.py`, `wake_time`) — day-ahead: today's calendar and reminders,
+- **Morning** (`jobs/morning.py`, `morning_time`) — day-ahead: today's calendar and reminders,
   today's and tomorrow's weather, yesterday's unticked captures, a heads-up on tomorrow.
 - **Evening** (`jobs/evening.py`, `evening_time`) — not a recap (the assistant can't know what you
-  did). Built by code from what you wrote: bedtime, today's check-in prompts and answers verbatim,
-  a short grounded reading across recent answers (the only generated part), unticked captures,
-  tomorrow. Optionally saved to `Reviews/Daily/` (`daily_commentary`, default on). Also sweeps
+  did). Built entirely by code, no model call: bedtime, unticked captures, tomorrow. Check-in
+  answers are deliberately not in it. Optionally saved to `Reviews/Daily/` (`daily_commentary`, default on). Also sweeps
   threads, stale thread locks and old recordings, even if the message failed.
 - **Weekly review** (`jobs/reviews.py`, Sunday `weekly_review_time`) and **monthly review**
   (`monthly_review_timing` = `last_evening` or `first_morning`) — written by the writer from files
   read by date range, saved under `Reviews/`, pushed shortened and emailed in full.
 - **Bedtime** (`jobs/bedtime.py`) — fixed Gotify nudge at `bedtime`.
 - **Check-ins** (`jobs/checkin.py`, `jobs/day_start.py`, `agent/tools/checkin.py`) — short
-  reflection prompts at randomised times in `[wake_time, latest_checkin_time)`, delivered through
+  reflection prompts at randomised times in `[checkin_start_time, latest_checkin_time)`, delivered through
   `/device/sync` and Gotify magic links. A skip gets one lighter retry before the cooldown; an
   unanswered/expired prompt goes straight to cooldown. Prompts come from `agent/checkin_prompts.py`
   (`random.choice`, no personalisation).
@@ -236,7 +235,7 @@ reminders and bedtime, 8 for errors.
 - **Dashboard** (`frontend/`) — React + TypeScript SPA (Vite, Tailwind, TanStack Query,
   react-router) served from `dist/` by `main.py`'s `serve_spa` catch-all (registered last). Pages:
   Home (Today pane with day navigation + Captures), Captures, Chat (tiny), Day planning, Reminders,
-  Reflection, Settings, and admin: Testing, Models, Check-ins, Alert sounds, Errors, Thread debug.
+  Reflection, Settings, and admin: Testing, Check-ins, Alert sounds, Errors, Thread debug.
   `src/api/schema.ts` is generated from the live OpenAPI schema; `static/checkin.html` is the one
   page kept outside the SPA (magic link, no session).
 
@@ -254,7 +253,6 @@ agent/
   keywords.py              Wordlist + fuzzy prefix matching
   settings.py              Standing settings (persisted via utils/settings_store.py)
   scheduler.py             Shared APScheduler + cron trigger builders
-  model_assignments.py     Per-surface model overrides
   checkin_prompts.py       Reflection prompt bank
   tools/                   calendar, alerts, planning, weather, general, jot, checkin, all_tools
 jobs/                      morning, evening, reviews, bedtime, reminders, calendar_sync, checkin,
@@ -274,13 +272,13 @@ tests/                     pytest suite
 See `.env.example`. Notable:
 
 - **LM Studio** — `LMSTUDIO_OPENAI_URL`; `LMSTUDIO_CHAT_MODEL` and `LMSTUDIO_WRITER_MODEL` are
-  first-run seeds only (settings.db owns them afterwards, live-switchable on the Models page);
+  first-run seeds only (settings.db owns them afterwards, live-switchable on the Settings page);
   nothing embeds anything in v2, so there is no embedding model. `LMSTUDIO_MANAGEMENT_URL` (optional) lets `utils/lmstudio_client.py` read the model's real loaded
   context length for history trimming and list downloaded models.
 - **CalDAV** — `CALDAV_URL`, `CALDAV_USERNAME`, `CALDAV_PASSWORD` (bundled Radicale or any server).
 - **SearXNG** — `SEARXNG_URL` seeds the `searxng` entry of `settings.mcp_servers` at first run.
-- **Gotify / SMTP / email** — `GOTIFY_URL`, `GOTIFY_TOKEN`, `PUBLIC_BASE_URL`, `EMAIL_TO` (alias
-  `DIGEST_EMAIL_TO`) are first-run seeds; settings.db owns them afterwards. `GOTIFY_TOKEN` is never
+- **Gotify / SMTP / email** — `GOTIFY_URL`, `GOTIFY_TOKEN`, `PUBLIC_BASE_URL`, `EMAIL_TO` are
+  first-run seeds; settings.db owns them afterwards. `GOTIFY_TOKEN` is never
   echoed back (`gotify_token_set`). SMTP is env-only.
 - **Paths** — `VAULT_PATH`, `EVENT_LOG_DIR`.
 - **Auth** — `API_TOKEN` (hardware and scripts: `/voice`, `/device/*`, `/synthesize`; also accepted
@@ -290,14 +288,14 @@ See `.env.example`. Notable:
   Set `SESSION_COOKIE_SECURE=true` only behind HTTPS (a Secure cookie is never sent over plain
   HTTP, so login silently breaks). `static/checkin.html` endpoints are gated by the check-in UUID.
 - **Settings (settings.db, live via GET/POST `/settings`)** — `default_location`, `timezone`,
-  `wake_time`, `evening_time`, `bedtime`, `latest_checkin_time`, `weekly_review_time`,
+  `morning_time`, `checkin_start_time`, `wake_time` (default start of a generated day schedule only),
+  `evening_time`, `bedtime`, `latest_checkin_time`, `weekly_review_time`,
   `monthly_review_timing`, `monthly_review_evening_time`, `monthly_review_morning_time`,
   `daily_commentary`, `weather_enabled`, `calendar_sync_interval_minutes`,
   `device_poll_interval_seconds`, `max_history_tokens`, `email_to`, `public_base_url`, `gotify_url`,
   `gotify_token`, `mcp_servers`, `planning_template_note_id`, `chime_alert_sound_id`,
   `lmstudio_chat_model`, `lmstudio_writer_model`. See `agent/settings.py` for bounds and which
-  changes reschedule a job. `digest_email_to` survives only as a legacy alias in
-  `apply_persisted()` so an upgraded settings.db still loads.
+  changes reschedule a job.
 
 ## Known limitations (true today, not proposals — don't "fix" without asking)
 

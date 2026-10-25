@@ -21,10 +21,6 @@ import os
 from zoneinfo import ZoneInfo, available_timezones
 
 
-def _bool_env(name: str, default: str) -> bool:
-    return os.environ.get(name, default).strip().lower() in ("1", "true", "yes", "on")
-
-
 def is_valid_timezone(name: str) -> bool:
     return name in available_timezones()
 
@@ -194,11 +190,22 @@ class Settings:
     # same reasoning as default_location above.
     calendar_sync_interval_minutes: int = 30
 
-    # "HH:MM" 24-hour local time check-in prompts may start firing (see
-    # jobs/checkin.py, jobs/day_start.py) — paired with `latest_checkin_time`
-    # as the end of the waking-hours window. Same rescheduling/validation
-    # pattern as evening_time/bedtime. No env var, same reasoning as
-    # default_location above.
+    # "HH:MM" 24-hour local time the morning message goes out
+    # (jobs/morning.py). Seeded from wake_time on first load after the
+    # three-way split (see apply_persisted), so upgrading is a no-op. Same
+    # rescheduling/validation pattern as evening_time. No env var, same
+    # reasoning as default_location above.
+    morning_time: str = "07:00"
+
+    # "HH:MM" 24-hour local time the day's check-in window opens
+    # (jobs/checkin.py, jobs/day_start.py) — paired with `latest_checkin_time`
+    # as the end of the window. Seeded from wake_time like morning_time.
+    # Reschedules the day_start job.
+    checkin_start_time: str = "07:00"
+
+    # "HH:MM" 24-hour local time you get up. Only used as the default start
+    # of a generated day schedule (agent/tools/planning.py); it no longer
+    # drives the morning message or the check-ins.
     wake_time: str = "07:00"
 
     # "HH:MM" 24-hour local time check-in prompts must stop firing by (see
@@ -207,7 +214,7 @@ class Settings:
     # two can be tuned separately. Default matches bedtime's own default so
     # upgrading is a no-op until explicitly changed. No rescheduling needed
     # (read fresh at schedule-time, not baked into a registered cron
-    # trigger) — same validation pattern as evening_time/bedtime/wake_time.
+    # trigger) — same validation pattern as evening_time/bedtime/morning_time.
     # No env var, same reasoning as default_location above.
     latest_checkin_time: str = "21:20"
 
@@ -252,9 +259,8 @@ class Settings:
 
     # Recipient for the morning/evening/weekly/monthly messages sent by email
     # as well as Gotify (utils/mailer.py; SMTP_* env vars hold the server).
-    # Blank = no email. Seeded from EMAIL_TO, or the older DIGEST_EMAIL_TO so
-    # an existing deployment keeps working.
-    email_to: str = os.environ.get("EMAIL_TO") or os.environ.get("DIGEST_EMAIL_TO", "")
+    # Blank = no email. Seeded from EMAIL_TO on first run.
+    email_to: str = os.environ.get("EMAIL_TO", "")
 
     # Base URL used to build check-in magic-link URLs (jobs/checkin.py's
     # _checkin_click_url) for Gotify's tap-to-open extras. Seeded from
@@ -285,9 +291,9 @@ class Settings:
     # built at startup (main.py's lifespan), not re-fetched per request.
     mcp_servers: str = _default_mcp_servers()
 
-    # Which model get_chat_llm() (utils/llm_client.py) sends chat-completion
-    # requests to on LM Studio's OpenAI-compatible endpoint — the
-    # dashboard's LM Studio Models admin card (utils/lmstudio_client.py's
+    # The tool model: which model get_chat_llm() (utils/llm_client.py) sends
+    # chat-completion requests to on LM Studio's OpenAI-compatible endpoint —
+    # the Settings page's Models card (utils/lmstudio_client.py's
     # live catalog, sourced from LMSTUDIO_MANAGEMENT_URL) writes here when
     # you pick one. Env var seeds it, dashboard owns it after that. Also what
     # utils/lmstudio_client.py's get_loaded_context_length() looks up
@@ -295,10 +301,10 @@ class Settings:
     # restart: agent/graph.py's call_llm re-binds it fresh every turn.
     lmstudio_chat_model: str = os.environ.get("LMSTUDIO_CHAT_MODEL", "")
 
-    # LM Studio model that writes anything the user reads as prose (the daily
-    # digest first; see README "Planned: split-model architecture"). Empty =
-    # no split, get_writer_llm() falls back to lmstudio_chat_model.
-    # Live-editable, no restart.
+    # LM Studio model that writes anything the user reads as prose (scheduled
+    # messages, reviews, day-planning summaries; routing in agent/writer.py).
+    # Empty = no split, get_writer_llm() falls back to lmstudio_chat_model.
+    # Seeded from LMSTUDIO_WRITER_MODEL. Live-editable, no restart.
     lmstudio_writer_model: str = os.environ.get("LMSTUDIO_WRITER_MODEL", "")
 
 
@@ -324,7 +330,7 @@ def apply_persisted(values: dict[str, str]) -> None:
     """Overlay settings.db (utils/settings_store.py) onto the class
     defaults/env fallbacks above. Called once at startup (main.py's
     lifespan), before any field is read to build a live APScheduler
-    trigger, so a persisted evening_time/bedtime/wake_time takes effect
+    trigger, so a persisted evening_time/bedtime/morning_time takes effect
     from the very first job registration, not just on the next edit.
 
     sqlite3 only stores strings, so each field is parsed back to its real
@@ -351,6 +357,10 @@ def apply_persisted(values: dict[str, str]) -> None:
         settings.calendar_sync_interval_minutes = int(values["calendar_sync_interval_minutes"])
     if "wake_time" in values:
         settings.wake_time = values["wake_time"]
+    # morning_time / checkin_start_time were split out of wake_time; until
+    # they are saved explicitly they inherit it.
+    settings.morning_time = values.get("morning_time", settings.wake_time)
+    settings.checkin_start_time = values.get("checkin_start_time", settings.wake_time)
     if "latest_checkin_time" in values:
         settings.latest_checkin_time = values["latest_checkin_time"]
     if "device_poll_interval_seconds" in values:
@@ -363,8 +373,6 @@ def apply_persisted(values: dict[str, str]) -> None:
         settings.chime_alert_sound_id = values["chime_alert_sound_id"]
     if "email_to" in values:
         settings.email_to = values["email_to"]
-    elif "digest_email_to" in values:
-        settings.email_to = values["digest_email_to"]
     if "public_base_url" in values:
         settings.public_base_url = values["public_base_url"]
     if "lmstudio_chat_model" in values:

@@ -68,8 +68,8 @@ or `fallback`.
 - `mcp_servers` is `"{}"` in the defaults here only because `SEARXNG_URL` was unset when it was generated; with
   it set the first-run seed is `{"searxng": {"transport": "stdio", "command": "uvx", "args": ["--with", "fastmcp<4", "searxng-mcp-server"], ...}}`.
 - `gotify_token` is write-only; the response reports `gotify_token_set`.
-- `lmstudio_chat_model` (tool model) comes from `LMSTUDIO_CHAT_MODEL` at first run and is not part of
-  `GET /settings`; it is recorded per turn in `models.tool`. `lmstudio_writer_model` blank means no writer.
+- `lmstudio_chat_model` (tool model) comes from `LMSTUDIO_CHAT_MODEL` at first run; it is also
+  recorded per turn in `models.tool`. `lmstudio_writer_model` blank means no writer.
 - `timezone` and `default_location` feed the datetime line and the weather tools.
 
 ## Log schema

@@ -7,8 +7,7 @@ object to stdout with the result. Invoked via:
     (with this file's contents piped in as the script, payload as argv[1] JSON,
      or -- simpler here -- the payload is read from stdin as JSON directly)
 
-Actions: switch_model {model}, post_text {text, thread_id}, get_thread {thread_id},
-set_tool_router {enabled}, set_tool_suggestion {enabled}
+Actions: switch_model {model}, post_text {text, thread_id}, get_thread {thread_id}, list_models
 """
 import json
 import os
@@ -36,12 +35,6 @@ try:
     elif action == "get_thread":
         r = httpx.get(f"{base}/debug/thread/{payload['thread_id']}", headers=h, timeout=30)
         out = {"ok": r.status_code == 200, "status": r.status_code, "body": r.json() if r.status_code == 200 else r.text[:500]}
-    elif action == "set_tool_router":
-        r = httpx.post(f"{base}/settings", headers=h, json={"tool_router_enabled": payload["enabled"]}, timeout=30)
-        out = {"ok": r.status_code == 200, "status": r.status_code}
-    elif action == "set_tool_suggestion":
-        r = httpx.post(f"{base}/settings", headers=h, json={"tool_suggestion_enabled": payload["enabled"]}, timeout=30)
-        out = {"ok": r.status_code == 200, "status": r.status_code}
     elif action == "list_models":
         r = httpx.get(f"{base}/debug/lmstudio-models", headers=h, timeout=15)
         out = {"ok": r.status_code == 200, "status": r.status_code, "body": r.json() if r.status_code == 200 else r.text[:500]}

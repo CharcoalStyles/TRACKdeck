@@ -7,7 +7,7 @@ register/cancel per-reminder jobs without main.py and agent.tools.* ending
 up importing each other.
 
 Jobs currently registered against this scheduler (see main.py's lifespan):
-  - "morning_message" — jobs/morning.py, cron via wake_trigger()
+  - "morning_message" — jobs/morning.py, cron via morning_trigger()
   - "evening_message" — jobs/evening.py, cron via evening_trigger()
   - "weekly_review" — jobs/reviews.py, Sundays via weekly_trigger()
   - "monthly_review" — jobs/reviews.py, last evening or first morning via monthly_trigger()
@@ -16,7 +16,7 @@ Jobs currently registered against this scheduler (see main.py's lifespan):
     calendar_sync_trigger()
   - "reminder:<id>" — jobs/reminders.py, one-shot DateTrigger per ad-hoc
     reminder, added/removed directly by agent/tools/alerts.py
-  - "day_start" — jobs/day_start.py, cron via wake_trigger()
+  - "day_start" — jobs/day_start.py, cron via checkin_start_trigger()
   - "checkin:<id>" / "checkin_expire:<id>" — jobs/checkin.py, one-shot
     DateTrigger per mental-health check-in prompt and its answer-window
     expiry, added/removed directly by jobs/checkin.py
@@ -61,18 +61,23 @@ def calendar_sync_trigger() -> IntervalTrigger:
     return IntervalTrigger(minutes=settings.calendar_sync_interval_minutes)
 
 
-def wake_trigger() -> CronTrigger:
-    hour, minute = (int(p) for p in settings.wake_time.split(":"))
+def morning_trigger() -> CronTrigger:
+    hour, minute = (int(p) for p in settings.morning_time.split(":"))
+    return CronTrigger(hour=hour, minute=minute, timezone=settings.zoneinfo())
+
+
+def checkin_start_trigger() -> CronTrigger:
+    hour, minute = (int(p) for p in settings.checkin_start_time.split(":"))
     return CronTrigger(hour=hour, minute=minute, timezone=settings.zoneinfo())
 
 
 _TIME_JOB_TRIGGERS = {
-    "morning_message": wake_trigger,
+    "morning_message": morning_trigger,
     "evening_message": evening_trigger,
     "weekly_review": weekly_trigger,
     "monthly_review": monthly_trigger,
     "bedtime_reminder": bedtime_trigger,
-    "day_start": wake_trigger,
+    "day_start": checkin_start_trigger,
 }
 
 

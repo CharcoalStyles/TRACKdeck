@@ -35,10 +35,9 @@ export default function SettingsPage() {
     <div className="flex flex-col gap-4">
       <ModelsCard data={data} onSaved={invalidate} />
       <LocationTimeCard data={data} onSaved={invalidate} />
-      <MorningCard data={data} onSaved={invalidate} />
-      <EveningCard data={data} onSaved={invalidate} />
-      <ReviewsCard data={data} onSaved={invalidate} />
+      <ScheduleCard data={data} onSaved={invalidate} />
       <NotificationsCard data={data} onSaved={invalidate} />
+      <PlanningCard data={data} onSaved={invalidate} />
       <SyncCard data={data} onSaved={invalidate} />
       <details className="rounded-xl border border-border bg-card p-4">
         <summary className="cursor-pointer text-lg font-semibold">Advanced</summary>
@@ -51,8 +50,14 @@ export default function SettingsPage() {
   )
 }
 
+function formatContext(length: number | null | undefined) {
+  if (length == null) return null
+  return length >= 1000 ? `${Math.round(length / 1000)}k ctx` : `${length} ctx`
+}
+
 function ModelsCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
-  const status = useSaveStatus()
+  const { status, save } = useSettingsSave(onSaved)
+  const [tool, setTool] = useState('')
   const [writer, setWriter] = useState('')
 
   const modelsQuery = useQuery({
@@ -64,21 +69,57 @@ function ModelsCard({ data, onSaved }: { data?: Settings; onSaved: () => void })
   })
 
   useEffect(() => {
-    if (data) setWriter(data.lmstudio_writer_model || '')
+    if (!data) return
+    setTool(data.lmstudio_chat_model || '')
+    setWriter(data.lmstudio_writer_model || '')
   }, [data])
 
-  const mutation = useMutation({
-    mutationFn: async (lmstudio_writer_model: string) => {
-      const { error } = await api.POST('/settings', { body: { lmstudio_writer_model } })
-      if (error) throw new Error()
-    },
-    onMutate: () => status.setState('saving'),
-    onSuccess: () => {
-      status.setState('saved')
-      onSaved()
-    },
-    onError: () => status.setState('error'),
-  })
+  const models = modelsQuery.data?.models ?? []
+  const canList = (modelsQuery.data?.management_configured ?? false) && models.length > 0
+  const byId = new Map(models.map((m) => [m.id, m]))
+  const unchanged =
+    tool.trim() === (data?.lmstudio_chat_model ?? '') &&
+    writer.trim() === (data?.lmstudio_writer_model ?? '')
+
+  const optionLabel = (id: string) => {
+    const m = byId.get(id)
+    if (!m) return `${id} (not in LM Studio's list)`
+    return [id, formatContext(m.loaded_context_length ?? m.max_context_length), m.state === 'loaded' ? 'loaded' : 'not loaded']
+      .filter(Boolean)
+      .join(' · ')
+  }
+
+  const picker = (value: string, onChange: (v: string) => void, blankLabel?: string) => {
+    if (!canList) {
+      return (
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={blankLabel ?? 'LM Studio model id'}
+          className={inputClass}
+        />
+      )
+    }
+    return (
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={inputClass}>
+        {blankLabel !== undefined && <option value="">{blankLabel}</option>}
+        {blankLabel === undefined && !value && (
+          <option value="" disabled>
+            Choose a model…
+          </option>
+        )}
+        {value && !byId.has(value) && <option value={value}>{optionLabel(value)}</option>}
+        {models.map((m) => (
+          <option key={m.id} value={m.id}>
+            {optionLabel(m.id)}
+          </option>
+        ))}
+      </select>
+    )
+  }
+
+  const notLoaded = [tool, writer].filter((id) => id && byId.has(id) && byId.get(id)?.state !== 'loaded')
 
   return (
     <Card>
@@ -88,39 +129,33 @@ function ModelsCard({ data, onSaved }: { data?: Settings; onSaved: () => void })
         writes the longer replies, reviews and check-in wording. Both must be loaded in LM
         Studio. Applies immediately.
       </p>
+      {!modelsQuery.isPending && !canList && (
+        <p className="mb-3 text-sm text-text-muted">
+          {modelsQuery.data?.management_configured
+            ? "LM Studio's model list is empty or unreachable"
+            : 'LMSTUDIO_MANAGEMENT_URL is not set'}
+          , so type the exact model ids instead.
+        </p>
+      )}
       <div className="grid gap-3 md:grid-cols-2">
-        <FieldRow label="Tool model">
-          <div className="rounded border border-border bg-card-alt px-3 py-2 font-mono text-sm text-text-primary">
-            {modelsQuery.data?.configured_model || '—'}
-          </div>
-          <span className="text-xs text-text-muted">Set on the Models page.</span>
-        </FieldRow>
-        <FieldRow label="Writer model">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={writer}
-              onChange={(e) => setWriter(e.target.value)}
-              list="lmstudioModelOptions"
-              placeholder="e.g. gemma-4-e4b-it (blank = tool model writes)"
-              className={inputClass}
-            />
-            <button
-              type="button"
-              onClick={() => mutation.mutate(writer.trim())}
-              disabled={writer.trim() === (data?.lmstudio_writer_model ?? '')}
-              className={`${primaryBtnClass} disabled:cursor-not-allowed disabled:opacity-50`}
-            >
-              Save
-            </button>
-          </div>
-        </FieldRow>
+        <FieldRow label="Tool model">{picker(tool, setTool)}</FieldRow>
+        <FieldRow label="Writer model">{picker(writer, setWriter, 'None (tool model writes)')}</FieldRow>
       </div>
-      <datalist id="lmstudioModelOptions">
-        {(modelsQuery.data?.models ?? []).map((m) => (
-          <option key={m.id} value={m.id} />
-        ))}
-      </datalist>
+      {notLoaded.length > 0 && (
+        <p className="mt-2 text-sm text-accent">
+          Not loaded in LM Studio right now: {notLoaded.join(', ')}.
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={() =>
+          save({ lmstudio_chat_model: tool.trim(), lmstudio_writer_model: writer.trim() })
+        }
+        disabled={unchanged || !tool.trim()}
+        className={`${primaryBtnClass} mt-3 disabled:cursor-not-allowed disabled:opacity-50`}
+      >
+        Save
+      </button>
       <SaveStatus state={status.state} errorMessage={status.errorMessage} />
     </Card>
   )
@@ -224,96 +259,26 @@ function useSettingsSave(onSaved: () => void, failMessage?: string) {
   return { status, save: (body: SettingsBody) => mutation.mutate(body) }
 }
 
-function MorningCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
+function ScheduleGroup({ title, note, children }: { title: string; note: string; children: ReactNode }) {
+  return (
+    <section className="mt-5 border-t border-border pt-4 first-of-type:mt-3 first-of-type:border-t-0 first-of-type:pt-0">
+      <h3 className="text-base font-semibold">{title}</h3>
+      <p className="mb-3 text-sm text-text-muted">{note}</p>
+      {children}
+    </section>
+  )
+}
+
+function ScheduleCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
   const { status, save } = useSettingsSave(onSaved)
-  const [wakeTime, setWakeTime] = useState('')
-  const [latest, setLatest] = useState('')
+  const [morning, setMorning] = useState('')
   const [weather, setWeather] = useState(true)
-
-  useEffect(() => {
-    if (!data) return
-    setWakeTime(data.wake_time || '')
-    setLatest(data.latest_checkin_time || '')
-    setWeather(data.weather_enabled)
-  }, [data])
-
-  return (
-    <Card>
-      <h2 className="mb-1 text-lg font-semibold">Morning &amp; Check-Ins</h2>
-      <p className="mb-3 text-sm text-text-muted">
-        The day-ahead message (calendar, tasks, forecast for today and tomorrow) goes out at
-        the wake time, and that is also when the day's short check-in prompts may start. They
-        stop by the latest time. Takes effect immediately.
-      </p>
-      <div className="grid gap-3 md:grid-cols-2">
-        <FieldRow label="Wake time (morning message, first check-in)">
-          <input type="time" value={wakeTime} onChange={(e) => setWakeTime(e.target.value)} className={inputClass} />
-        </FieldRow>
-        <FieldRow label="Latest check-in time">
-          <input type="time" value={latest} onChange={(e) => setLatest(e.target.value)} className={inputClass} />
-        </FieldRow>
-      </div>
-      <CheckRow checked={weather} onChange={setWeather} label="Include the weather forecast in the morning message" />
-      <button
-        type="button"
-        onClick={() => save({ wake_time: wakeTime, latest_checkin_time: latest, weather_enabled: weather })}
-        className={primaryBtnClass}
-      >
-        Save
-      </button>
-      <SaveStatus state={status.state} errorMessage={status.errorMessage} />
-    </Card>
-  )
-}
-
-function EveningCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
-  const { status, save } = useSettingsSave(onSaved)
+  const [checkinStart, setCheckinStart] = useState('')
+  const [latest, setLatest] = useState('')
   const [eveningTime, setEveningTime] = useState('')
-  const [bedtime, setBedtime] = useState('')
   const [commentary, setCommentary] = useState(true)
-
-  useEffect(() => {
-    if (!data) return
-    setEveningTime(data.evening_time || '')
-    setBedtime(data.bedtime || '')
-    setCommentary(data.daily_commentary)
-  }, [data])
-
-  return (
-    <Card>
-      <h2 className="mb-1 text-lg font-semibold">Evening &amp; Bedtime</h2>
-      <p className="mb-3 text-sm text-text-muted">
-        The evening message shows the day's check-in answers, a short reading across the last
-        few days, unticked captures and tomorrow's heads-up. The bedtime reminder is a separate
-        wind-down nudge.
-      </p>
-      <div className="grid gap-3 md:grid-cols-2">
-        <FieldRow label="Evening message time">
-          <input type="time" value={eveningTime} onChange={(e) => setEveningTime(e.target.value)} className={inputClass} />
-        </FieldRow>
-        <FieldRow label="Bedtime reminder">
-          <input type="time" value={bedtime} onChange={(e) => setBedtime(e.target.value)} className={inputClass} />
-        </FieldRow>
-      </div>
-      <CheckRow
-        checked={commentary}
-        onChange={setCommentary}
-        label="Save the evening message as a daily commentary under Reviews/Daily/"
-      />
-      <button
-        type="button"
-        onClick={() => save({ evening_time: eveningTime, bedtime, daily_commentary: commentary })}
-        className={primaryBtnClass}
-      >
-        Save
-      </button>
-      <SaveStatus state={status.state} errorMessage={status.errorMessage} />
-    </Card>
-  )
-}
-
-function ReviewsCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
-  const { status, save } = useSettingsSave(onSaved)
+  const [bedtime, setBedtime] = useState('')
+  const [wake, setWake] = useState('')
   const [weekly, setWeekly] = useState('')
   const [timing, setTiming] = useState('last_evening')
   const [monthlyEvening, setMonthlyEvening] = useState('')
@@ -321,47 +286,172 @@ function ReviewsCard({ data, onSaved }: { data?: Settings; onSaved: () => void }
 
   useEffect(() => {
     if (!data) return
+    setMorning(data.morning_time || '')
+    setWeather(data.weather_enabled)
+    setCheckinStart(data.checkin_start_time || '')
+    setLatest(data.latest_checkin_time || '')
+    setEveningTime(data.evening_time || '')
+    setCommentary(data.daily_commentary)
+    setBedtime(data.bedtime || '')
+    setWake(data.wake_time || '')
     setWeekly(data.weekly_review_time || '')
     setTiming(data.monthly_review_timing || 'last_evening')
     setMonthlyEvening(data.monthly_review_evening_time || '')
     setMonthlyMorning(data.monthly_review_morning_time || '')
   }, [data])
 
+  const time = (value: string, set: (v: string) => void) => (
+    <input type="time" value={value} onChange={(e) => set(e.target.value)} className={inputClass} />
+  )
+
   return (
     <Card>
-      <h2 className="mb-1 text-lg font-semibold">Reviews</h2>
-      <p className="mb-3 text-sm text-text-muted">
-        The weekly review goes out on Sunday; the monthly review either on the evening of the
-        month's last day or on the morning of the 1st (covering the month just ended). Both
-        are saved under Reviews/ in the vault.
+      <h2 className="mb-1 text-lg font-semibold">Schedule</h2>
+      <p className="text-sm text-text-muted">
+        When each part of the day happens, in the timezone above. Every time is independent.
+        Takes effect immediately.
       </p>
-      <FieldRow label="Sunday weekly review time">
-        <input type="time" value={weekly} onChange={(e) => setWeekly(e.target.value)} className={inputClass} />
-      </FieldRow>
-      <FieldRow label="Monthly review">
-        <select value={timing} onChange={(e) => setTiming(e.target.value)} className={inputClass}>
-          <option value="last_evening">Evening of the last day of the month</option>
-          <option value="first_morning">Morning of the 1st</option>
-        </select>
-      </FieldRow>
-      <div className="grid gap-3 md:grid-cols-2">
-        <FieldRow label="Last-day evening time">
-          <input type="time" value={monthlyEvening} onChange={(e) => setMonthlyEvening(e.target.value)} className={inputClass} />
+
+      <ScheduleGroup
+        title="Morning message"
+        note="The day-ahead message: calendar, tasks, and the forecast for today and tomorrow."
+      >
+        <FieldRow label="Send at">{time(morning, setMorning)}</FieldRow>
+        <CheckRow checked={weather} onChange={setWeather} label="Include the weather forecast" />
+      </ScheduleGroup>
+
+      <ScheduleGroup
+        title="Check-ins"
+        note="Short reflection prompts at random times inside this window."
+      >
+        <div className="grid gap-3 md:grid-cols-2">
+          <FieldRow label="Window opens">{time(checkinStart, setCheckinStart)}</FieldRow>
+          <FieldRow label="Latest prompt">{time(latest, setLatest)}</FieldRow>
+        </div>
+      </ScheduleGroup>
+
+      <ScheduleGroup
+        title="Evening message"
+        note="Bedtime, unticked captures and tomorrow's heads-up."
+      >
+        <FieldRow label="Send at">{time(eveningTime, setEveningTime)}</FieldRow>
+        <CheckRow
+          checked={commentary}
+          onChange={setCommentary}
+          label="Save it as a daily commentary under Reviews/Daily/"
+        />
+      </ScheduleGroup>
+
+      <ScheduleGroup title="Bedtime reminder" note="A separate wind-down nudge.">
+        <FieldRow label="Remind at">{time(bedtime, setBedtime)}</FieldRow>
+      </ScheduleGroup>
+
+      <ScheduleGroup
+        title="Day planning"
+        note="Generated schedules start from this time unless you give another."
+      >
+        <FieldRow label="Wake time">{time(wake, setWake)}</FieldRow>
+      </ScheduleGroup>
+
+      <ScheduleGroup
+        title="Weekly review"
+        note="Goes out on Sunday and is saved under Reviews/Weekly/."
+      >
+        <FieldRow label="Send at">{time(weekly, setWeekly)}</FieldRow>
+      </ScheduleGroup>
+
+      <ScheduleGroup
+        title="Monthly review"
+        note="Either on the evening of the month's last day or on the morning of the 1st (covering the month just ended). Saved under Reviews/Monthly/."
+      >
+        <FieldRow label="When">
+          <select value={timing} onChange={(e) => setTiming(e.target.value)} className={inputClass}>
+            <option value="last_evening">Evening of the last day of the month</option>
+            <option value="first_morning">Morning of the 1st</option>
+          </select>
         </FieldRow>
-        <FieldRow label="First-of-month morning time">
-          <input type="time" value={monthlyMorning} onChange={(e) => setMonthlyMorning(e.target.value)} className={inputClass} />
-        </FieldRow>
-      </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <FieldRow label="Last-day evening time">{time(monthlyEvening, setMonthlyEvening)}</FieldRow>
+          <FieldRow label="First-of-month morning time">{time(monthlyMorning, setMonthlyMorning)}</FieldRow>
+        </div>
+      </ScheduleGroup>
+
       <button
         type="button"
         onClick={() =>
           save({
+            morning_time: morning,
+            weather_enabled: weather,
+            checkin_start_time: checkinStart,
+            latest_checkin_time: latest,
+            evening_time: eveningTime,
+            daily_commentary: commentary,
+            bedtime,
+            wake_time: wake,
             weekly_review_time: weekly,
             monthly_review_timing: timing,
             monthly_review_evening_time: monthlyEvening,
             monthly_review_morning_time: monthlyMorning,
           })
         }
+        className={primaryBtnClass}
+      >
+        Save schedule
+      </button>
+      <SaveStatus state={status.state} errorMessage={status.errorMessage} />
+    </Card>
+  )
+}
+
+function PlanningCard({ data, onSaved }: { data?: Settings; onSaved: () => void }) {
+  const { status, save } = useSettingsSave(onSaved)
+  const [templateId, setTemplateId] = useState('')
+  const [chimeId, setChimeId] = useState('')
+
+  const soundsQuery = useQuery({
+    queryKey: ['alert-sounds'],
+    queryFn: async () => {
+      const { data } = await api.GET('/alert-sounds')
+      return data?.alert_sounds ?? []
+    },
+  })
+
+  useEffect(() => {
+    if (!data) return
+    setTemplateId(data.planning_template_note_id || '')
+    setChimeId(data.chime_alert_sound_id || '')
+  }, [data])
+
+  return (
+    <Card>
+      <h2 className="mb-1 text-lg font-semibold">Day planning</h2>
+      <p className="mb-3 text-sm text-text-muted">
+        A new day&apos;s planning note starts from the template note below (blank = empty
+        headings). The chime sound is pinned on the reminders generated at schedule-block
+        boundaries (blank = a random sound).
+      </p>
+      <FieldRow label="Template note id">
+        <input
+          type="text"
+          value={templateId}
+          onChange={(e) => setTemplateId(e.target.value)}
+          placeholder="blank = no template"
+          className={inputClass}
+        />
+      </FieldRow>
+      <FieldRow label="Chime sound">
+        <select value={chimeId} onChange={(e) => setChimeId(e.target.value)} className={inputClass}>
+          <option value="">Random (default)</option>
+          {(soundsQuery.data ?? []).map((sound) => (
+            <option key={sound.id} value={sound.id}>
+              {sound.display_name}
+            </option>
+          ))}
+        </select>
+      </FieldRow>
+      <button
+        type="button"
+        onClick={() => save({ planning_template_note_id: templateId, chime_alert_sound_id: chimeId })}
         className={primaryBtnClass}
       >
         Save

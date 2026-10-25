@@ -79,11 +79,12 @@ from agent.runtime import (
 from agent.scheduler import (
     bedtime_trigger,
     calendar_sync_trigger,
+    checkin_start_trigger,
     evening_trigger,
     monthly_trigger,
+    morning_trigger,
     reschedule_time_jobs,
     scheduler,
-    wake_trigger,
     weekly_trigger,
 )
 from agent.settings import (
@@ -157,6 +158,8 @@ async def lifespan(app: FastAPI):
     # the trigger builders bake the configured times in at add_job() time.
     await asyncio.to_thread(settings_store.init_db)
     apply_persisted(await asyncio.to_thread(settings_store.load_all))
+    # The scheduler is built at import with the default zone; adopt the saved one.
+    scheduler.configure(timezone=settings.zoneinfo())
 
     vault.ensure_vault_dirs()
 
@@ -199,7 +202,7 @@ async def lifespan(app: FastAPI):
 
         scheduler.add_job(
             send_morning_message,
-            trigger=wake_trigger(),
+            trigger=morning_trigger(),
             id="morning_message",
             replace_existing=True,
         )
@@ -265,7 +268,7 @@ async def lifespan(app: FastAPI):
 
         scheduler.add_job(
             start_of_day_setup,
-            trigger=wake_trigger(),
+            trigger=checkin_start_trigger(),
             id="day_start",
             replace_existing=True,
         )
@@ -274,7 +277,7 @@ async def lifespan(app: FastAPI):
         # restarts, same reasoning as the reminders block above — the DB is
         # the source of truth. Expiry timers first, then not-yet-fired
         # one-shots, then a startup catch-up call in case the app was down
-        # through today's wake_time (start_of_day_setup is idempotent).
+        # through today's checkin_start_time (start_of_day_setup is idempotent).
         await asyncio.to_thread(checkins_store.init_db)
         for fired in await asyncio.to_thread(checkins_store.list_fired_awaiting_response):
             expire_at = datetime.fromtimestamp(fired["fired_at"], tz=timezone.utc) + checkin_jobs.CHECKIN_EXPIRY
@@ -625,9 +628,14 @@ class SettingsUpdate(BaseModel):
     # Minutes between calendar reminder-sync polls (jobs/calendar_sync.py).
     # Same rescheduling behavior as evening_time/bedtime, separate job.
     calendar_sync_interval_minutes: int | None = None
-    # "HH:MM" 24-hour local time check-in prompts may start firing (see
-    # jobs/checkin.py, jobs/day_start.py). Same rescheduling behavior as
-    # evening_time/bedtime, separate job.
+    # "HH:MM" 24-hour local time the morning message goes out. Same
+    # rescheduling behavior as evening_time, separate job.
+    morning_time: str | None = None
+    # "HH:MM" 24-hour local time the check-in window opens (see
+    # jobs/checkin.py, jobs/day_start.py). Reschedules the day_start job.
+    checkin_start_time: str | None = None
+    # "HH:MM" 24-hour local time you get up; only the default start of a
+    # generated day schedule (agent/tools/planning.py). No job to reschedule.
     wake_time: str | None = None
     # "HH:MM" 24-hour local time check-in prompts must stop firing by (see
     # jobs/checkin.py) — independent from bedtime, read fresh at
@@ -692,8 +700,10 @@ class SettingsUpdate(BaseModel):
             self.calendar_sync_interval_minutes
         ):
             raise ValueError("calendar_sync_interval_minutes must be between 1 and 1440")
-        if self.wake_time is not None and not is_valid_clock_time(self.wake_time):
-            raise ValueError(f"'{self.wake_time}' is not a valid HH:MM 24-hour time")
+        for name in ("morning_time", "checkin_start_time", "wake_time"):
+            value = getattr(self, name)
+            if value is not None and not is_valid_clock_time(value):
+                raise ValueError(f"'{value}' is not a valid HH:MM 24-hour time")
         if self.latest_checkin_time is not None and not is_valid_clock_time(self.latest_checkin_time):
             raise ValueError(f"'{self.latest_checkin_time}' is not a valid HH:MM 24-hour time")
         if self.device_poll_interval_seconds is not None and not is_valid_poll_interval_seconds(
@@ -724,6 +734,8 @@ class SettingsResponse(BaseModel):
     weather_enabled: bool
     bedtime: str
     calendar_sync_interval_minutes: int
+    morning_time: str
+    checkin_start_time: str
     wake_time: str
     latest_checkin_time: str
     device_poll_interval_seconds: int
@@ -735,6 +747,7 @@ class SettingsResponse(BaseModel):
     max_history_tokens: int
     planning_template_note_id: str
     chime_alert_sound_id: str
+    lmstudio_chat_model: str
     lmstudio_writer_model: str
 
 
@@ -752,6 +765,8 @@ def _current_settings() -> dict:
         "weather_enabled": settings.weather_enabled,
         "bedtime": settings.bedtime,
         "calendar_sync_interval_minutes": settings.calendar_sync_interval_minutes,
+        "morning_time": settings.morning_time,
+        "checkin_start_time": settings.checkin_start_time,
         "wake_time": settings.wake_time,
         "latest_checkin_time": settings.latest_checkin_time,
         "device_poll_interval_seconds": settings.device_poll_interval_seconds,
@@ -764,6 +779,7 @@ def _current_settings() -> dict:
         "max_history_tokens": settings.max_history_tokens,
         "planning_template_note_id": settings.planning_template_note_id,
         "chime_alert_sound_id": settings.chime_alert_sound_id,
+        "lmstudio_chat_model": settings.lmstudio_chat_model,
         "lmstudio_writer_model": settings.lmstudio_writer_model,
     }
 
@@ -825,10 +841,17 @@ async def _apply_settings_update(update: SettingsUpdate) -> None:
     if update.calendar_sync_interval_minutes is not None:
         settings.calendar_sync_interval_minutes = update.calendar_sync_interval_minutes
         changed["calendar_sync_interval_minutes"] = str(update.calendar_sync_interval_minutes)
+    if update.morning_time is not None:
+        settings.morning_time = update.morning_time
+        changed["morning_time"] = update.morning_time
+        reschedule_ids.add("morning_message")
+    if update.checkin_start_time is not None:
+        settings.checkin_start_time = update.checkin_start_time
+        changed["checkin_start_time"] = update.checkin_start_time
+        reschedule_ids.add("day_start")
     if update.wake_time is not None:
         settings.wake_time = update.wake_time
         changed["wake_time"] = update.wake_time
-        reschedule_ids.update(["morning_message", "day_start"])
     if update.latest_checkin_time is not None:
         settings.latest_checkin_time = update.latest_checkin_time
         changed["latest_checkin_time"] = update.latest_checkin_time
@@ -881,7 +904,7 @@ async def update_settings(
     field is also write-through persisted to settings.db
     (utils/settings_store.py) so it survives a restart.
 
-    timezone/evening_time/bedtime/calendar_sync_interval_minutes/wake_time
+    timezone/evening_time/bedtime/calendar_sync_interval_minutes/morning_time/checkin_start_time
     also live-reschedule their APScheduler jobs, since they're registered
     as fixed triggers rather than being read fresh like the other settings.
     latest_checkin_time needs no reschedule — jobs/checkin.py reads it
@@ -898,7 +921,6 @@ async def update_settings(
 
 
 class LlmProviderResponse(BaseModel):
-    provider: str
     model: str | None
     base_url: str | None
 
@@ -906,7 +928,6 @@ class LlmProviderResponse(BaseModel):
 class LmStudioModelsResponse(BaseModel):
     models: list[LmStudioModel]
     management_configured: bool
-    configured_model: str | None
 
 
 @app.get("/debug/lmstudio-models", response_model=LmStudioModelsResponse)
@@ -914,15 +935,13 @@ async def get_lmstudio_models(_: Annotated[None, Depends(auth.require_session_or
     """Every chat-capable model LM Studio currently has downloaded
     (utils/lmstudio_client.py, live, uncached — a local LAN call to
     LMSTUDIO_MANAGEMENT_URL, the same management API surface used for
-    live context-length lookups), plus which model
-    settings.lmstudio_chat_model currently points at. Backs the dashboard's LM Studio Models admin
-    card. Empty models list (management_configured: false) if
+    live context-length lookups). Backs the Settings page's Models card.
+    Empty models list (management_configured: false) if
     LMSTUDIO_MANAGEMENT_URL isn't set."""
     models = await fetch_lmstudio_models()
     return {
         "models": models,
         "management_configured": bool(os.environ.get("LMSTUDIO_MANAGEMENT_URL")),
-        "configured_model": settings.lmstudio_chat_model or None,
     }
 
 
@@ -979,7 +998,7 @@ async def trigger_reminder_now(
 async def trigger_calendar_sync_now(_: Annotated[None, Depends(auth.require_session_or_token)]):
     """
     Manually runs a calendar reminder sync pass immediately, without
-    waiting for the CALENDAR_SYNC_INTERVAL_MINUTES schedule — useful for
+    waiting for the calendar_sync_interval_minutes schedule — useful for
     testing that a manually added/changed/removed calendar event (with a
     native alarm set) picks up correctly.
     """

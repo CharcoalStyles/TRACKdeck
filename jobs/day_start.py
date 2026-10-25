@@ -3,7 +3,7 @@ jobs/day_start.py
 -------------------
 Beginning-of-day setup — the symmetric counterpart to jobs/evening.py's
 end-of-day message. Scheduled (see main.py) via agent/scheduler.py's
-wake_trigger() at settings.wake_time.
+checkin_start_trigger() at settings.checkin_start_time.
 
 Right now this only decides today's mental-health check-in target (3-5,
 randomized, persisted so a restart doesn't reroll it — see jobs/checkin.py)
@@ -28,7 +28,7 @@ async def start_of_day_setup() -> None:
     logger.info("Day plan for today: %d check-in(s) targeted.", target)
 
     # Idempotent — no-ops if today already has a scheduled/fired row, or
-    # we're outside [wake_time, bedtime) right now. Safe to call
+    # we're outside [checkin_start_time, latest_checkin_time) right now. Safe to call
     # unconditionally at startup as a catch-up for "app was down through
-    # wake_time".
+    # checkin_start_time".
     await checkin.schedule_first_of_day(now_local, day_start_utc, day_end_utc, target)

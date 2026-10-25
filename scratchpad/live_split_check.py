@@ -34,7 +34,7 @@ for name in (".models", "static", "frontend"):
 from dotenv import dotenv_values  # noqa: E402
 
 _docker_env = dotenv_values(REPO / ".env.docker")
-for _k in ("LMSTUDIO_OPENAI_URL", "LMSTUDIO_MANAGEMENT_URL", "EMBEDDING_MODEL"):
+for _k in ("LMSTUDIO_OPENAI_URL", "LMSTUDIO_MANAGEMENT_URL"):
     if _docker_env.get(_k):
         os.environ[_k] = _docker_env[_k]
 os.environ["VAULT_PATH"] = str(scratch / "vault")
@@ -49,11 +49,8 @@ from agent import graph as graph_mod  # noqa: E402
 from agent.settings import settings  # noqa: E402
 from utils import writer_log  # noqa: E402
 
-settings.llm_provider = "lmstudio"
 settings.lmstudio_chat_model = args.tool_id
 settings.lmstudio_writer_model = args.writer_id
-settings.tool_router_enabled = False
-settings.tool_suggestion_enabled = False
 writer_log.DB_PATH = str(scratch / "data" / "writer_log.db")
 writer_log.init_db()
 

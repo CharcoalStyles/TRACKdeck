@@ -48,6 +48,14 @@
       "title": "Calendar Sync Interval Minutes",
       "type": "integer"
     },
+    "morning_time": {
+      "title": "Morning Time",
+      "type": "string"
+    },
+    "checkin_start_time": {
+      "title": "Checkin Start Time",
+      "type": "string"
+    },
     "wake_time": {
       "title": "Wake Time",
       "type": "string"
@@ -88,6 +96,10 @@
       "title": "Chime Alert Sound Id",
       "type": "string"
     },
+    "lmstudio_chat_model": {
+      "title": "Lmstudio Chat Model",
+      "type": "string"
+    },
     "lmstudio_writer_model": {
       "title": "Lmstudio Writer Model",
       "type": "string"
@@ -106,6 +118,8 @@
     "weather_enabled",
     "bedtime",
     "calendar_sync_interval_minutes",
+    "morning_time",
+    "checkin_start_time",
     "wake_time",
     "latest_checkin_time",
     "device_poll_interval_seconds",
@@ -116,6 +130,7 @@
     "max_history_tokens",
     "planning_template_note_id",
     "chime_alert_sound_id",
+    "lmstudio_chat_model",
     "lmstudio_writer_model"
   ],
   "title": "SettingsResponse",

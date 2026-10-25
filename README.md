@@ -38,8 +38,8 @@ Radicale (CalDAV) <────────────────────�
 - **Reminders and timers.** "Remind me in 10 minutes", "set a 25 minute timer", "30 minutes before
   my dentist appointment". One-off; a recurring need is a calendar event. Pending reminders survive
   restarts; anything overdue fires immediately.
-- **Check-ins.** Short reflective prompts at random times between `wake_time` and
-  `latest_checkin_time`, answered on the device, by magic link or in the dashboard. Answers are
+- **Check-ins.** Short reflective prompts at random times between `checkin_start_time`
+  and `latest_checkin_time`, answered on the device, by magic link or in the dashboard. Answers are
   stored in the vault.
 - **Day planning.** Give it a list of tasks and the hours you have; it builds schedule blocks
   around your fixed commitments. Ad hoc, run when you want it (the dashboard's Day planning page).
@@ -54,8 +54,8 @@ All context for these is gathered by ordinary code that reads vault files by dat
 
 | Message | When | Contents |
 |---|---|---|
-| Morning | `wake_time` | Today's calendar and reminders, today's and tomorrow's weather, yesterday's unticked captures, a heads-up on tomorrow |
-| Evening | `evening_time` | Bedtime, today's check-in prompts and your answers verbatim, a short reading across the last few days of answers, unticked captures, tomorrow. It deliberately does not recap the day: the assistant cannot know what you did, so it would invent |
+| Morning | `morning_time` | Today's calendar and reminders, today's and tomorrow's weather, yesterday's unticked captures, a heads-up on tomorrow |
+| Evening | `evening_time` | Bedtime, unticked captures, tomorrow. Built by code with no model call. It deliberately does not recap the day: the assistant cannot know what you did, so it would invent |
 | Weekly review | Sunday, `weekly_review_time` | What the week held, what stayed open, a couple of things to decide. A pattern counts only if it shows on 3 or more separate days |
 | Monthly review | last evening or first morning (`monthly_review_timing`) | Built from the month's weekly reviews and daily commentary |
 
@@ -166,7 +166,7 @@ minutes. `GET /debug/device-sync` and `GET /debug/device-state` show the payload
 
 Upload audio on the Alert sounds page (`/admin/alert-sounds`). Files are transcoded to 16 kHz
 16-bit mono WAV and catalogued by hash; the device picks one at random when nudging about a
-reminder. A chime sound can be assigned in Settings (`chime_alert_sound_id`).
+reminder. The chime sound used by day-planning boundary reminders is chosen on the Settings page.
 
 ## Calendar
 
@@ -193,8 +193,8 @@ A React and TypeScript single-page app, served by FastAPI from its built `dist/`
 - **Captures** — all captures by day, with voice/dashboard badges, tick, edit, delete and convert
 - **Chat** — a deliberately small chat page
 - **Day planning**, **Reminders**, **Reflection**
-- **Settings** — every setting listed below, plus models by mode
-- **Admin** — Testing (trigger jobs, device payload and telemetry), Models, Check-ins, Alert sounds,
+- **Settings** — the settings listed below
+- **Admin** — Testing (trigger jobs, device payload and telemetry), Check-ins, Alert sounds,
   Errors, Thread debug
 
 `static/checkin.html` is the one page outside the SPA: the magic-link check-in page reached from a
@@ -207,8 +207,9 @@ loaded at startup. Job times reschedule immediately when saved.
 
 | Group | Settings |
 |---|---|
-| Day | `default_location`, `timezone`, `wake_time`, `bedtime`, `latest_checkin_time` |
-| Messages | `evening_time`, `weekly_review_time`, `monthly_review_timing` (`last_evening` or `first_morning`), `monthly_review_evening_time`, `monthly_review_morning_time`, `daily_commentary`, `weather_enabled`, `email_to` |
+| Day | `default_location`, `timezone`, `wake_time` (default start of a generated day schedule) |
+| Times | `morning_time`, `checkin_start_time`, `latest_checkin_time`, `evening_time`, `bedtime`, `weekly_review_time`, `monthly_review_*` (all on one Settings card, grouped by function) |
+| Messages | `monthly_review_timing` (`last_evening` or `first_morning`), `daily_commentary`, `weather_enabled`, `email_to` |
 | Notifications | `gotify_url`, `gotify_token` (write-only), `public_base_url` |
 | Sync | `calendar_sync_interval_minutes`, `device_poll_interval_seconds` |
 | Models | `lmstudio_chat_model`, `lmstudio_writer_model`, `max_history_tokens` |

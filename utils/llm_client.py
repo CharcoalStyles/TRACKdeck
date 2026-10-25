@@ -63,7 +63,6 @@ def describe_chat_llm() -> dict:
     """Model and base_url get_chat_llm() builds right now, for the dashboard's
     Testing page. No credentials included."""
     return {
-        "provider": "lmstudio",
         "model": settings.lmstudio_chat_model or None,
         "base_url": os.environ.get("LMSTUDIO_OPENAI_URL"),
     }

@@ -93,24 +93,6 @@ def render_days(first: date, last: date, *, per_day_chars: int = 1200, total_cha
     return text if len(text) <= total_chars else text[: total_chars - 3].rstrip() + "..."
 
 
-def render_checkin_answers(first: date, last: date) -> str:
-    """The user's check-in answers for first..last, oldest first, verbatim
-    (prompt and answer, unclipped). Days or check-ins without an answer are
-    left out."""
-    blocks = []
-    day = first
-    while day <= last:
-        rows = []
-        for e in checkin_log.read_entries(day.isoformat()):
-            if e["answer"]:
-                answer = "\n".join(f"  {line}" for line in e["answer"].strip().splitlines())
-                rows.append(f'- {e["time"]} Prompt: {e["prompt"]}\n  Answer:\n{answer}')
-        if rows:
-            blocks.append(f"[{day.strftime('%A %d %B')}]\n" + "\n".join(rows))
-        day += timedelta(days=1)
-    return "\n\n".join(blocks)
-
-
 def leftover_captures(day: date) -> list[dict]:
     return [c for c in daily_notes.read_captures(day.isoformat()) if not c["done"]]
 

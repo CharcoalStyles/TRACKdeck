@@ -79,3 +79,34 @@ def test_update_applies_persists_and_reschedules(settings_env, monkeypatch):
     apply_persisted(stored)
     assert settings.weekly_review_time == "18:30"
     assert settings.daily_commentary is False
+
+
+def test_morning_checkin_start_and_wake_time_are_independent(settings_env, monkeypatch):
+    import main
+
+    for name in ("wake_time", "morning_time", "checkin_start_time"):
+        monkeypatch.setattr(settings, name, getattr(settings, name))
+    rescheduled = []
+    monkeypatch.setattr(main, "reschedule_time_jobs", lambda *ids: rescheduled.append(set(ids)))
+
+    asyncio.run(main._apply_settings_update(main.SettingsUpdate(checkin_start_time="09:30")))
+    assert rescheduled == [{"day_start"}]
+    assert settings.morning_time != "09:30"
+
+    asyncio.run(main._apply_settings_update(main.SettingsUpdate(morning_time="06:45", wake_time="06:00")))
+    assert rescheduled[1] == {"morning_message"}
+    assert (settings.morning_time, settings.checkin_start_time, settings.wake_time) == ("06:45", "09:30", "06:00")
+
+    with pytest.raises(ValueError):
+        main.SettingsUpdate(checkin_start_time="25:00")
+
+
+def test_split_times_inherit_wake_time_until_saved(monkeypatch):
+    for name in ("wake_time", "morning_time", "checkin_start_time"):
+        monkeypatch.setattr(settings, name, getattr(settings, name))
+
+    apply_persisted({"wake_time": "06:15"})
+    assert (settings.morning_time, settings.checkin_start_time) == ("06:15", "06:15")
+
+    apply_persisted({"wake_time": "06:15", "morning_time": "07:30", "checkin_start_time": "10:00"})
+    assert (settings.morning_time, settings.checkin_start_time) == ("07:30", "10:00")

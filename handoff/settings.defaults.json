@@ -11,6 +11,8 @@
   "weather_enabled": true,
   "bedtime": "21:20",
   "calendar_sync_interval_minutes": 30,
+  "morning_time": "07:00",
+  "checkin_start_time": "07:00",
   "wake_time": "07:00",
   "latest_checkin_time": "21:20",
   "device_poll_interval_seconds": 300,
@@ -21,5 +23,6 @@
   "max_history_tokens": 6000,
   "planning_template_note_id": "",
   "chime_alert_sound_id": "",
+  "lmstudio_chat_model": "liquid/lfm2.5-1.2b",
   "lmstudio_writer_model": ""
 }
