@@ -273,6 +273,7 @@ function ScheduleCard({ data, onSaved }: { data?: Settings; onSaved: () => void 
   const { status, save } = useSettingsSave(onSaved)
   const [morning, setMorning] = useState('')
   const [weather, setWeather] = useState(true)
+  const [podcast, setPodcast] = useState(true)
   const [checkinStart, setCheckinStart] = useState('')
   const [latest, setLatest] = useState('')
   const [eveningTime, setEveningTime] = useState('')
@@ -288,6 +289,7 @@ function ScheduleCard({ data, onSaved }: { data?: Settings; onSaved: () => void 
     if (!data) return
     setMorning(data.morning_time || '')
     setWeather(data.weather_enabled)
+    setPodcast(data.podcast_enabled)
     setCheckinStart(data.checkin_start_time || '')
     setLatest(data.latest_checkin_time || '')
     setEveningTime(data.evening_time || '')
@@ -318,6 +320,11 @@ function ScheduleCard({ data, onSaved }: { data?: Settings; onSaved: () => void 
       >
         <FieldRow label="Send at">{time(morning, setMorning)}</FieldRow>
         <CheckRow checked={weather} onChange={setWeather} label="Include the weather forecast" />
+        <CheckRow
+          checked={podcast}
+          onChange={setPodcast}
+          label="Make the morning podcast (starts 25 minutes before, so the message can link to it)"
+        />
       </ScheduleGroup>
 
       <ScheduleGroup
@@ -382,6 +389,7 @@ function ScheduleCard({ data, onSaved }: { data?: Settings; onSaved: () => void 
           save({
             morning_time: morning,
             weather_enabled: weather,
+            podcast_enabled: podcast,
             checkin_start_time: checkinStart,
             latest_checkin_time: latest,
             evening_time: eveningTime,

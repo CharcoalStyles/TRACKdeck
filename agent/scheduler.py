@@ -8,6 +8,7 @@ up importing each other.
 
 Jobs currently registered against this scheduler (see main.py's lifespan):
   - "morning_message" — jobs/morning.py, cron via morning_trigger()
+  - "morning_podcast" — jobs/podcast.py, cron via podcast_trigger()
   - "evening_message" — jobs/evening.py, cron via evening_trigger()
   - "weekly_review" — jobs/reviews.py, Sundays via weekly_trigger()
   - "monthly_review" — jobs/reviews.py, last evening or first morning via monthly_trigger()
@@ -66,6 +67,15 @@ def morning_trigger() -> CronTrigger:
     return CronTrigger(hour=hour, minute=minute, timezone=settings.zoneinfo())
 
 
+def podcast_trigger() -> CronTrigger:
+    """Fires PODCAST_LEAD_MINUTES before morning_time (never across midnight)."""
+    from jobs.podcast import PODCAST_LEAD_MINUTES
+
+    hour, minute = (int(p) for p in settings.morning_time.split(":"))
+    total = max(0, hour * 60 + minute - PODCAST_LEAD_MINUTES)
+    return CronTrigger(hour=total // 60, minute=total % 60, timezone=settings.zoneinfo())
+
+
 def checkin_start_trigger() -> CronTrigger:
     hour, minute = (int(p) for p in settings.checkin_start_time.split(":"))
     return CronTrigger(hour=hour, minute=minute, timezone=settings.zoneinfo())
@@ -73,6 +83,7 @@ def checkin_start_trigger() -> CronTrigger:
 
 _TIME_JOB_TRIGGERS = {
     "morning_message": morning_trigger,
+    "morning_podcast": podcast_trigger,
     "evening_message": evening_trigger,
     "weekly_review": weekly_trigger,
     "monthly_review": monthly_trigger,

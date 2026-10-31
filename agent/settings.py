@@ -177,6 +177,11 @@ class Settings:
     # Include the today+tomorrow forecast in the morning message.
     weather_enabled: bool = True
 
+    # Make the morning podcast (jobs/podcast.py): runs PODCAST_LEAD_MINUTES
+    # before the morning message so that message can link to it. No env var,
+    # same reasoning as default_location above.
+    podcast_enabled: bool = True
+
     # "HH:MM" 24-hour local time the bedtime reminder push fires (see
     # jobs/bedtime.py) — a distinct nudge from the evening message, timed close to
     # it but not the same trigger. Same rescheduling/validation pattern as
@@ -349,6 +354,8 @@ def apply_persisted(values: dict[str, str]) -> None:
             setattr(settings, name, values[name])
     if "daily_commentary" in values:
         settings.daily_commentary = values["daily_commentary"] == "1"
+    if "podcast_enabled" in values:
+        settings.podcast_enabled = values["podcast_enabled"] == "1"
     if "weather_enabled" in values:
         settings.weather_enabled = values["weather_enabled"] == "1"
     if "bedtime" in values:

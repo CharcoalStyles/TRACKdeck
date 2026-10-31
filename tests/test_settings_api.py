@@ -94,7 +94,7 @@ def test_morning_checkin_start_and_wake_time_are_independent(settings_env, monke
     assert settings.morning_time != "09:30"
 
     asyncio.run(main._apply_settings_update(main.SettingsUpdate(morning_time="06:45", wake_time="06:00")))
-    assert rescheduled[1] == {"morning_message"}
+    assert rescheduled[1] == {"morning_message", "morning_podcast"}
     assert (settings.morning_time, settings.checkin_start_time, settings.wake_time) == ("06:45", "09:30", "06:00")
 
     with pytest.raises(ValueError):

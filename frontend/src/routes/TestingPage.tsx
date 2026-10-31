@@ -130,6 +130,14 @@ export default function TestingPage() {
         successText="Done."
       />
       <TriggerCard
+        title="Morning Podcast"
+        description="Starts today's podcast in the background (it takes a few minutes; the Podcast page shows when it is ready). Uses the writer model and the speech voices, and re-gathers the news."
+        path="/debug/podcast"
+        buttonLabel="Make the podcast now"
+        pendingText="Starting..."
+        successText="Started — see the Podcast page."
+      />
+      <TriggerCard
         title="Evening Message"
         description="Fires the evening message immediately: a real push (and email if set), the daily commentary file if that setting is on, and the nightly thread sweep."
         path="/debug/evening"

@@ -35,13 +35,15 @@ def write(prompt: str, temperature: float = 0.7) -> str:
     return text
 
 
-def deliver(title: str, text: str, priority: int, *, push_text: str | None = None) -> None:
+def deliver(
+    title: str, text: str, priority: int, *, push_text: str | None = None, click_url: str | None = None
+) -> None:
     """Gotify push (push_text if given, else text) and, when email_to is set,
     the full text by email. Blocking — run via asyncio.to_thread. Both
     channels are always attempted; any failure is raised afterwards so the
     caller's error notification still fires."""
     errors: list[str] = []
-    send_gotify(title, push_text or text, priority)
+    send_gotify(title, push_text or text, priority, *([click_url] if click_url else []))
     if mailer.email_wanted():
         missing = mailer.missing_smtp_env()
         if missing:

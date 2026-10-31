@@ -83,6 +83,7 @@ from agent.scheduler import (
     evening_trigger,
     monthly_trigger,
     morning_trigger,
+    podcast_trigger,
     reschedule_time_jobs,
     scheduler,
     weekly_trigger,
@@ -108,6 +109,7 @@ from jobs.day_start import start_of_day_setup
 from jobs.device_sync import build_sync_payload
 from jobs.evening import send_evening_message
 from jobs.morning import send_morning_message
+from jobs.podcast import make_morning_podcast
 from jobs.reviews import send_monthly_review, send_weekly_review
 from jobs.reminders import create_test_reminder, fire_reminder
 
@@ -138,6 +140,7 @@ from routes.reflection import router as reflection_router
 from routes.day_planning import router as day_planning_router
 from routes.task_library import router as task_library_router
 from routes.captures import router as captures_router
+from routes.podcast import router as podcast_router
 from routes.today import router as today_router
 from routes.calendar_events import router as calendar_events_router
 
@@ -200,6 +203,12 @@ async def lifespan(app: FastAPI):
         if restored:
             logger.info("Rehydrated %d thread(s) from memory.db after restart.", restored)
 
+        scheduler.add_job(
+            make_morning_podcast,
+            trigger=podcast_trigger(),
+            id="morning_podcast",
+            replace_existing=True,
+        )
         scheduler.add_job(
             send_morning_message,
             trigger=morning_trigger(),
@@ -365,6 +374,7 @@ app.include_router(reflection_router)  # /reflection
 app.include_router(day_planning_router)  # /day-plans/run
 app.include_router(task_library_router)  # /task-library
 app.include_router(captures_router)  # /captures
+app.include_router(podcast_router)  # /podcasts
 app.include_router(today_router)  # /today
 app.include_router(calendar_events_router)  # /calendar-events
 
@@ -622,6 +632,7 @@ class SettingsUpdate(BaseModel):
     daily_commentary: bool | None = None
     # Include the forecast in the morning message.
     weather_enabled: bool | None = None
+    podcast_enabled: bool | None = None
     # "HH:MM" 24-hour local time the bedtime reminder fires. Same
     # rescheduling behavior as evening_time, separate job.
     bedtime: str | None = None
@@ -732,6 +743,7 @@ class SettingsResponse(BaseModel):
     email_to: str
     daily_commentary: bool
     weather_enabled: bool
+    podcast_enabled: bool
     bedtime: str
     calendar_sync_interval_minutes: int
     morning_time: str
@@ -763,6 +775,7 @@ def _current_settings() -> dict:
         "email_to": settings.email_to,
         "daily_commentary": settings.daily_commentary,
         "weather_enabled": settings.weather_enabled,
+        "podcast_enabled": settings.podcast_enabled,
         "bedtime": settings.bedtime,
         "calendar_sync_interval_minutes": settings.calendar_sync_interval_minutes,
         "morning_time": settings.morning_time,
@@ -804,7 +817,7 @@ async def _apply_settings_update(update: SettingsUpdate) -> None:
     reschedule_ids: set[str] = set()
     if update.timezone is not None:
         reschedule_ids.update(
-            ["morning_message", "evening_message", "weekly_review", "monthly_review",
+            ["morning_message", "morning_podcast", "evening_message", "weekly_review", "monthly_review",
              "bedtime_reminder", "day_start"]
         )
     reschedule_calendar_sync = update.calendar_sync_interval_minutes is not None
@@ -831,6 +844,9 @@ async def _apply_settings_update(update: SettingsUpdate) -> None:
     if update.daily_commentary is not None:
         settings.daily_commentary = update.daily_commentary
         changed["daily_commentary"] = "1" if update.daily_commentary else "0"
+    if update.podcast_enabled is not None:
+        settings.podcast_enabled = update.podcast_enabled
+        changed["podcast_enabled"] = "1" if update.podcast_enabled else "0"
     if update.weather_enabled is not None:
         settings.weather_enabled = update.weather_enabled
         changed["weather_enabled"] = "1" if update.weather_enabled else "0"
@@ -844,7 +860,7 @@ async def _apply_settings_update(update: SettingsUpdate) -> None:
     if update.morning_time is not None:
         settings.morning_time = update.morning_time
         changed["morning_time"] = update.morning_time
-        reschedule_ids.add("morning_message")
+        reschedule_ids.update(["morning_message", "morning_podcast"])
     if update.checkin_start_time is not None:
         settings.checkin_start_time = update.checkin_start_time
         changed["checkin_start_time"] = update.checkin_start_time
@@ -950,6 +966,14 @@ async def trigger_morning_now(_: Annotated[None, Depends(auth.require_session_or
     """Fires the morning day-ahead message now (a real Gotify push)."""
     await send_morning_message()
     return {"status": "sent"}
+
+
+@app.post("/debug/podcast")
+async def trigger_podcast_now(_: Annotated[None, Depends(auth.require_session_or_token)]):
+    """Starts the morning podcast now, in the background (it takes minutes)."""
+    from routes.podcast import run_podcast_now
+
+    return await run_podcast_now(None)
 
 
 @app.post("/debug/evening")

@@ -98,6 +98,7 @@ Deleting a database must lose only transient state, never content.
 | Check-in answers | `Check-ins/YYYY-MM-DD.md`, one file per day (`utils/checkin_log.py`) |
 | Reviews | `Reviews/Daily/`, `Reviews/Weekly/`, `Reviews/Monthly/` (`utils/reviews.py`) |
 | Planning notes | `planning-YYYY-MM-DD.md` at the vault root (`utils/vault.py`, `agent/tools/planning.py`) |
+| Morning podcast | `Podcasts/YYYY-MM-DD.mp3` + `.md` script (`jobs/podcast.py`), newest 30 kept |
 | What happened and from where | `data/logs/events-YYYY-MM.jsonl` (`utils/event_log.py`) |
 | Calendar | CalDAV (Radicale) |
 
@@ -182,12 +183,23 @@ Don't loosen these to "let the model decide":
 ## Scheduled jobs
 
 All on the shared APScheduler (`agent/scheduler.py`); times come from settings and reschedule live
-when saved. Job ids: `morning_message`, `evening_message`, `weekly_review`, `monthly_review`,
+when saved. Job ids: `morning_message`, `morning_podcast`, `evening_message`, `weekly_review`, `monthly_review`,
 `bedtime_reminder`, `day_start`, `calendar_reminder_sync`, plus per-item `reminder:<id>`,
 `checkin:<id>`, `checkin_expire:<id>`.
 
 - **Morning** (`jobs/morning.py`, `morning_time`) — day-ahead: today's calendar and reminders,
   today's and tomorrow's weather, yesterday's unticked captures, a heads-up on tomorrow.
+- **Morning podcast** (`jobs/podcast.py`, runs `PODCAST_LEAD_MINUTES` = 25 before `morning_time`,
+  `podcast_enabled`) — a ~5 minute two-host chat. `utils/morning_context.py` gathers one snapshot
+  per day (calendar without the day plan's sprint blocks, reminders, tomorrow, forecast plus
+  sunrise/UV/wind, open captures, Canberra headlines from the RiotACT and Canberra Times RSS feeds
+  via `utils/news.py`, a Wikipedia "on this day" item); the writer model scripts it as
+  `HOST:`/`CO:` lines (only non-empty sections go in the prompt), `utils/tts.py` speaks each line
+  with Piper (voice pairs rotate by day, `VOICE_PAIRS`; a missing voice falls back to lessac) and
+  ffmpeg encodes the MP3. The morning message reads the same snapshot and adds the Canberra
+  headlines with links and a link to `/podcast` when the episode exists; the podcast never waits on
+  the message. Dashboard: `/podcast` page, `/podcasts*` API, "Make the podcast now" on Testing.
+  Piper voices come from `setup.sh` into `.models/`. Still two models: the podcast uses the writer.
 - **Evening** (`jobs/evening.py`, `evening_time`) — not a recap (the assistant can't know what you
   did). Built entirely by code, no model call: bedtime, unticked captures, tomorrow. Check-in
   answers are deliberately not in it. Optionally saved to `Reviews/Daily/` (`daily_commentary`, default on). Also sweeps
@@ -255,9 +267,9 @@ agent/
   scheduler.py             Shared APScheduler + cron trigger builders
   checkin_prompts.py       Reflection prompt bank
   tools/                   calendar, alerts, planning, weather, general, jot, checkin, all_tools
-jobs/                      morning, evening, reviews, bedtime, reminders, calendar_sync, checkin,
+jobs/                      morning, podcast, evening, reviews, bedtime, reminders, calendar_sync, checkin,
                            day_start, device_sync, common (deliver/write helpers)
-utils/                     vault, daily_notes, checkin_log, reviews, day_context, event_log,
+utils/                     vault, daily_notes, morning_context, news, tts, checkin_log, reviews, day_context, event_log,
                            planning, caldav_client, datetime, *_store.py (sqlite3), notify, mailer,
                            llm_client, lmstudio_client, transcription, writer_log
 routes/                    today, captures, calendar_events, day_planning, task_library,

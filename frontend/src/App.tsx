@@ -13,6 +13,7 @@ import ErrorsPage from './routes/ErrorsPage'
 import ThreadDebugPage from './routes/ThreadDebugPage'
 import TestingPage from './routes/TestingPage'
 import ReflectionPage from './routes/ReflectionPage'
+import PodcastPage from './routes/PodcastPage'
 import DayPlanningPage from './routes/DayPlanningPage'
 
 export default function App() {
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="/admin/errors" element={<ErrorsPage />} />
           <Route path="/admin/thread-debug" element={<ThreadDebugPage />} />
           <Route path="/admin/testing" element={<TestingPage />} />
+          <Route path="/podcast" element={<PodcastPage />} />
           <Route path="/reflection" element={<ReflectionPage />} />
           <Route path="/day-planning" element={<DayPlanningPage />} />
         </Route>

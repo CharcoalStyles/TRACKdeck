@@ -303,7 +303,9 @@ export interface paths {
         /**
          * List Captures
          * @description Captures for today and the previous days-1 days, newest day first;
-         *     days without captures are left out (today is always present).
+         *     days without captures are left out (today is always present). Older days
+         *     that still hold unticked captures are appended too: those roll forward
+         *     until done.
          */
         get: operations["list_captures_captures_get"];
         put?: never;
@@ -348,6 +350,95 @@ export interface paths {
          *     then tick it off. Nothing is created if the time is rejected.
          */
         post: operations["convert_capture_captures__date_str___capture_id__convert_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/podcasts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Podcasts */
+        get: operations["list_podcasts_podcasts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/podcasts/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Podcast Now
+         * @description Starts today's episode in the background (it takes minutes) and
+         *     returns at once; poll GET /podcasts for `running`.
+         */
+        post: operations["run_podcast_now_podcasts_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/podcasts/voice-samples.mp3": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Voice Samples */
+        get: operations["get_voice_samples_podcasts_voice_samples_mp3_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/podcasts/{date_str}.mp3": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Podcast Audio */
+        get: operations["get_podcast_audio_podcasts__date_str__mp3_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/podcasts/{date_str}/script": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Podcast Script */
+        get: operations["get_podcast_script_podcasts__date_str__script_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -674,6 +765,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/debug/podcast": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trigger Podcast Now
+         * @description Starts the morning podcast now, in the background (it takes minutes).
+         */
+        post: operations["trigger_podcast_now_debug_podcast_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/debug/evening": {
         parameters: {
             query?: never;
@@ -789,7 +900,7 @@ export interface paths {
         /**
          * Trigger Calendar Sync Now
          * @description Manually runs a calendar reminder sync pass immediately, without
-         *     waiting for the CALENDAR_SYNC_INTERVAL_MINUTES schedule — useful for
+         *     waiting for the calendar_sync_interval_minutes schedule — useful for
          *     testing that a manually added/changed/removed calendar event (with a
          *     native alarm set) picks up correctly.
          */
@@ -1563,6 +1674,13 @@ export interface components {
             /** Reset Reason */
             reset_reason?: string | null;
         };
+        /** EpisodeInfo */
+        EpisodeInfo: {
+            /** Date */
+            date: string;
+            /** Has Script */
+            has_script: boolean;
+        };
         /** FixedBlockInput */
         FixedBlockInput: {
             /** Name */
@@ -1613,6 +1731,20 @@ export interface components {
             thread_id: string;
             /** Keyword */
             keyword: string;
+        };
+        /** PodcastList */
+        PodcastList: {
+            /** Episodes */
+            episodes: components["schemas"]["EpisodeInfo"][];
+            /** Running */
+            running: boolean;
+            /**
+             * Has Samples
+             * @default false
+             */
+            has_samples: boolean;
+            /** Error */
+            error?: string | null;
         };
         /** ReflectionHistoryItem */
         ReflectionHistoryItem: {
@@ -1689,6 +1821,18 @@ export interface components {
             /** Reminders */
             reminders: components["schemas"]["Reminder"][];
         };
+        /** RunResponse */
+        RunResponse: {
+            /** Status */
+            status: string;
+        };
+        /** ScriptResponse */
+        ScriptResponse: {
+            /** Date */
+            date: string;
+            /** Script */
+            script: string;
+        };
         /** SettingsResponse */
         SettingsResponse: {
             /** Default Location */
@@ -1711,6 +1855,8 @@ export interface components {
             daily_commentary: boolean;
             /** Weather Enabled */
             weather_enabled: boolean;
+            /** Podcast Enabled */
+            podcast_enabled: boolean;
             /** Bedtime */
             bedtime: string;
             /** Calendar Sync Interval Minutes */
@@ -1766,6 +1912,8 @@ export interface components {
             daily_commentary?: boolean | null;
             /** Weather Enabled */
             weather_enabled?: boolean | null;
+            /** Podcast Enabled */
+            podcast_enabled?: boolean | null;
             /** Bedtime */
             bedtime?: string | null;
             /** Calendar Sync Interval Minutes */
@@ -3038,6 +3186,165 @@ export interface operations {
             };
         };
     };
+    list_podcasts_podcasts_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PodcastList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_podcast_now_podcasts_run_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_voice_samples_podcasts_voice_samples_mp3_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_podcast_audio_podcasts__date_str__mp3_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path: {
+                date_str: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_podcast_script_podcasts__date_str__script_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path: {
+                date_str: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScriptResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     today_today_get: {
         parameters: {
             query?: {
@@ -3574,6 +3881,37 @@ export interface operations {
         };
     };
     trigger_morning_now_debug_morning_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                auth?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trigger_podcast_now_debug_podcast_post: {
         parameters: {
             query?: never;
             header?: {

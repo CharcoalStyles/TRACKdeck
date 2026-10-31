@@ -9,7 +9,7 @@ from agent import scheduler
 from agent.settings import settings
 from jobs import common, evening, morning
 from jobs import reviews as review_jobs
-from utils import checkin_log, daily_notes, day_context, event_log, reviews
+from utils import checkin_log, daily_notes, day_context, event_log, morning_context, reviews
 
 
 @pytest.fixture
@@ -23,6 +23,11 @@ def env(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "public_base_url", "")
     monkeypatch.setattr(settings, "email_to", "")
     monkeypatch.setattr(settings, "monthly_review_timing", "last_evening")
+    # No network, and a fresh snapshot for every test.
+    monkeypatch.setattr(morning_context.news, "fetch_headlines", lambda: [])
+    monkeypatch.setattr(morning_context.news, "fetch_on_this_day", lambda day: [])
+    monkeypatch.setattr(morning_context, "render_weather_extras", lambda day: "")
+    morning_context._cache.clear()
     return tmp_path
 
 
@@ -34,7 +39,8 @@ def _at(hour, minute=0, day=DAY):
 
 
 def _stub_context(monkeypatch):
-    monkeypatch.setattr(day_context, "render_calendar", lambda a, b: f"CAL {a}..{b}")
+    monkeypatch.setattr(day_context, "render_calendar", lambda a, b, **kw: f"CAL {a}..{b}")
+    monkeypatch.setattr(day_context, "render_plan_window", lambda d: "")
     monkeypatch.setattr(day_context, "render_reminders", lambda a, b: f"REM {a}..{b}")
     monkeypatch.setattr(day_context, "render_forecast", lambda a, b: f"FC {a}..{b}")
 
@@ -211,7 +217,7 @@ def test_morning_prompt_carries_today_tomorrow_and_leftovers(env, monkeypatch):
 
 
 def test_morning_prompt_marks_empty_sections_none(env, monkeypatch):
-    monkeypatch.setattr(day_context, "render_calendar", lambda a, b: "")
+    monkeypatch.setattr(day_context, "render_calendar", lambda a, b, **kw: "")
     monkeypatch.setattr(day_context, "render_reminders", lambda a, b: "")
     monkeypatch.setattr(day_context, "render_forecast", lambda a, b: "")
     prompt = morning.build_prompt(DAY)
@@ -232,6 +238,7 @@ def test_morning_message_lists_every_open_capture(env, monkeypatch):
     assert "Still open" not in morning.compose_morning_message(DAY)
     daily_notes.append_capture(_at(9, day=date(2026, 10, 12)), "print the dice holder")
     daily_notes.append_capture(_at(9, day=date(2026, 10, 21)), "renew the permit")
+    morning_context._cache.clear()  # the snapshot is per day; start a fresh one
     text = morning.compose_morning_message(DAY)
     assert text.startswith("Good morning text\n\nStill open (unticked captures):\n")
     assert text.splitlines()[-2:] == ["- Mon 12 Oct 09:00 print the dice holder", "- Wed 21 Oct 09:00 renew the permit"]
@@ -271,7 +278,8 @@ def test_evening_message_structure_and_order(env, monkeypatch):
 
 
 def test_weekly_prompt_covers_the_iso_week(env, monkeypatch):
-    monkeypatch.setattr(day_context, "render_calendar", lambda a, b: f"CAL {a}..{b}")
+    monkeypatch.setattr(day_context, "render_calendar", lambda a, b, **kw: f"CAL {a}..{b}")
+    monkeypatch.setattr(day_context, "render_plan_window", lambda d: "")
     daily_notes.append_capture(_at(9), "midweek thing")
     reviews.write_review("weekly", "2026-W42", "t", "Last week was calm.")
     key, prompt = review_jobs.build_weekly_prompt(date(2026, 10, 25))  # the Sunday
@@ -311,7 +319,7 @@ def test_month_and_week_bounds(monkeypatch):
 
 
 def test_compose_weekly_and_monthly_write_files(env, monkeypatch):
-    monkeypatch.setattr(day_context, "render_calendar", lambda a, b: "")
+    monkeypatch.setattr(day_context, "render_calendar", lambda a, b, **kw: "")
     monkeypatch.setattr(review_jobs, "write", lambda p, **k: "Review text.")
     path, text = review_jobs.compose_weekly_review(date(2026, 10, 25))
     assert text == "Review text." and path.name == "2026-W43.md"
@@ -401,7 +409,7 @@ def test_weekly_push_is_clipped(env, monkeypatch):
     monkeypatch.setattr(settings, "email_to", "me@example.com")
     for name in common.mailer._REQUIRED_ENV:
         monkeypatch.setenv(name, "x")
-    monkeypatch.setattr(day_context, "render_calendar", lambda a, b: "")
+    monkeypatch.setattr(day_context, "render_calendar", lambda a, b, **kw: "")
     monkeypatch.setattr(review_jobs, "write", lambda p, **k: "word " * 400)
     asyncio.run(review_jobs.send_weekly_review())
     assert sent[0][0] == "Weekly review" and len(sent[0][1]) <= review_jobs.PUSH_CHARS

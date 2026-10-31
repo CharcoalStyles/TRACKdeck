@@ -103,6 +103,21 @@ else
     fi
 fi
 
+# Extra Piper voices for the morning podcast (jobs/podcast.py's VOICE_PAIRS).
+# A missing one is not fatal: utils/tts.py falls back to the lessac voice.
+for entry in "en_GB/alan" "en_GB/jenny_dioco" "en_US/ryan" "en_US/amy"; do
+    lang="${entry%%/*}"; voice="${entry##*/}"
+    name="${lang}-${voice}-medium"
+    base="https://huggingface.co/rhasspy/piper-voices/resolve/main/en/${lang}/${voice}/medium"
+    if [[ -f "${MODEL_DIR}/${name}.onnx" && -f "${MODEL_DIR}/${name}.onnx.json" ]]; then
+        echo "  OK: podcast voice $name already present."
+    else
+        echo "  Downloading podcast voice $name..."
+        curl -fL -o "${MODEL_DIR}/${name}.onnx" "${base}/${name}.onnx?download=true" || echo "  WARN: could not download $name"
+        curl -fL -o "${MODEL_DIR}/${name}.onnx.json" "${base}/${name}.onnx.json?download=true" || true
+    fi
+done
+
 echo
 echo "== 3. memory.db / reminders.db / checkins.db / settings.db / alert_sounds.db /"
 echo "      device_errors.db / device_state.db /"

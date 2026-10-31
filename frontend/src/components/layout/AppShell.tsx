@@ -79,6 +79,9 @@ const MainNav = () => {
       <NavLink to="/chat" className={navLinkClass}>
         Chat
       </NavLink>
+      <NavLink to="/podcast" className={navLinkClass}>
+        Podcast
+      </NavLink>
       <NavLink to="/day-planning" className={navLinkClass}>
         Plan Day
       </NavLink>

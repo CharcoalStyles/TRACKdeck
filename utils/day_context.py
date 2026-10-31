@@ -125,9 +125,10 @@ def _parse_ics(value: str | None) -> datetime | None:
         return None
 
 
-def render_calendar(first: date, last: date) -> str:
+def render_calendar(first: date, last: date, *, generated: bool = True) -> str:
     """Calendar events from the start of `first` to the end of `last`, in
-    local time, soonest first. Empty string when none or CalDAV is down."""
+    local time, soonest first. Empty string when none or CalDAV is down.
+    `generated=False` leaves out the sprint/break blocks a day plan creates."""
     from utils.caldav_client import get_events_in_range
 
     tz = settings.zoneinfo()
@@ -145,6 +146,8 @@ def render_calendar(first: date, last: date) -> str:
         return ""
     rows = []
     for event in result.get("events", []):
+        if event.get("generated") and not generated:
+            continue
         begin = _parse_ics(event.get("start"))
         if begin is None:
             continue
@@ -156,6 +159,32 @@ def render_calendar(first: date, last: date) -> str:
         rows.append((begin, f"- {when} {event.get('summary') or '(untitled)'}"))
     rows.sort(key=lambda r: r[0])
     return "\n".join(line for _, line in rows)
+
+
+def render_plan_window(day: date) -> str:
+    """One line for a day plan's generated blocks ("sprints from 11:15 to
+    17:05"), or "" when the day has none — the blocks themselves are noise
+    in a spoken or written summary."""
+    from utils.caldav_client import get_events_in_range
+
+    tz = settings.zoneinfo()
+    start = _day_start(day)
+    try:
+        result = get_events_in_range(
+            start.astimezone(timezone.utc).strftime(_ICS_FORMAT),
+            (start + timedelta(days=1)).astimezone(timezone.utc).strftime(_ICS_FORMAT),
+        )
+    except Exception as e:
+        logger.warning("Plan window fetch failed: %s", e)
+        return ""
+    blocks = [e for e in result.get("events", []) if e.get("generated")] if result.get("success") else []
+    spans = [(_parse_ics(e.get("start")), _parse_ics(e.get("end"))) for e in blocks]
+    spans = [(b, f) for b, f in spans if b and f]
+    if not spans:
+        return ""
+    first = min(b for b, _ in spans).astimezone(tz)
+    last = max(f for _, f in spans).astimezone(tz)
+    return f"A planned day of work sprints and breaks runs from {first:%H:%M} to {last:%H:%M}."
 
 
 def render_reminders(first: date, last: date) -> str:
