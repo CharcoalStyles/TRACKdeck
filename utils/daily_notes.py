@@ -66,6 +66,20 @@ def read_captures(date_str: str) -> list[dict]:
     return out
 
 
+def open_captures(up_to: str) -> list[dict]:
+    """Every unticked capture from any day up to and including `up_to`
+    ("YYYY-MM-DD"), oldest day first, each with its "date". Unticked
+    captures roll forward until they are ticked off or deleted."""
+    folder = vault.vault_root() / DAILY_NOTES_DIRNAME
+    if not folder.exists():
+        return []
+    out = []
+    for path in sorted(folder.glob("????-??-??.md")):
+        if path.stem <= up_to:
+            out.extend({**c, "date": path.stem} for c in read_captures(path.stem) if not c["done"])
+    return out
+
+
 def update_capture(
     date_str: str, capture_id: str, *, text: str | None = None, done: bool | None = None
 ) -> dict | None:

@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 from fastapi import HTTPException
@@ -173,3 +173,16 @@ def test_listing_marks_where_each_capture_came_from(env):
     assert (caps[voice_id]["source"], caps[voice_id]["via"]) == ("voice", "fallback")
     assert (caps[typed["id"]]["source"], caps[typed["id"]]["via"]) == ("dashboard", "form")
     assert caps[unknown].get("source") is None and caps[unknown].get("via") is None
+
+
+def test_list_keeps_old_unticked_days_beyond_the_window(env):
+    from routes import captures
+
+    old = datetime.now(settings.zoneinfo()) - timedelta(days=20)
+    daily_notes.append_capture(old, "record the audio log")
+    done = daily_notes.append_capture(old - timedelta(days=1), "already done")
+    daily_notes.update_capture(f"{old - timedelta(days=1):%Y-%m-%d}", done, done=True)
+    listing = run(captures.list_captures(None, days=3))
+    dates = [d["date"] for d in listing["days"]]
+    assert f"{old:%Y-%m-%d}" in dates and f"{old - timedelta(days=1):%Y-%m-%d}" not in dates
+    assert listing["unticked"] == 1

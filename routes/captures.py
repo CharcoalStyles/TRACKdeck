@@ -89,7 +89,9 @@ async def list_captures(
     days: Annotated[int, Query(ge=1, le=60)] = 7,
 ):
     """Captures for today and the previous days-1 days, newest day first;
-    days without captures are left out (today is always present)."""
+    days without captures are left out (today is always present). Older days
+    that still hold unticked captures are appended too: those roll forward
+    until done."""
     now = _today()
     today = now.date()
     first = (now - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -102,6 +104,16 @@ async def list_captures(
         unticked += sum(1 for c in captures if not c["done"])
         if captures or offset == 0:
             out.append({"date": date_str, "captures": captures})
+    cutoff = (today - timedelta(days=days - 1)).isoformat()
+    older = {}
+    for c in await asyncio.to_thread(daily_notes.open_captures, today.isoformat()):
+        if c["date"] < cutoff:
+            older.setdefault(c["date"], []).append(c)
+    for date_str in sorted(older, reverse=True):
+        captures = [{k: v for k, v in c.items() if k != "date"} for c in older[date_str]]
+        captures = [{**c, **origins.get(c["id"], {})} for c in captures]
+        unticked += len(captures)
+        out.append({"date": date_str, "captures": captures})
     return {"days": out, "unticked": unticked}
 
 

@@ -106,12 +106,21 @@ def test_render_days_skips_quiet_days_and_clips_total(env):
     assert len(day_context.render_days(date(2026, 10, 19), date(2026, 10, 25), total_chars=60)) <= 60
 
 
+def test_open_captures_roll_forward_until_ticked(env):
+    daily_notes.append_capture(_at(9, day=date(2026, 10, 12)), "record the audio log")
+    first = daily_notes.append_capture(_at(9), "done already")
+    path = daily_notes.daily_notes_file(DAY.isoformat())
+    path.write_text(path.read_text().replace(f"- [ ] 09:00 done already ^{first}", f"- [x] 09:00 done already ^{first}"))
+    assert day_context.render_open_captures(DAY).splitlines() == ["- Mon 12 Oct 09:00 record the audio log"]
+    assert day_context.render_open_captures(date(2026, 10, 11)) == ""  # not before it existed
+
+
 def test_leftover_captures_exclude_ticked(env):
     first = daily_notes.append_capture(_at(9), "done already")
     daily_notes.append_capture(_at(10), "still open")
     path = daily_notes.daily_notes_file(DAY.isoformat())
     path.write_text(path.read_text().replace(f"- [ ] 09:00 done already ^{first}", f"- [x] 09:00 done already ^{first}"))
-    assert day_context.render_leftover_captures(DAY).splitlines() == ["- 10:00 still open"]
+    assert day_context.render_open_captures(DAY).splitlines() == ["- 10:00 still open"]
 
 
 def test_render_reviews_reads_bodies_and_skips_missing(env):
@@ -198,7 +207,7 @@ def test_morning_prompt_carries_today_tomorrow_and_leftovers(env, monkeypatch):
     assert "Today is Thursday 22 October 2026" in prompt
     assert "CAL 2026-10-22..2026-10-22" in prompt and "CAL 2026-10-23..2026-10-23" in prompt
     assert "FC 2026-10-22..2026-10-23" in prompt
-    assert "renew the permit" in prompt
+    assert "renew the permit" not in prompt  # the list is appended by code, not the writer
 
 
 def test_morning_prompt_marks_empty_sections_none(env, monkeypatch):
@@ -206,7 +215,7 @@ def test_morning_prompt_marks_empty_sections_none(env, monkeypatch):
     monkeypatch.setattr(day_context, "render_reminders", lambda a, b: "")
     monkeypatch.setattr(day_context, "render_forecast", lambda a, b: "")
     prompt = morning.build_prompt(DAY)
-    assert prompt.count(":\n(none)\n") == 5
+    assert prompt.count(":\n(none)\n") == 4
 
 
 def test_compose_morning_uses_writer(env, monkeypatch):
@@ -217,6 +226,18 @@ def test_compose_morning_uses_writer(env, monkeypatch):
     assert "Thursday 22 October 2026" in prompts[0]
 
 
+def test_morning_message_lists_every_open_capture(env, monkeypatch):
+    _stub_context(monkeypatch)
+    monkeypatch.setattr(morning, "write", lambda p, **k: "Good morning text")
+    assert "Still open" not in morning.compose_morning_message(DAY)
+    daily_notes.append_capture(_at(9, day=date(2026, 10, 12)), "print the dice holder")
+    daily_notes.append_capture(_at(9, day=date(2026, 10, 21)), "renew the permit")
+    text = morning.compose_morning_message(DAY)
+    assert text.startswith("Good morning text\n\nStill open (unticked captures):\n")
+    assert text.splitlines()[-2:] == ["- Mon 12 Oct 09:00 print the dice holder", "- Wed 21 Oct 09:00 renew the permit"]
+    assert text.index("dice holder") < text.index("renew the permit")
+
+
 def test_captures_line_counts_and_links(env, monkeypatch):
     assert evening.captures_line(DAY) == "No unticked captures."
     daily_notes.append_capture(_at(9), "one")
@@ -224,6 +245,8 @@ def test_captures_line_counts_and_links(env, monkeypatch):
     daily_notes.append_capture(_at(10), "two")
     monkeypatch.setattr(settings, "public_base_url", "https://pa.example.com/")
     assert evening.captures_line(DAY) == "2 unticked captures. https://pa.example.com/captures"
+    daily_notes.append_capture(_at(9, day=date(2026, 10, 15)), "older")
+    assert evening.captures_line(DAY).startswith("3 unticked captures (1 from earlier days).")
 
 
 def test_evening_message_structure_and_order(env, monkeypatch):

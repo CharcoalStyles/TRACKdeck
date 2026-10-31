@@ -93,12 +93,20 @@ def render_days(first: date, last: date, *, per_day_chars: int = 1200, total_cha
     return text if len(text) <= total_chars else text[: total_chars - 3].rstrip() + "..."
 
 
-def leftover_captures(day: date) -> list[dict]:
-    return [c for c in daily_notes.read_captures(day.isoformat()) if not c["done"]]
+def open_captures(today: date) -> list[dict]:
+    """All unticked captures up to today, oldest first — they carry over
+    until done."""
+    return daily_notes.open_captures(today.isoformat())
 
 
-def render_leftover_captures(day: date) -> str:
-    return "\n".join(f"- {c['time']} {c['text']}" for c in leftover_captures(day))
+def render_open_captures(today: date) -> str:
+    lines = []
+    for c in open_captures(today):
+        when = c["time"] if c["date"] == today.isoformat() else (
+            f"{date.fromisoformat(c['date']).strftime('%a %d %b')} {c['time']}"
+        )
+        lines.append(f"- {when} {c['text']}")
+    return "\n".join(lines)
 
 
 def render_reviews(kind: str, keys: list[str], *, per_review_chars: int = 1500) -> str:

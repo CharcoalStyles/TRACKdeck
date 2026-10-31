@@ -2,7 +2,7 @@
 jobs/morning.py
 ----------------
 The wake-up day-ahead message: today's and tomorrow's weather, today's
-calendar and reminders, what's left unticked from yesterday's captures.
+calendar and reminders, every capture still unticked (they carry over until done).
 Pushed through Gotify (and emailed when email_to is set) at settings.morning_time. All context is gathered by
 plain code (utils/day_context.py) and handed to the writer model.
 """
@@ -24,7 +24,7 @@ MORNING_PRIORITY = 5
 MORNING_PROMPT = """You are the user's personal assistant, writing the short good-morning \
 message that sets up their day. Today is {today}. Keep it to a few short sentences or a \
 very short list: lead with what is on today, then anything worth knowing about the weather \
-(today and tomorrow), then loose ends left from yesterday. If the day is empty, say so \
+(today and tomorrow), and nothing else about captures: the open captures are appended after your message. If the day is empty, say so \
 briefly.
 
 {rules}
@@ -40,9 +40,6 @@ Tomorrow's calendar (a heads-up only):
 
 Forecast (today and tomorrow):
 {forecast}
-
-Captures left unticked yesterday:
-{leftovers}
 """
 
 
@@ -55,14 +52,18 @@ def build_prompt(today: date) -> str:
         reminders=or_none(day_context.render_reminders(today, today)),
         tomorrow=or_none(day_context.render_calendar(tomorrow, tomorrow)),
         forecast=or_none(day_context.render_forecast(today, tomorrow)),
-        leftovers=or_none(day_context.render_leftover_captures(today - timedelta(days=1))),
     )
 
 
 def compose_morning_message(today: date | None = None) -> str:
     """Blocking (CalDAV, weather, LLM) — run via asyncio.to_thread."""
     today = today or datetime.now(settings.zoneinfo()).date()
-    return write(build_prompt(today))
+    text = write(build_prompt(today))
+    # Appended by code, not left to the writer: every open capture, listed in full.
+    open_list = day_context.render_open_captures(today)
+    if open_list:
+        text = f"{text.rstrip()}\n\nStill open (unticked captures):\n{open_list}"
+    return text
 
 
 async def send_morning_message() -> None:

@@ -39,11 +39,13 @@ RECEIVED_NOTES_MAX_AGE_SECONDS = 24 * 60 * 60
 EVENING_PRIORITY = 3
 
 def captures_line(today: date) -> str:
-    count = len(day_context.leftover_captures(today))
+    open_ = day_context.open_captures(today)
+    count = len(open_)
     if not count:
         return "No unticked captures."
     noun = "capture" if count == 1 else "captures"
-    line = f"{count} unticked {noun}."
+    older = sum(1 for c in open_ if c["date"] != today.isoformat())
+    line = f"{count} unticked {noun}" + (f" ({older} from earlier days)." if older else ".")
     if settings.public_base_url:
         line += f" {settings.public_base_url.rstrip('/')}/captures"
     return line
