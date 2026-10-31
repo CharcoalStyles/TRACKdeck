@@ -1823,6 +1823,8 @@ export interface components {
             task: string;
             /** Minutes */
             minutes: number;
+            /** After */
+            after?: string | null;
         };
         /** TaskLibraryInput */
         TaskLibraryInput: {

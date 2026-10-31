@@ -10,6 +10,8 @@ utils/caldav_client.py; agent/tools/planning.py wires them together.
 """
 from __future__ import annotations
 
+import math
+import random
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -19,6 +21,10 @@ TASK_LINE = re.compile(
     r"^-\s*\[ \]\s*(?:Task\s*\d+:\s*)?(?P<task>.+?)\s*[-—]+\s*Est:?\s*(?P<minutes>\d+)\s*min",
     re.IGNORECASE,
 )
+
+# Optional trailing "— after Clean kitchen" on a task line: the task must come
+# after every chunk of the named task.
+TASK_AFTER = re.compile(r"[-—]+\s*after\s+(?P<ref>\S.*?)\s*$", re.IGNORECASE)
 
 # Matches "- [ ] Work — 09:00 to 17:00" style lines in a "## Fixed Blocks"
 # section — a name plus an already-occupied HH:MM-HH:MM window, as
@@ -46,6 +52,19 @@ def parse_target_tasks(section_text: str) -> list[tuple[str, int]]:
         if match:
             tasks.append((match.group("task").strip(), int(match.group("minutes"))))
     return tasks
+
+
+def parse_task_dependencies(section_text: str) -> dict[str, str]:
+    """{task label (lower-case): label it must come after (lower-case)} from
+    "— after X" suffixes on a "## Tasks" section's checklist lines."""
+    deps = {}
+    for line in section_text.splitlines():
+        line = line.strip()
+        match = TASK_LINE.match(line)
+        after = TASK_AFTER.search(line[match.end():]) if match else None
+        if match and after:
+            deps[match.group("task").strip().lower()] = after.group("ref").strip().lower()
+    return deps
 
 
 def parse_fixed_blocks(section_text: str) -> list[tuple[str, str, str]]:
@@ -137,37 +156,96 @@ def order_tasks(tasks: list[tuple[str, int]], hints: dict[str, str]) -> list[tup
     return ordered
 
 
+def split_into_chunks(minutes: int, chunk_min: int, chunk_max: int, rng: random.Random) -> list[int]:
+    """Random chunk sizes in [chunk_min, chunk_max] summing to `minutes`. A
+    task that already fits in one chunk (or is too short to split) stays whole."""
+    if minutes <= chunk_max:
+        return [minutes]
+    count = max(1, min(math.ceil(minutes / chunk_max), minutes // chunk_min))
+    step = 5 if minutes % 5 == 0 and chunk_min % 5 == 0 else 1
+    sizes = [chunk_min] * count
+    remaining = minutes - chunk_min * count
+    while remaining > 0:
+        room = [i for i, size in enumerate(sizes) if size + step <= chunk_max]
+        if not room:
+            sizes[rng.randrange(count)] += remaining
+            break
+        sizes[rng.choice(room)] += step
+        remaining -= step
+    return sizes
+
+
+def _order_chunks(
+    chunks: list[tuple[str, int]], after: dict[str, str], shuffle: bool, rng: random.Random
+) -> list[tuple[str, int]]:
+    """Shuffles chunks, then pulls each one forward only as far as needed so a
+    task's chunks all land after every chunk of the task it must follow."""
+    pool = list(chunks)
+    if shuffle:
+        rng.shuffle(pool)
+    remaining = {label.lower(): sum(1 for c in pool if c[0] == label) for label, _ in pool}
+    ordered: list[tuple[str, int]] = []
+    while pool:
+        pick = next(
+            (c for c in pool if remaining.get(after.get(c[0].lower(), ""), 0) == 0),
+            pool[0],  # a cycle: stop honouring the constraint rather than loop
+        )
+        pool.remove(pick)
+        remaining[pick[0].lower()] -= 1
+        ordered.append(pick)
+    return ordered
+
+
 def compute_schedule_blocks(
     tasks: list[tuple[str, int]],
     occupied: list[tuple[datetime, datetime]],
     window_start: datetime,
     window_end: datetime,
+    *,
+    chunk_range: Optional[tuple[int, int]] = None,
+    break_range: Optional[tuple[int, int]] = None,
+    shuffle: bool = False,
+    after: Optional[dict[str, str]] = None,
+    rng: Optional[random.Random] = None,
 ) -> tuple[list[Block], list[str]]:
-    """Greedy first-fit: walk the free gaps between `occupied` intervals
-    (the day's real calendar events) within [window_start, window_end),
-    placing each task — in the order given — followed by a break, moving
-    to the next gap whenever the current one runs out of room. A break
-    that hits the end of its gap is trimmed rather than spilling into the
-    next occupied interval. Returns (blocks, unscheduled) — a task that
-    never finds a big enough gap before window_end is reported in
-    `unscheduled` rather than silently dropped.
+    """Walk the free gaps between `occupied` intervals (the day's real
+    calendar events) within [window_start, window_end), placing each chunk —
+    followed by a break — and moving to the next gap whenever the current one
+    runs out of room. A break that hits the end of its gap is trimmed rather
+    than spilling into the next occupied interval. Returns (blocks,
+    unscheduled) — a task with a chunk that never finds a big enough gap
+    before window_end is reported in `unscheduled` rather than silently dropped.
 
-    # ponytail: greedy first-fit, no reordering/optimization — revisit
-    # only if a real day's plan is dense enough that ordering visibly
-    # wastes gaps.
+    With no options this is plain first-fit in the order given. `chunk_range`
+    splits each task into random chunks of that many minutes (labelled
+    "Task (2/4)"), `break_range` picks each break at random from that range in
+    5-minute steps, `shuffle` randomises chunk order, and `after`
+    ({task: task it must follow}, lower-cased) is always honoured.
     """
+    rng = rng or random.Random()
     gaps = _free_gaps(_merge_intervals(occupied, window_start, window_end), window_start, window_end)
+
+    chunks: list[tuple[str, int]] = []
+    for description, minutes in tasks:
+        sizes = split_into_chunks(minutes, *chunk_range, rng) if chunk_range else [minutes]
+        chunks.extend((description, size) for size in sizes)
+    chunks = _order_chunks(chunks, after or {}, shuffle, rng)
+
+    totals = {description: sum(1 for c in chunks if c[0] == description) for description, _ in chunks}
+    seen: dict[str, int] = {}
 
     blocks: list[Block] = []
     unscheduled: list[str] = []
     gap_idx = 0
     cursor: Optional[datetime] = None
 
-    for description, minutes in tasks:
+    for description, minutes in chunks:
         duration = timedelta(minutes=minutes)
-        break_duration = timedelta(
-            minutes=LONG_BREAK_MINUTES if minutes >= LONG_TASK_THRESHOLD_MINUTES else SHORT_BREAK_MINUTES
-        )
+        if break_range:
+            break_minutes = rng.randrange(break_range[0], break_range[1] + 1, 5)
+        else:
+            break_minutes = LONG_BREAK_MINUTES if minutes >= LONG_TASK_THRESHOLD_MINUTES else SHORT_BREAK_MINUTES
+        break_duration = timedelta(minutes=break_minutes)
 
         placed = False
         while gap_idx < len(gaps):
@@ -175,7 +253,9 @@ def compute_schedule_blocks(
             start = cursor if cursor is not None and cursor > gap_start else gap_start
             if start + duration <= gap_end:
                 end = start + duration
-                blocks.append(Block(kind="task", start=start, end=end, label=description))
+                seen[description] = seen.get(description, 0) + 1
+                label = f"{description} ({seen[description]}/{totals[description]})" if totals[description] > 1 else description
+                blocks.append(Block(kind="task", start=start, end=end, label=label))
                 break_end = min(end + break_duration, gap_end)
                 blocks.append(Block(kind="break", start=end, end=break_end, label="Break"))
                 cursor = break_end
@@ -184,7 +264,7 @@ def compute_schedule_blocks(
             gap_idx += 1
             cursor = None
 
-        if not placed:
+        if not placed and description not in unscheduled:
             unscheduled.append(description)
 
     return blocks, unscheduled

@@ -15,7 +15,9 @@ from datetime import datetime, timedelta, timezone
 from apscheduler.triggers.date import DateTrigger
 
 from agent.scheduler import scheduler
+from agent.settings import settings
 from utils import reminders_store
+from utils.caldav_client import get_event
 from utils.notify import notify_error, send_gotify
 
 logger = logging.getLogger(__name__)
@@ -24,13 +26,33 @@ REMINDER_PRIORITY = 7  # below the error convention (8), above silent routine pu
 TEST_REMINDER_DELAY = timedelta(seconds=10)
 
 
+def push_text(reminder: dict) -> str:
+    """The reminder's text for the Gotify push. A generated schedule block's
+    reminder gets its length and end time appended here, so the stored text
+    (what the device and dashboard list) stays short. Any lookup failure
+    falls back to the plain message."""
+    try:
+        if not reminder.get("event_uid"):
+            return reminder["message"]
+        result = get_event(reminder["event_uid"])
+        event = result.get("event") if result.get("success") else None
+        if not event or not event.get("generated"):
+            return reminder["message"]
+        start = datetime.strptime(event["start"], "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+        end = datetime.strptime(event["end"], "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+        until = end.astimezone(settings.zoneinfo()).strftime("%H:%M")
+        return f"{reminder['message']} — {round((end - start).total_seconds() / 60)} min, until {until}"
+    except Exception:
+        return reminder["message"]
+
+
 async def fire_reminder(reminder_id: str) -> None:
     try:
         reminder = await asyncio.to_thread(reminders_store.get_reminder, reminder_id)
         if reminder is None or reminder["status"] != "pending":
             return
 
-        await asyncio.to_thread(send_gotify, "Reminder", reminder["message"], REMINDER_PRIORITY)
+        await asyncio.to_thread(send_gotify, "Reminder", await asyncio.to_thread(push_text, reminder), REMINDER_PRIORITY)
         await asyncio.to_thread(reminders_store.mark_status, reminder_id, "fired")
         logger.info("Fired reminder %s: %s", reminder_id, reminder["message"])
     except Exception as e:

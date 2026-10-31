@@ -32,7 +32,7 @@ from agent.scheduler import scheduler
 from agent.settings import settings
 from jobs.reminders import fire_reminder
 from utils import reminders_store, task_library_store, vault
-from utils.caldav_client import create_or_update_event, get_events_in_range
+from utils.caldav_client import create_or_update_event, delete_event, get_events_in_range
 from utils.datetime import parse_local_datetime, text_to_utc
 from utils.planning import (
     REFLECTION_SECTION_HEADING,
@@ -42,6 +42,8 @@ from utils.planning import (
     occupied_from_calendar_events,
     order_tasks,
     parse_fixed_blocks,
+    parse_order_hint,
+    parse_task_dependencies,
     parse_reflection_section,
     parse_target_tasks,
     reflection_is_filled,
@@ -50,6 +52,11 @@ from utils.planning import (
 TASKS_SECTION = "Tasks"
 FIXED_BLOCKS_SECTION = "Fixed Blocks"
 SCHEDULE_SECTION = "Generated Schedule & Sprints"
+
+# Chunk and break sizes for a generated day: long tasks are split into
+# 15-25 minute sprints with 5-15 minute breaks, in shuffled order.
+CHUNK_RANGE = (15, 25)
+BREAK_RANGE = (5, 15)
 
 # How far back generate_schedule_blocks looks for reflections to surface —
 # a week covers "same day last week" patterns without dredging up stale
@@ -98,17 +105,18 @@ def _recent_reflections(before_date_str: str, days: int = RECENT_REFLECTION_DAYS
     return format_reflection_digest(entries[:RECENT_REFLECTION_LIMIT])
 
 
-def save_planning_tasks(date_str: str, tasks: list[tuple[str, int]]) -> None:
-    """Append one or more (task, duration_minutes) tasks to a day's
+def save_planning_tasks(date_str: str, tasks: list[tuple]) -> None:
+    """Append one or more (task, duration_minutes[, after]) tasks to a day's
     planning note's Tasks section — the LLM-free core of
     add_planning_task, also called directly by routes/day_planning.py so
     the dashboard's "Plan my day" form can save a whole plan's tasks
     without spending an agent turn on it."""
     with _planning_note_lock:
         note = vault.get_or_create_planning_note(date_str, settings.planning_template_note_id)
-        for task, duration_minutes in tasks:
+        for task, duration_minutes, *rest in tasks:
+            after = f" — after {rest[0].strip()}" if rest and rest[0] and rest[0].strip() else ""
             note.body = vault.append_to_section(
-                note.body, TASKS_SECTION, f"- [ ] {task.strip()} — Est: {duration_minutes} mins"
+                note.body, TASKS_SECTION, f"- [ ] {task.strip()} — Est: {duration_minutes} mins{after}"
             )
         note.updated = vault.now_iso()
         vault.write_note_atomic(note.path, vault.serialize_note(note))
@@ -130,6 +138,21 @@ def save_fixed_blocks(date_str: str, blocks: list[tuple[str, str, str]]) -> None
             )
         note.updated = vault.now_iso()
         vault.write_note_atomic(note.path, vault.serialize_note(note))
+
+
+def _schedule_reminder(message: str, due: datetime, event_uid: Optional[str]) -> None:
+    reminder_id = str(uuid.uuid4())
+    reminders_store.create_reminder(
+        reminder_id, message, int(due.astimezone(timezone.utc).timestamp()), event_uid,
+        settings.chime_alert_sound_id or None,
+    )
+    scheduler.add_job(
+        fire_reminder,
+        trigger=DateTrigger(run_date=due),
+        args=[reminder_id],
+        id=f"reminder:{reminder_id}",
+        replace_existing=True,
+    )
 
 
 @tool
@@ -191,6 +214,17 @@ def generate_schedule_blocks(
         day_end_utc = text_to_utc(f"{date_str} 23:59:59")
         calendar_response = get_events_in_range(day_start_utc, day_end_utc)
         events = calendar_response.get("events", []) if calendar_response.get("success") else []
+        # Blocks from an earlier run of this plan are replaced, not worked
+        # around: drop them (and their boundary reminders) before looking
+        # for free time.
+        for event in [e for e in events if e.get("generated")]:
+            if delete_event(event["uid"]).get("success"):
+                for reminder_id in reminders_store.cancel_pending_for_event(event["uid"]):
+                    try:
+                        scheduler.remove_job(f"reminder:{reminder_id}")
+                    except Exception:
+                        pass
+        events = [e for e in events if not e.get("generated")]
         occupied = occupied_from_calendar_events(events, tz)
 
         # Fixed blocks (e.g. "Work, 09:00-17:00") are time the user
@@ -220,8 +254,21 @@ def generate_schedule_blocks(
         window_start = parse_local_datetime(f"{date_str} {start_time or settings.wake_time}:00")
         window_end = parse_local_datetime(f"{date_str} {end_time or settings.bedtime}:00")
 
-        tasks = order_tasks(tasks, task_library_store.hints_by_label())
-        blocks, unscheduled = compute_schedule_blocks(tasks, occupied, window_start, window_end)
+        hints = task_library_store.hints_by_label()
+        tasks = order_tasks(tasks, hints)
+        after = parse_task_dependencies(vault.get_section(note.body, TASKS_SECTION) or "")
+        for label, _ in tasks:
+            parsed = parse_order_hint(hints.get(label.strip().lower()))
+            if parsed:
+                rel, ref = parsed
+                if rel == "after":
+                    after.setdefault(label.strip().lower(), ref.strip().lower())
+                else:  # "before X" means X comes after this task
+                    after.setdefault(ref.strip().lower(), label.strip().lower())
+        blocks, unscheduled = compute_schedule_blocks(
+            tasks, occupied, window_start, window_end,
+            chunk_range=CHUNK_RANGE, break_range=BREAK_RANGE, shuffle=True, after=after,
+        )
 
         note.body = vault.replace_section(note.body, SCHEDULE_SECTION, format_schedule_section(blocks, unscheduled))
         note.updated = vault.now_iso()
@@ -234,6 +281,7 @@ def generate_schedule_blocks(
     # each event so the device can tell a sprint/break block apart from a
     # real appointment (jobs/device_sync.py's calendar_events.generated).
     created = 0
+    now = datetime.now(timezone.utc)
     for block in blocks:
         event_uid = str(uuid.uuid4())
         result = create_or_update_event(
@@ -247,30 +295,19 @@ def generate_schedule_blocks(
             continue
         created += 1
 
-        # One boundary reminder per block, due when it ends, pinned to
-        # the configured chime sound (agent/settings.py's
-        # chime_alert_sound_id) — the same ad-hoc reminder mechanism
-        # set_reminder uses (agent/tools/alerts.py's _create_reminder),
-        # just invoked directly with a computed time instead of parsed
-        # natural language. event_uid links it to the calendar event it
-        # was scheduled for, same as jobs/calendar_sync.py's
-        # native-alarm-derived reminders.
-        reminder_id = str(uuid.uuid4())
-        reminder_message = f"{block.label} ended" if block.kind == "task" else "Break's over"
-        reminders_store.create_reminder(
-            reminder_id,
-            reminder_message,
-            int(block.end.astimezone(timezone.utc).timestamp()),
-            event_uid,
-            settings.chime_alert_sound_id or None,
-        )
-        scheduler.add_job(
-            fire_reminder,
-            trigger=DateTrigger(run_date=block.end),
-            args=[reminder_id],
-            id=f"reminder:{reminder_id}",
-            replace_existing=True,
-        )
+        # One reminder per block, due when it STARTS ("Start: X" / "Break
+        # time"), pinned to the configured chime sound
+        # (agent/settings.py's chime_alert_sound_id) — the same ad-hoc
+        # reminder mechanism set_reminder uses (agent/tools/alerts.py's
+        # _create_reminder), invoked directly with a computed time.
+        # event_uid links it to the calendar event it was scheduled for.
+        # A block already under way (re-planning mid-day) gets none.
+        if block.start > now:
+            reminder_message = f"Start: {block.label}" if block.kind == "task" else "Break time"
+            _schedule_reminder(reminder_message, block.start, event_uid)
+
+    if blocks and blocks[-1].end > now:
+        _schedule_reminder("All done for the day", blocks[-1].end, None)
 
     task_count = sum(1 for b in blocks if b.kind == "task")
     summary = f"Scheduled {task_count} task block(s) with breaks for {date_str}, added {created} calendar event(s)."

@@ -5,7 +5,9 @@ import { api } from '../api/client'
 import Card from '../components/Card'
 import SaveStatus, { type SaveState } from '../components/SaveStatus'
 
-const TODAY = new Date().toISOString().slice(0, 10)
+// Local date, not toISOString(): that is the UTC date, which is yesterday in the
+// morning for anyone east of Greenwich.
+const TODAY = new Date().toLocaleDateString('en-CA')
 
 const inputClass =
   'w-full rounded border border-border bg-card-alt px-3 py-2 text-sm text-text-primary outline-none focus:border-accent'
@@ -15,7 +17,7 @@ const secondaryBtnClass =
 const primaryBtnClass =
   'rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover'
 
-type TaskRow = { task: string; minutes: string }
+type TaskRow = { task: string; minutes: string; after: string }
 type FixedBlockRow = { name: string; startTime: string; endTime: string }
 type TaskLibraryItem = {
   id: string
@@ -29,7 +31,7 @@ type TaskLibraryInput = { label: string; default_minutes: number; group_name: st
 export default function DayPlanningPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const date = searchParams.get('date') || TODAY
-  const [tasks, setTasks] = useState<TaskRow[]>([{ task: '', minutes: '' }])
+  const [tasks, setTasks] = useState<TaskRow[]>([{ task: '', minutes: '', after: '' }])
   const [fixedBlocks, setFixedBlocks] = useState<FixedBlockRow[]>([])
   const [notes, setNotes] = useState('')
   const [startTime, setStartTime] = useState('')
@@ -57,7 +59,7 @@ export default function DayPlanningPage() {
     mutationFn: async () => {
       const body = {
         date,
-        tasks: tasks.filter((t) => t.task.trim()).map((t) => ({ task: t.task.trim(), minutes: Number(t.minutes) || 30 })),
+        tasks: tasks.filter((t) => t.task.trim()).map((t) => ({ task: t.task.trim(), minutes: Number(t.minutes) || 30, after: t.after.trim() || null })),
         fixed_blocks: fixedBlocks
           .filter((b) => b.name.trim() && b.startTime && b.endTime)
           .map((b) => ({ name: b.name.trim(), start_time: b.startTime, end_time: b.endTime })),
@@ -76,14 +78,14 @@ export default function DayPlanningPage() {
     onSuccess: (data) => {
       setStatus('saved')
       setReply(data?.reply ?? null)
-      setTasks([{ task: '', minutes: '' }])
+      setTasks([{ task: '', minutes: '', after: '' }])
       setFixedBlocks([])
     },
     onError: () => setStatus('error'),
   })
 
   function addLibraryItem(item: TaskLibraryItem) {
-    setTasks((prev) => [...prev, { task: item.label, minutes: String(item.default_minutes) }])
+    setTasks((prev) => [...prev, { task: item.label, minutes: String(item.default_minutes), after: '' }])
   }
 
   const hasTasks = tasks.some((t) => t.task.trim())
@@ -134,8 +136,8 @@ export default function DayPlanningPage() {
           </div>
         </div>
         <p className="mb-3 -mt-2 text-xs text-text-muted">
-          Leave blank to plan the whole day (wake time to bedtime) — set both to plan just part of
-          it, like an evening.
+          Blank start means wake time, blank end means bedtime. Long tasks are split into 15–25 minute
+          sprints with shuffled order and 5–15 minute breaks.
         </p>
 
         <div className="mb-3 flex flex-col gap-1">
@@ -157,6 +159,13 @@ export default function DayPlanningPage() {
                 placeholder="Mins"
                 className={`${inputClass} w-24`}
               />
+              <input
+                type="text"
+                value={t.after}
+                onChange={(e) => updateTask(i, 'after', e.target.value)}
+                placeholder="After task… (optional)"
+                className={`${inputClass} w-48`}
+              />
               <button
                 type="button"
                 onClick={() => setTasks((prev) => prev.filter((_, idx) => idx !== i))}
@@ -168,7 +177,7 @@ export default function DayPlanningPage() {
           ))}
           <button
             type="button"
-            onClick={() => setTasks((prev) => [...prev, { task: '', minutes: '' }])}
+            onClick={() => setTasks((prev) => [...prev, { task: '', minutes: '', after: '' }])}
             className={`${secondaryBtnClass} self-start`}
           >
             + Add task

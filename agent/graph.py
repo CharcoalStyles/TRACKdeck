@@ -138,13 +138,11 @@ normal case for a "start my day" trigger the morning after tasks were entered th
 before), do NOT call add_planning_task at all — the tasks are already in that date's planning
 note. Just call generate_schedule_blocks directly.
 
-If a "Guidance on how to arrange these" note is included, use it to choose the ORDER you
-call add_planning_task in — generate_schedule_blocks places tasks strictly in the order they
-were added, into the day's next free gap, with no reordering of its own. So "put shopping
-after my lunch break" means: add whatever else fills the morning first, then shopping, so it
-naturally lands in the first free gap after lunch. If the guidance can't be satisfied this
-way (e.g. it names an event or constraint that doesn't actually exist on the calendar or in
-the task list), say so plainly in your reply rather than silently ignoring it.
+generate_schedule_blocks already splits long tasks into 15-25 minute sprints, shuffles their
+order, varies the breaks (5-15 minutes) and honours any "after" ordering saved with the tasks,
+so never call add_planning_task to reorder anything. If a "Guidance on how to arrange these"
+note is included, mention in your reply any part of it the schedule cannot reflect (it names
+something that is not on the calendar or in the task list) rather than claiming it was applied.
 
 If a "Schedule window" line is included (e.g. planning just an evening rather than the whole
 day), pass its two values to generate_schedule_blocks as start_time/end_time exactly as

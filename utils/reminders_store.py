@@ -186,6 +186,17 @@ def update_reminder(reminder_id: str, message: Optional[str] = None, due_at: Opt
         return dict(row) if row else None
 
 
+def cancel_pending_for_event(event_uid: str) -> list[str]:
+    """Cancels the pending reminder linked to a calendar event; returns its
+    id (as a list) so the caller can drop the scheduled job."""
+    with _connect() as conn:
+        ids = [r[0] for r in conn.execute(
+            "SELECT id FROM reminders WHERE event_uid = ? AND status = 'pending'", (event_uid,)
+        ).fetchall()]
+        conn.execute("UPDATE reminders SET status = 'cancelled' WHERE event_uid = ? AND status = 'pending'", (event_uid,))
+        return ids
+
+
 def mark_status(reminder_id: str, status: str) -> None:
     with _connect() as conn:
         conn.execute("UPDATE reminders SET status = ? WHERE id = ?", (status, reminder_id))
